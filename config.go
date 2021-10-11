@@ -17,7 +17,7 @@ var (
 )
 
 var (
-	DefaultStringScanner StringScanner = StringScannerFunc(DefaultScanString)
+	StringScanners *TypeStringScanners = NewTypeStringScanners(StringScannerFunc(DefaultScanString))
 
 	// CommandUsageColor is the color in which the
 	// command usage will be printed on the screen.

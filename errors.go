@@ -3,24 +3,12 @@ package function
 import (
 	"errors"
 	"fmt"
-	"reflect"
 )
 
 var (
-	ErrCommandNotFound = errors.New("command not found")
+	ErrCommandNotFound  = errors.New("command not found")
+	ErrTypeNotSupported = errors.New("type not supported")
 )
-
-type ErrCantScanType struct {
-	Type reflect.Type
-}
-
-func (e ErrCantScanType) Error() string {
-	return fmt.Sprintf("can't scan type %s", e.Type)
-}
-
-func NewErrCantScanType(t reflect.Type) ErrCantScanType {
-	return ErrCantScanType{t}
-}
 
 type ErrParseArgString struct {
 	Err  error

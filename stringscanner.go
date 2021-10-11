@@ -3,19 +3,17 @@ package function
 import (
 	"encoding"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"reflect"
 	"strings"
 	"time"
-
-	"github.com/domonda/go-types/nullable"
-	"github.com/ungerik/go-fs"
 )
 
 // ScanString uses the configured DefaultStringScanner
 // to scan sourceStr
 func ScanString(sourceStr string, destPtr interface{}) error {
-	return DefaultStringScanner.ScanString(sourceStr, destPtr)
+	return StringScanners.ScanString(sourceStr, destPtr)
 }
 
 type StringScanner interface {
@@ -29,23 +27,20 @@ func (f StringScannerFunc) ScanString(sourceStr string, destPtr interface{}) err
 }
 
 func DefaultScanString(sourceStr string, destPtr interface{}) (err error) {
-	destVal := reflect.ValueOf(destPtr)
-	if destVal.Kind() != reflect.Ptr {
-		return fmt.Errorf("DefaultStringScannerImpl expected destination pointer type but got: %s", destVal.Type())
+	if destPtr == nil {
+		return errors.New("destination pointer is nil")
 	}
-	if destVal.IsNil() {
-
+	v := reflect.ValueOf(destPtr)
+	if v.Kind() != reflect.Ptr {
+		return fmt.Errorf("expected destination pointer type but got: %s", v.Type())
 	}
-	return defaultScanString(sourceStr, destVal.Elem())
+	if v.IsNil() {
+		return errors.New("destination pointer is nil")
+	}
+	return scanString(sourceStr, v.Elem())
 }
 
-func defaultScanString(sourceStr string, destVal reflect.Value) (err error) {
-	defer func() {
-		if err != nil {
-			err = fmt.Errorf("DefaultScanString(%s, %q): %w", sourceStr, destVal.Type(), err)
-		}
-	}()
-
+func scanString(sourceStr string, destVal reflect.Value) (err error) {
 	destPtr := destVal.Addr().Interface()
 
 	switch dest := destPtr.(type) {
@@ -63,16 +58,6 @@ func defaultScanString(sourceStr string, destVal reflect.Value) (err error) {
 		}
 		return fmt.Errorf("can't parse %q as time.Time using formats %#v", sourceStr, TimeFormats)
 
-	case *nullable.Time:
-		for _, format := range TimeFormats {
-			t, err := nullable.TimeParseInLocation(format, sourceStr, time.Local)
-			if err == nil {
-				*dest = t
-				return nil
-			}
-		}
-		return fmt.Errorf("can't parse %q as nullable.Time using formats %#v", sourceStr, TimeFormats)
-
 	case *time.Duration:
 		duration, err := time.ParseDuration(sourceStr)
 		if err != nil {
@@ -84,18 +69,14 @@ func defaultScanString(sourceStr string, destVal reflect.Value) (err error) {
 	case encoding.TextUnmarshaler:
 		return dest.UnmarshalText([]byte(sourceStr))
 
-	case *fs.FileReader:
-		*dest = fs.File(sourceStr)
-		return nil
-
 	case json.Unmarshaler:
 		return dest.UnmarshalJSON([]byte(sourceStr))
 
 	case *map[string]interface{}:
-		return json.Unmarshal([]byte(sourceStr), dest)
+		return json.Unmarshal([]byte(sourceStr), destPtr)
 
 	case *[]interface{}:
-		return json.Unmarshal([]byte(sourceStr), dest)
+		return json.Unmarshal([]byte(sourceStr), destPtr)
 
 	case *[]byte:
 		*dest = []byte(sourceStr)
@@ -104,7 +85,23 @@ func defaultScanString(sourceStr string, destVal reflect.Value) (err error) {
 
 	switch destVal.Kind() {
 	case reflect.String:
-		destVal.Set(reflect.ValueOf(sourceStr).Convert(destVal.Type()))
+		destVal.SetString(sourceStr)
+		return nil
+
+	case reflect.Ptr:
+		if isNilString(sourceStr) {
+			destVal.Set(reflect.Zero(destVal.Type()))
+			return nil
+		}
+		ptr := destVal
+		if ptr.IsNil() {
+			ptr = reflect.New(destVal.Type().Elem())
+		}
+		err := scanString(sourceStr, ptr.Elem())
+		if err != nil {
+			return err
+		}
+		destVal.Set(ptr)
 		return nil
 
 	case reflect.Struct:
@@ -112,38 +109,25 @@ func defaultScanString(sourceStr string, destVal reflect.Value) (err error) {
 		// but it could have also come from a HTTP request body or other sources
 		return json.Unmarshal([]byte(sourceStr), destPtr)
 
-	case reflect.Ptr:
-		ptr := destVal
-		if sourceStr != "nil" {
-			if ptr.IsNil() {
-				ptr = reflect.New(destVal.Type().Elem())
-			}
-			err := defaultScanString(sourceStr, ptr.Elem())
+	case reflect.Slice:
+		if isNilString(sourceStr) {
+			destVal.Set(reflect.Zero(destVal.Type()))
+			return nil
+		}
+		var sourceStrings []string
+		if strings.HasPrefix(sourceStr, "[") && strings.HasSuffix(sourceStr, "]") {
+			sourceStrings, err = sliceLiteralFields(sourceStr)
 			if err != nil {
 				return err
 			}
-			destVal.Set(ptr)
+		} else {
+			// Treat non-slice literals as single element slice
+			sourceStrings = []string{sourceStr}
 		}
-		return nil
-
-	case reflect.Slice:
-		if !strings.HasPrefix(sourceStr, "[") {
-			return fmt.Errorf("slice value %q does not begin with '['", sourceStr)
-		}
-		if !strings.HasSuffix(sourceStr, "]") {
-			return fmt.Errorf("slice value %q does not end with ']'", sourceStr)
-		}
-		// elemSourceStrings := strings.Split(sourceStr[1:len(sourceStr)-1], ",")
-		sourceFields, err := sliceLiteralFields(sourceStr)
-		if err != nil {
-			return err
-		}
-
-		count := len(sourceFields)
-		destVal.Set(reflect.MakeSlice(destVal.Type(), count, count))
-
-		for i := 0; i < count; i++ {
-			err := defaultScanString(sourceFields[i], destVal.Index(i))
+		sliceLen := len(sourceStrings)
+		destVal.Set(reflect.MakeSlice(destVal.Type(), sliceLen, sliceLen))
+		for i := 0; i < sliceLen; i++ {
+			err = scanString(sourceStrings[i], destVal.Index(i))
 			if err != nil {
 				return err
 			}
@@ -151,25 +135,22 @@ func defaultScanString(sourceStr string, destVal reflect.Value) (err error) {
 		return nil
 
 	case reflect.Array:
-		if !strings.HasPrefix(sourceStr, "[") {
-			return fmt.Errorf("array value %q does not begin with '['", sourceStr)
+		var sourceStrings []string
+		if strings.HasPrefix(sourceStr, "[") && strings.HasSuffix(sourceStr, "]") {
+			sourceStrings, err = sliceLiteralFields(sourceStr)
+			if err != nil {
+				return err
+			}
+		} else {
+			// Treat non-slice literals as single element slice
+			sourceStrings = []string{sourceStr}
 		}
-		if !strings.HasSuffix(sourceStr, "]") {
-			return fmt.Errorf("array value %q does not end with ']'", sourceStr)
+		arrayLen := destVal.Len()
+		if len(sourceStrings) != arrayLen {
+			return fmt.Errorf("array value %q needs to have %d elements, but has %d", sourceStr, arrayLen, len(sourceStrings))
 		}
-		// elemSourceStrings := strings.Split(sourceStr[1:len(sourceStr)-1], ",")
-		sourceFields, err := sliceLiteralFields(sourceStr)
-		if err != nil {
-			return err
-		}
-
-		count := len(sourceFields)
-		if count != destVal.Len() {
-			return fmt.Errorf("array value %q needs to have %d elements, but has %d", sourceStr, destVal.Len(), count)
-		}
-
-		for i := 0; i < count; i++ {
-			err := defaultScanString(sourceFields[i], destVal.Index(i))
+		for i := 0; i < arrayLen; i++ {
+			err := scanString(sourceStrings[i], destVal.Index(i))
 			if err != nil {
 				return err
 			}
@@ -177,15 +158,29 @@ func defaultScanString(sourceStr string, destVal reflect.Value) (err error) {
 		return nil
 
 	case reflect.Chan, reflect.Func:
-		// We can't assign a string to a channel or function, it's OK to ignore it
-		// destVal = reflect.Zero(destVal.Type()) // or set nil?
-		return NewErrCantScanType(destVal.Type())
+		if isNilString(sourceStr) {
+			destVal.Set(reflect.Zero(destVal.Type()))
+			return nil
+		}
+		return fmt.Errorf("%w: %s", ErrTypeNotSupported, destVal.Type())
 	}
 
 	// If all else fails, use fmt scanning
 	// for generic type conversation from string
 	_, err = fmt.Sscan(sourceStr, destPtr)
-	return err
+	if err != nil {
+		return fmt.Errorf("%w: %s, fmt.Sscan error: %s", ErrTypeNotSupported, destVal.Type(), err)
+	}
+
+	return nil
+}
+
+func isNilString(str string) bool {
+	switch strings.ToLower(str) {
+	case "", "nil", "null":
+		return true
+	}
+	return false
 }
 
 func sliceLiteralFields(sourceStr string) (fields []string, err error) {
@@ -195,10 +190,21 @@ func sliceLiteralFields(sourceStr string) (fields []string, err error) {
 	if !strings.HasSuffix(sourceStr, "]") {
 		return nil, fmt.Errorf("slice value %q does not end with ']'", sourceStr)
 	}
-	objectDepth := 0
-	bracketDepth := 0
-	begin := 1
+	var (
+		objectDepth  = 0
+		bracketDepth = 0
+		rLast        rune
+		withinQuote  rune
+		begin        = 1
+	)
 	for i, r := range sourceStr {
+		if withinQuote != 0 {
+			if r == '"' && rLast != '\\' {
+				withinQuote = 0
+			}
+			continue
+		}
+
 		switch r {
 		case '{':
 			objectDepth++
@@ -218,15 +224,20 @@ func sliceLiteralFields(sourceStr string) (fields []string, err error) {
 				return nil, fmt.Errorf("slice value %q has too many ']'", sourceStr)
 			}
 			if objectDepth == 0 && bracketDepth == 0 && i-begin > 0 {
-				fields = append(fields, sourceStr[begin:i])
+				fields = append(fields, strings.TrimSpace(sourceStr[begin:i]))
 			}
 
 		case ',':
 			if objectDepth == 0 && bracketDepth == 1 {
-				fields = append(fields, sourceStr[begin:i])
+				fields = append(fields, strings.TrimSpace(sourceStr[begin:i]))
 				begin = i + 1
 			}
+
+		case '"':
+			withinQuote = r
 		}
+
+		rLast = r
 	}
 	return fields, nil
 }
