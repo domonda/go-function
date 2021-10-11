@@ -43,16 +43,39 @@ func DefaultScanString(sourceStr string, destPtr interface{}) (err error) {
 func scanString(sourceStr string, destVal reflect.Value) (err error) {
 	destPtr := destVal.Addr().Interface()
 
+	if n, ok := destPtr.(interface{ SetNull() }); ok && isNilString(sourceStr) {
+		n.SetNull()
+		return nil
+	}
+
 	switch dest := destPtr.(type) {
 	case *string:
 		*dest = sourceStr
 		return nil
 
 	case *time.Time:
+		if isNilString(sourceStr) {
+			*dest = time.Time{}
+			return nil
+		}
 		for _, format := range TimeFormats {
 			t, err := time.ParseInLocation(format, sourceStr, time.Local)
 			if err == nil {
 				*dest = t
+				return nil
+			}
+		}
+		return fmt.Errorf("can't parse %q as time.Time using formats %#v", sourceStr, TimeFormats)
+
+	case interface{ Set(time.Time) }:
+		if isNilString(sourceStr) {
+			dest.Set(time.Time{})
+			return nil
+		}
+		for _, format := range TimeFormats {
+			t, err := time.ParseInLocation(format, sourceStr, time.Local)
+			if err == nil {
+				dest.Set(t)
 				return nil
 			}
 		}
