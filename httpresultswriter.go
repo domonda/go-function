@@ -12,24 +12,17 @@ import (
 	"github.com/h2non/filetype/types"
 )
 
-type ResultsHTTPWriter interface {
+type HTTPResultsWriter interface {
 	WriteResults(results []interface{}, resultErr error, writer http.ResponseWriter, request *http.Request) error
 }
 
-type ResultsHTTPWriterFunc func(results []interface{}, resultErr error, writer http.ResponseWriter, request *http.Request) error
+type HTTPResultsWriterFunc func(results []interface{}, resultErr error, writer http.ResponseWriter, request *http.Request) error
 
-func (f ResultsHTTPWriterFunc) WriteResults(results []interface{}, resultErr error, writer http.ResponseWriter, request *http.Request) error {
+func (f HTTPResultsWriterFunc) WriteResults(results []interface{}, resultErr error, writer http.ResponseWriter, request *http.Request) error {
 	return f(results, resultErr, writer, request)
 }
 
-func encodeJSON(response interface{}) ([]byte, error) {
-	if PrettyPrint {
-		return json.MarshalIndent(response, "", PrettyPrintIndent)
-	}
-	return json.Marshal(response)
-}
-
-var HTTPRespondJSON ResultsHTTPWriterFunc = func(results []interface{}, resultErr error, writer http.ResponseWriter, request *http.Request) error {
+var HTTPRespondJSON HTTPResultsWriterFunc = func(results []interface{}, resultErr error, writer http.ResponseWriter, request *http.Request) error {
 	if resultErr != nil {
 		return resultErr
 	}
@@ -50,7 +43,7 @@ var HTTPRespondJSON ResultsHTTPWriterFunc = func(results []interface{}, resultEr
 }
 
 // HTTPRespondBinary responds with contentType using the binary data from results of type []byte, string, or io.Reader.
-func HTTPRespondBinary(contentType string) ResultsHTTPWriterFunc {
+func HTTPRespondBinary(contentType string) HTTPResultsWriterFunc {
 	return func(results []interface{}, resultErr error, writer http.ResponseWriter, request *http.Request) (err error) {
 		if resultErr != nil {
 			return resultErr
@@ -80,7 +73,7 @@ func HTTPRespondBinary(contentType string) ResultsHTTPWriterFunc {
 	}
 }
 
-func HTTPRespondJSONField(fieldName string) ResultsHTTPWriterFunc {
+func HTTPRespondJSONField(fieldName string) HTTPResultsWriterFunc {
 	return func(results []interface{}, resultErr error, writer http.ResponseWriter, request *http.Request) (err error) {
 		if resultErr != nil {
 			return resultErr
@@ -103,14 +96,7 @@ func HTTPRespondJSONField(fieldName string) ResultsHTTPWriterFunc {
 	}
 }
 
-func encodeXML(response interface{}) ([]byte, error) {
-	if PrettyPrint {
-		return xml.MarshalIndent(response, "", PrettyPrintIndent)
-	}
-	return xml.Marshal(response)
-}
-
-var HTTPRespondXML ResultsHTTPWriterFunc = func(results []interface{}, resultErr error, writer http.ResponseWriter, request *http.Request) error {
+var HTTPRespondXML HTTPResultsWriterFunc = func(results []interface{}, resultErr error, writer http.ResponseWriter, request *http.Request) error {
 	if resultErr != nil {
 		return resultErr
 	}
@@ -130,7 +116,7 @@ var HTTPRespondXML ResultsHTTPWriterFunc = func(results []interface{}, resultErr
 	return nil
 }
 
-var HTTPRespondPlaintext ResultsHTTPWriterFunc = func(results []interface{}, resultErr error, writer http.ResponseWriter, request *http.Request) error {
+var HTTPRespondPlaintext HTTPResultsWriterFunc = func(results []interface{}, resultErr error, writer http.ResponseWriter, request *http.Request) error {
 	if resultErr != nil {
 		return resultErr
 	}
@@ -150,7 +136,7 @@ var HTTPRespondPlaintext ResultsHTTPWriterFunc = func(results []interface{}, res
 	return nil
 }
 
-var HTTPRespondHTML ResultsHTTPWriterFunc = func(results []interface{}, resultErr error, writer http.ResponseWriter, request *http.Request) error {
+var HTTPRespondHTML HTTPResultsWriterFunc = func(results []interface{}, resultErr error, writer http.ResponseWriter, request *http.Request) error {
 	if resultErr != nil {
 		return resultErr
 	}
@@ -170,7 +156,7 @@ var HTTPRespondHTML ResultsHTTPWriterFunc = func(results []interface{}, resultEr
 	return nil
 }
 
-var HTTPRespondDetectContentType ResultsHTTPWriterFunc = func(results []interface{}, resultErr error, writer http.ResponseWriter, request *http.Request) error {
+var HTTPRespondDetectContentType HTTPResultsWriterFunc = func(results []interface{}, resultErr error, writer http.ResponseWriter, request *http.Request) error {
 	if resultErr != nil {
 		return resultErr
 	}
@@ -190,8 +176,8 @@ var HTTPRespondDetectContentType ResultsHTTPWriterFunc = func(results []interfac
 	return nil
 }
 
-func HTTPRespondContentType(contentType string) ResultsHTTPWriter {
-	return ResultsHTTPWriterFunc(func(results []interface{}, resultErr error, writer http.ResponseWriter, request *http.Request) error {
+func HTTPRespondContentType(contentType string) HTTPResultsWriter {
+	return HTTPResultsWriterFunc(func(results []interface{}, resultErr error, writer http.ResponseWriter, request *http.Request) error {
 		if resultErr != nil {
 			return resultErr
 		}
@@ -212,7 +198,7 @@ func HTTPRespondContentType(contentType string) ResultsHTTPWriter {
 	})
 }
 
-var HTTPRespondNothing ResultsHTTPWriterFunc = func(results []interface{}, resultErr error, writer http.ResponseWriter, request *http.Request) error {
+var HTTPRespondNothing HTTPResultsWriterFunc = func(results []interface{}, resultErr error, writer http.ResponseWriter, request *http.Request) error {
 	return resultErr
 }
 
@@ -224,4 +210,18 @@ func DetectContentType(data []byte) string {
 		return http.DetectContentType(data)
 	}
 	return kind.MIME.Value
+}
+
+func encodeJSON(response interface{}) ([]byte, error) {
+	if PrettyPrint {
+		return json.MarshalIndent(response, "", PrettyPrintIndent)
+	}
+	return json.Marshal(response)
+}
+
+func encodeXML(response interface{}) ([]byte, error) {
+	if PrettyPrint {
+		return xml.MarshalIndent(response, "", PrettyPrintIndent)
+	}
+	return xml.Marshal(response)
 }
