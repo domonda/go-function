@@ -22,7 +22,7 @@ func (f HTTPResultsWriterFunc) WriteResults(results []interface{}, resultErr err
 	return f(results, resultErr, writer, request)
 }
 
-var HTTPRespondJSON HTTPResultsWriterFunc = func(results []interface{}, resultErr error, writer http.ResponseWriter, request *http.Request) error {
+var RespondJSON HTTPResultsWriterFunc = func(results []interface{}, resultErr error, writer http.ResponseWriter, request *http.Request) error {
 	if resultErr != nil {
 		return resultErr
 	}
@@ -42,8 +42,8 @@ var HTTPRespondJSON HTTPResultsWriterFunc = func(results []interface{}, resultEr
 	return nil
 }
 
-// HTTPRespondBinary responds with contentType using the binary data from results of type []byte, string, or io.Reader.
-func HTTPRespondBinary(contentType string) HTTPResultsWriterFunc {
+// RespondBinary responds with contentType using the binary data from results of type []byte, string, or io.Reader.
+func RespondBinary(contentType string) HTTPResultsWriterFunc {
 	return func(results []interface{}, resultErr error, writer http.ResponseWriter, request *http.Request) (err error) {
 		if resultErr != nil {
 			return resultErr
@@ -73,7 +73,7 @@ func HTTPRespondBinary(contentType string) HTTPResultsWriterFunc {
 	}
 }
 
-func HTTPRespondJSONField(fieldName string) HTTPResultsWriterFunc {
+func RespondJSONField(fieldName string) HTTPResultsWriterFunc {
 	return func(results []interface{}, resultErr error, writer http.ResponseWriter, request *http.Request) (err error) {
 		if resultErr != nil {
 			return resultErr
@@ -96,7 +96,7 @@ func HTTPRespondJSONField(fieldName string) HTTPResultsWriterFunc {
 	}
 }
 
-var HTTPRespondXML HTTPResultsWriterFunc = func(results []interface{}, resultErr error, writer http.ResponseWriter, request *http.Request) error {
+var RespondXML HTTPResultsWriterFunc = func(results []interface{}, resultErr error, writer http.ResponseWriter, request *http.Request) error {
 	if resultErr != nil {
 		return resultErr
 	}
@@ -116,7 +116,7 @@ var HTTPRespondXML HTTPResultsWriterFunc = func(results []interface{}, resultErr
 	return nil
 }
 
-var HTTPRespondPlaintext HTTPResultsWriterFunc = func(results []interface{}, resultErr error, writer http.ResponseWriter, request *http.Request) error {
+var RespondPlaintext HTTPResultsWriterFunc = func(results []interface{}, resultErr error, writer http.ResponseWriter, request *http.Request) error {
 	if resultErr != nil {
 		return resultErr
 	}
@@ -136,7 +136,7 @@ var HTTPRespondPlaintext HTTPResultsWriterFunc = func(results []interface{}, res
 	return nil
 }
 
-var HTTPRespondHTML HTTPResultsWriterFunc = func(results []interface{}, resultErr error, writer http.ResponseWriter, request *http.Request) error {
+var RespondHTML HTTPResultsWriterFunc = func(results []interface{}, resultErr error, writer http.ResponseWriter, request *http.Request) error {
 	if resultErr != nil {
 		return resultErr
 	}
@@ -156,7 +156,7 @@ var HTTPRespondHTML HTTPResultsWriterFunc = func(results []interface{}, resultEr
 	return nil
 }
 
-var HTTPRespondDetectContentType HTTPResultsWriterFunc = func(results []interface{}, resultErr error, writer http.ResponseWriter, request *http.Request) error {
+var RespondDetectContentType HTTPResultsWriterFunc = func(results []interface{}, resultErr error, writer http.ResponseWriter, request *http.Request) error {
 	if resultErr != nil {
 		return resultErr
 	}
@@ -176,7 +176,7 @@ var HTTPRespondDetectContentType HTTPResultsWriterFunc = func(results []interfac
 	return nil
 }
 
-func HTTPRespondContentType(contentType string) HTTPResultsWriter {
+func RespondContentType(contentType string) HTTPResultsWriter {
 	return HTTPResultsWriterFunc(func(results []interface{}, resultErr error, writer http.ResponseWriter, request *http.Request) error {
 		if resultErr != nil {
 			return resultErr
@@ -198,7 +198,7 @@ func HTTPRespondContentType(contentType string) HTTPResultsWriter {
 	})
 }
 
-var HTTPRespondNothing HTTPResultsWriterFunc = func(results []interface{}, resultErr error, writer http.ResponseWriter, request *http.Request) error {
+var RespondNothing HTTPResultsWriterFunc = func(results []interface{}, resultErr error, writer http.ResponseWriter, request *http.Request) error {
 	return resultErr
 }
 

@@ -23,16 +23,20 @@ func HTTPHandler(getArgs HTTPRequestArgsGetter, function CallWithNamedStringsWra
 			}()
 		}
 
-		args, err := getArgs(request)
-		if err != nil {
-			if len(errHandlers) == 0 {
-				http.Error(writer, http.StatusText(http.StatusBadRequest), http.StatusBadRequest)
-			} else {
-				for _, errHandler := range errHandlers {
-					errHandler.HandleError(err, writer, request)
+		var args map[string]string
+		if getArgs != nil {
+			a, err := getArgs(request)
+			if err != nil {
+				if len(errHandlers) == 0 {
+					http.Error(writer, http.StatusText(http.StatusBadRequest), http.StatusBadRequest)
+				} else {
+					for _, errHandler := range errHandlers {
+						errHandler.HandleError(err, writer, request)
+					}
 				}
+				return
 			}
-			return
+			args = a
 		}
 
 		results, err := function.CallWithNamedStrings(request.Context(), args)

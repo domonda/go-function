@@ -8,10 +8,10 @@ import (
 var _ StringScanner = new(TypeStringScanners)
 
 type TypeStringScanners struct {
-	Types          map[reflect.Type]StringScanner
-	InterfaceTypes map[reflect.Type]StringScanner
-	Kinds          map[reflect.Kind]StringScanner
-	Default        StringScanner
+	Types      map[reflect.Type]StringScanner
+	Interfaces map[reflect.Type]StringScanner
+	Kinds      map[reflect.Kind]StringScanner
+	Default    StringScanner
 }
 
 func NewTypeStringScanners(defaultScanner StringScanner) *TypeStringScanners {
@@ -32,7 +32,7 @@ func (s *TypeStringScanners) ScanString(sourceStr string, destPtr interface{}) e
 			return err
 		}
 	}
-	for interfaceType, interfaceScanner := range s.InterfaceTypes {
+	for interfaceType, interfaceScanner := range s.Interfaces {
 		if destType.Implements(interfaceType) {
 			err := interfaceScanner.ScanString(sourceStr, destPtr)
 			if !errors.Is(err, ErrTypeNotSupported) {
@@ -49,34 +49,34 @@ func (s *TypeStringScanners) ScanString(sourceStr string, destPtr interface{}) e
 	return ErrTypeNotSupported
 }
 
-func (s *TypeStringScanners) WithTypeScanner(typ reflect.Type, scanner StringScanner) *TypeStringScanners {
+func (s *TypeStringScanners) WithTypeScanner(destType reflect.Type, scanner StringScanner) *TypeStringScanners {
 	mod := s.cloneOrNew()
 	if mod.Types == nil {
 		mod.Types = make(map[reflect.Type]StringScanner)
 	}
-	mod.Types[typ] = scanner
+	mod.Types[destType] = scanner
 	return mod
 }
 
-func (s *TypeStringScanners) WithInterfaceTypeScanner(typ reflect.Type, scanner StringScanner) *TypeStringScanners {
+func (s *TypeStringScanners) WithInterfaceTypeScanner(destImplsInterface reflect.Type, scanner StringScanner) *TypeStringScanners {
 	mod := s.cloneOrNew()
-	if mod.InterfaceTypes == nil {
-		mod.InterfaceTypes = make(map[reflect.Type]StringScanner)
+	if mod.Interfaces == nil {
+		mod.Interfaces = make(map[reflect.Type]StringScanner)
 	}
-	mod.InterfaceTypes[typ] = scanner
+	mod.Interfaces[destImplsInterface] = scanner
 	return mod
 }
 
-func (s *TypeStringScanners) WithKindScanner(kind reflect.Kind, scanner StringScanner) *TypeStringScanners {
+func (s *TypeStringScanners) WithKindScanner(destKind reflect.Kind, scanner StringScanner) *TypeStringScanners {
 	mod := s.cloneOrNew()
 	if mod.Kinds == nil {
 		mod.Kinds = make(map[reflect.Kind]StringScanner)
 	}
-	mod.Kinds[kind] = scanner
+	mod.Kinds[destKind] = scanner
 	return mod
 }
 
-func (s *TypeStringScanners) WithOtherScanner(scanner StringScanner) *TypeStringScanners {
+func (s *TypeStringScanners) WithDefaultScanner(scanner StringScanner) *TypeStringScanners {
 	mod := s.cloneOrNew()
 	mod.Default = scanner
 	return mod
@@ -93,10 +93,10 @@ func (s *TypeStringScanners) cloneOrNew() *TypeStringScanners {
 			c.Types[key] = val
 		}
 	}
-	if len(s.InterfaceTypes) > 0 {
-		c.InterfaceTypes = make(map[reflect.Type]StringScanner, len(s.InterfaceTypes))
-		for key, val := range s.InterfaceTypes {
-			c.InterfaceTypes[key] = val
+	if len(s.Interfaces) > 0 {
+		c.Interfaces = make(map[reflect.Type]StringScanner, len(s.Interfaces))
+		for key, val := range s.Interfaces {
+			c.Interfaces[key] = val
 		}
 	}
 	if len(s.Kinds) > 0 {

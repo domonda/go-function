@@ -1,3 +1,5 @@
+github.com/domonda/go-types v0.0.0-20211011122313-60aa5a932ba8 h1:ZsbrjGirv0l9SfvWBmfAmrUf2B2JQK7UcKirz9+QthM=
+github.com/domonda/go-types v0.0.0-20211011122313-60aa5a932ba8/go.mod h1:T/Sp+RXj32ZbQpKaWZYTrD2n4nfkN1rVDOc51n7ELCo=
 github.com/fatih/color v1.13.0 h1:8LOYc1KYPPmyKMuN8QV2DNRWNbLo6LZ0iLs8+mlH53w=
 github.com/fatih/color v1.13.0/go.mod h1:kLAiJbzzSOZDVNGyDpeOxJ47H46qBXwg5ILebYFFOfk=
 github.com/h2non/filetype v1.1.1 h1:xvOwnXKAckvtLWsN398qS9QhlxlnVXBjXBydK2/UFB4=

@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"io/ioutil"
 	"net/http"
+	"strings"
 )
 
 type HTTPRequestArgsGetter func(*http.Request) (map[string]string, error)
@@ -36,7 +37,15 @@ func MergeHTTPRequestArgs(getters ...HTTPRequestArgsGetter) HTTPRequestArgsGette
 	}
 }
 
-func HTTPRequestJSONBodyFieldsAsVars(request *http.Request) (map[string]string, error) {
+func HTTPRequestQueryArgs(request *http.Request) (map[string]string, error) {
+	args := make(map[string]string)
+	for name, values := range request.URL.Query() {
+		args[name] = strings.Join(values, ";")
+	}
+	return args, nil
+}
+
+func HTTPRequestBodyJSONFieldsAsArgs(request *http.Request) (map[string]string, error) {
 	defer request.Body.Close()
 	body, err := ioutil.ReadAll(request.Body)
 	if err != nil {
