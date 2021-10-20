@@ -38,6 +38,11 @@ func Test_sliceLiteralFields(t *testing.T) {
 			wantFields: []string{`a`, `b`},
 		},
 		{
+			name:       `[a, "b,c"]`,
+			sourceStr:  `[a, "b,c"]`,
+			wantFields: []string{`a`, `"b,c"`},
+		},
+		{
 			name:       `["[quoted", "{", "comma,string", "}"]`,
 			sourceStr:  `["[quoted", "{", "comma,string", "}"]`,
 			wantFields: []string{`"[quoted"`, `"{"`, `"comma,string"`, `"}"`},
