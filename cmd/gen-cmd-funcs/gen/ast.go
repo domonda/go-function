@@ -3,6 +3,7 @@ package gen
 import (
 	"fmt"
 	"go/ast"
+	"strings"
 
 	"github.com/ungerik/go-astvisit"
 )
@@ -25,7 +26,29 @@ func funcDeclArgTypes(funcDecl *ast.FuncDecl) (types []string) {
 	return types
 }
 
+func funcDeclArgDescriptions(funcDecl *ast.FuncDecl) (descriptions []string) {
+	for _, field := range funcDecl.Type.Params.List {
+		for _, name := range field.Names {
+			description := ""
+			if funcDecl.Doc != nil {
+				label := " " + name.Name + ": "
+				for _, comment := range funcDecl.Doc.List {
+					if labelPos := strings.Index(comment.Text, label); labelPos != -1 {
+						description = strings.TrimSpace(comment.Text[labelPos+len(label):])
+						break
+					}
+				}
+			}
+			descriptions = append(descriptions, description)
+		}
+	}
+	return descriptions
+}
+
 func funcDeclResultTypes(funcDecl *ast.FuncDecl) (types []string) {
+	if funcDecl.Type.Results == nil {
+		return nil
+	}
 	for _, field := range funcDecl.Type.Results.List {
 		types = append(types, astvisit.ExprString(field.Type))
 		for i := 1; i < len(field.Names); i++ {
@@ -64,8 +87,10 @@ func recursiveExprSelectors(expr ast.Expr, selectors map[string]struct{}) {
 		for _, p := range e.Params.List {
 			recursiveExprSelectors(p.Type, selectors)
 		}
-		for _, r := range e.Results.List {
-			recursiveExprSelectors(r.Type, selectors)
+		if e.Results != nil {
+			for _, r := range e.Results.List {
+				recursiveExprSelectors(r.Type, selectors)
+			}
 		}
 	default:
 		panic(fmt.Sprintf("UNSUPPORTED: %#v", expr))

@@ -143,8 +143,8 @@ func RewriteAstFile(fset *token.FileSet, filePkg *ast.Package, file *ast.File, f
 	}
 
 	var replacements astvisit.NodeReplacements
-	for _, impl := range funcImpls {
-		importName, funcName := impl.WrappedFuncPkgAndFuncName()
+	for _, fun := range funcImpls {
+		importName, funcName := fun.WrappedFuncPkgAndFuncName()
 		referencedPkg, ok := functions[importName]
 		if !ok {
 			return fmt.Errorf("can't find package %s in imports of file %s", importName, filePath)
@@ -157,15 +157,15 @@ func RewriteAstFile(fset *token.FileSet, filePkg *ast.Package, file *ast.File, f
 		var repl strings.Builder
 		// fmt.Fprintf(&newSrc, "////////////////////////////////////////\n")
 		// fmt.Fprintf(&newSrc, "// %s\n\n", impl.WrappedFunc)
-		fmt.Fprintf(&repl, "// %s wraps %s as %s (generated code)\n", impl.VarName, impl.WrappedFunc, impl.Implements)
-		fmt.Fprintf(&repl, "var %[1]s %[1]sT\n\n", impl.VarName)
-		err = impl.Implements.WriteFunction(&repl, file, wrappedFunc.Decl, impl.VarName+"T", importName)
+		fmt.Fprintf(&repl, "// %s wraps %s as %s (generated code)\n", fun.VarName, fun.WrappedFunc, fun.Implements)
+		fmt.Fprintf(&repl, "var %[1]s %[1]sT\n\n", fun.VarName)
+		err = fun.Implements.WriteFunction(&repl, file, wrappedFunc.Decl, fun.VarName+"T", importName)
 		if err != nil {
 			return err
 		}
 
 		var implReplacements astvisit.NodeReplacements
-		for i, node := range impl.Nodes {
+		for i, node := range fun.Nodes {
 			if i == 0 {
 				implReplacements.AddReplacement(node, repl.String())
 			} else {

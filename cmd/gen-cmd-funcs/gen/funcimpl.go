@@ -56,7 +56,7 @@ func (impl Impl) String() string {
 
 func (impl Impl) WriteFunction(w io.Writer, file *ast.File, funcDecl *ast.FuncDecl, implType, funcPackageSel string) error {
 	argNames := funcDeclArgNames(funcDecl)
-	argDescriptions := make([]string, len(argNames)) // TODO
+	argDescriptions := funcDeclArgDescriptions(funcDecl)
 	argTypes := funcDeclArgTypes(funcDecl)
 	if len(argNames) != len(argTypes) {
 		panic("len(argNames) != len(argTypes)")
