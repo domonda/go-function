@@ -22,4 +22,3 @@ require (
 	github.com/rivo/uniseg v0.2.0 // indirect
 	golang.org/x/sys v0.0.0-20211007075335-d3039528d8ac // indirect
 )
-
