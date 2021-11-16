@@ -54,7 +54,7 @@ func (impl Impl) String() string {
 	}
 }
 
-func (impl Impl) WriteFunction(w io.Writer, file *ast.File, funcDecl *ast.FuncDecl, implType, funcPackageSel string) error {
+func (impl Impl) WriteFunctionWrapper(w io.Writer, file *ast.File, funcDecl *ast.FuncDecl, implType, funcPackageSel string, outUsedImports map[string]struct{}) error {
 	var (
 		argNames        = funcDeclArgNames(funcDecl)
 		argDescriptions = funcDeclArgDescriptions(funcDecl)
@@ -66,6 +66,11 @@ func (impl Impl) WriteFunction(w io.Writer, file *ast.File, funcDecl *ast.FuncDe
 	)
 	if funcPackageSel != "" && !strings.HasSuffix(funcPackageSel, ".") {
 		funcPackageSel += "."
+	}
+
+	err := gatherFunctionImports(file, funcDecl.Type, outUsedImports)
+	if err != nil {
+		return err
 	}
 
 	writeFuncCall := func(args []string) {
@@ -105,6 +110,8 @@ func (impl Impl) WriteFunction(w io.Writer, file *ast.File, funcDecl *ast.FuncDe
 	fmt.Fprintf(w, "type %s struct{}\n\n", implType)
 
 	if impl&ImplDescription != 0 {
+		outUsedImports[`"reflect"`] = struct{}{}
+
 		fmt.Fprintf(w, "func (%s) Name() string {\n", implType)
 		fmt.Fprintf(w, "\treturn \"%s\"\n", funcDecl.Name.Name)
 		fmt.Fprintf(w, "}\n\n")
@@ -167,6 +174,8 @@ func (impl Impl) WriteFunction(w io.Writer, file *ast.File, funcDecl *ast.FuncDe
 	}
 
 	if impl&ImplCallWrapper != 0 {
+		outUsedImports[`"context"`] = struct{}{}
+
 		fmt.Fprintf(w, "func (f %s) Call(%s context.Context, %s []interface{}) (results []interface{}, err error) {\n", implType, ctxArgName, argsArgName)
 		{
 			args := make([]string, len(argTypes))
@@ -191,6 +200,9 @@ func (impl Impl) WriteFunction(w io.Writer, file *ast.File, funcDecl *ast.FuncDe
 	}
 
 	if impl&ImplCallWithStringsWrapper != 0 {
+		outUsedImports[`"context"`] = struct{}{}
+		outUsedImports[`function "github.com/domonda/go-function"`] = struct{}{}
+
 		fmt.Fprintf(w, "func (f %s) CallWithStrings(%s context.Context, %s ...string) (results []interface{}, err error) {\n", implType, ctxArgName, strsArgName)
 		{
 			for i, argName := range argNames {
@@ -224,6 +236,9 @@ func (impl Impl) WriteFunction(w io.Writer, file *ast.File, funcDecl *ast.FuncDe
 	}
 
 	if impl&ImplCallWithNamedStringsWrapper != 0 {
+		outUsedImports[`"context"`] = struct{}{}
+		outUsedImports[`function "github.com/domonda/go-function"`] = struct{}{}
+
 		fmt.Fprintf(w, "func (f %s) CallWithNamedStrings(%s context.Context, %s map[string]string) (results []interface{}, err error) {\n", implType, ctxArgName, strsArgName)
 		{
 			for i, argName := range argNames {
@@ -255,14 +270,14 @@ func (impl Impl) WriteFunction(w io.Writer, file *ast.File, funcDecl *ast.FuncDe
 	return nil
 }
 
-func (impl Impl) FunctionString(file *ast.File, funcDecl *ast.FuncDecl, implType, funcPackageSel string) (implSource string, err error) {
-	b := new(strings.Builder)
-	err = impl.WriteFunction(b, file, funcDecl, implType, funcPackageSel)
-	if err != nil {
-		return "", err
-	}
-	return b.String(), nil
-}
+// func (impl Impl) FunctionWrapperString(file *ast.File, funcDecl *ast.FuncDecl, implType, funcPackageSel string) (implSource string, err error) {
+// 	b := new(strings.Builder)
+// 	err = impl.WriteFunctionWrapper(b, file, funcDecl, implType, funcPackageSel)
+// 	if err != nil {
+// 		return "", err
+// 	}
+// 	return b.String(), nil
+// }
 
 func reflectTypeOfTypeName(typeName string) string {
 	typeName = strings.Replace(typeName, "...", "[]", 1)

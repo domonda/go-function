@@ -3,11 +3,9 @@ package gen
 import (
 	"bytes"
 	"fmt"
-	"go/ast"
 	"io/ioutil"
 	"path/filepath"
 	"sort"
-	"strings"
 
 	"golang.org/x/tools/imports"
 )
@@ -24,7 +22,7 @@ func PackageFunctions(pkgDir, genFilename, namePrefix string, printOnly bool, on
 		`function "github.com/domonda/go-function"`: {},
 	}
 	for _, fun := range funcs {
-		err = getFunctionImports(fun.File, fun.Decl.Type, importLines)
+		err = gatherFunctionImports(fun.File, fun.Decl.Type, importLines)
 		if err != nil {
 			return err
 		}
@@ -48,7 +46,7 @@ func PackageFunctions(pkgDir, genFilename, namePrefix string, printOnly bool, on
 	}
 
 	for funName, fun := range funcs {
-		err = ImplWrapper.WriteFunction(b, fun.File, fun.Decl, namePrefix+funName, "")
+		err = ImplWrapper.WriteFunctionWrapper(b, fun.File, fun.Decl, namePrefix+funName, "", importLines)
 		if err != nil {
 			return err
 		}
@@ -78,43 +76,4 @@ func PackageFunctions(pkgDir, genFilename, namePrefix string, printOnly bool, on
 	// }
 
 	return nil
-}
-
-func getFunctionImports(file *ast.File, funcType *ast.FuncType, outImportLines map[string]struct{}) error {
-	funcSelectors := make(map[string]struct{})
-	recursiveExprSelectors(funcType, funcSelectors)
-	// fmt.Println(funcSelectors)
-	for _, imp := range file.Imports {
-		if imp.Name != nil {
-			if _, ok := funcSelectors[imp.Name.Name]; ok {
-				delete(outImportLines, imp.Path.Value)
-				outImportLines[imp.Name.Name+" "+imp.Path.Value] = struct{}{}
-			}
-			continue
-		}
-		guessedName, err := guessPackageNameFromPath(imp.Path.Value)
-		if err != nil {
-			return err
-		}
-		if _, ok := funcSelectors[guessedName]; ok {
-			if _, ok = outImportLines[guessedName+" "+imp.Path.Value]; !ok {
-				outImportLines[imp.Path.Value] = struct{}{}
-			}
-		}
-	}
-	return nil
-}
-
-func guessPackageNameFromPath(path string) (string, error) {
-	pkg := path
-	if len(pkg) >= 2 && pkg[0] == '"' && pkg[len(pkg)-1] == '"' {
-		pkg = pkg[1 : len(pkg)-1]
-	}
-	pkg = pkg[strings.LastIndex(pkg, "/")+1:]
-	pkg = strings.TrimPrefix(pkg, "go-")
-	pkg = strings.TrimSuffix(pkg, ".go")
-	if pkg == "" || strings.ContainsAny(pkg, ".-") {
-		return "", fmt.Errorf("could not guess package name from import path %s", path)
-	}
-	return pkg, nil
 }

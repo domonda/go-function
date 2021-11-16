@@ -91,64 +91,23 @@ func RewriteAstFile(fset *token.FileSet, filePkg *ast.Package, file *ast.File, f
 		return nil
 	}
 
-	fileDir := filepath.Dir(filePath)
+	pkgDir := filepath.Dir(filePath)
 
 	// Gather imported packages of file
 	// and parse packages for function declarations
 	// that could be referenced by function.Wrapper implementations
-	type importedPkg struct {
-		Location *astvisit.PackageLocation
-		Funcs    map[string]funcInfo
-	}
-	functions := make(map[string]importedPkg)
-	for _, imp := range file.Imports {
-		importName, pkgLocation, err := astvisit.ImportSpecInfo(fileDir, imp)
-		if err != nil {
-			return err
-		}
-		if pkgLocation.Std {
-			continue
-		}
-		impPkg, err := astvisit.ParsePackage(fset, pkgLocation.SourcePath, filterOutTests)
-		if err != nil {
-			return err
-		}
-		exportedFuncs := make(map[string]funcInfo)
-		for _, f := range impPkg.Files {
-			for _, decl := range f.Decls {
-				funcDecl, ok := decl.(*ast.FuncDecl)
-				if ok && funcDecl.Name.IsExported() {
-					exportedFuncs[funcDecl.Name.Name] = funcInfo{
-						Decl: funcDecl,
-						File: f,
-					}
-				}
-			}
-		}
-		functions[importName] = importedPkg{
-			Location: pkgLocation,
-			Funcs:    exportedFuncs,
-		}
-	}
 	// Also parse all functions of the file's package
-	// because they could als be referenced with an empty import name
-	pkgFuncs := make(map[string]funcInfo)
-	for _, f := range filePkg.Files {
-		for _, decl := range f.Decls {
-			if funcDecl, ok := decl.(*ast.FuncDecl); ok {
-				pkgFuncs[funcDecl.Name.Name] = funcInfo{
-					Decl: funcDecl,
-					File: f,
-				}
-			}
-		}
+	// because they could als be referenced with an empty import name.
+	// Added with empty string as package/import name.
+	functions, err := localAndImportedFunctions(fset, filePkg, file, pkgDir)
+	if err != nil {
+		return err
 	}
-	functions[""] = importedPkg{
-		Location: &astvisit.PackageLocation{
-			PkgName:    filePkg.Name,
-			SourcePath: fileDir,
-		},
-		Funcs: pkgFuncs,
+
+	importLines := map[string]struct{}{
+		// `"reflect"`: {},
+		// `"context"`: {},
+		// `function "github.com/domonda/go-function"`: {},
 	}
 
 	var replacements astvisit.NodeReplacements
@@ -163,12 +122,17 @@ func RewriteAstFile(fset *token.FileSet, filePkg *ast.Package, file *ast.File, f
 			return fmt.Errorf("can't find function %s in package %s", funcName, importName)
 		}
 
+		err = gatherFunctionImports(file, wrappedFunc.Decl.Type, importLines)
+		if err != nil {
+			return err
+		}
+
 		var repl strings.Builder
 		// fmt.Fprintf(&newSrc, "////////////////////////////////////////\n")
 		// fmt.Fprintf(&newSrc, "// %s\n\n", impl.WrappedFunc)
 		fmt.Fprintf(&repl, "// %s wraps %s as %s (generated code)\n", wrapper.VarName, wrapper.WrappedFunc, wrapper.Impl)
 		fmt.Fprintf(&repl, "var %[1]s %[1]sT\n\n", wrapper.VarName)
-		err = wrapper.Impl.WriteFunction(&repl, file, wrappedFunc.Decl, wrapper.VarName+"T", importName)
+		err = wrapper.Impl.WriteFunctionWrapper(&repl, file, wrappedFunc.Decl, wrapper.VarName+"T", importName, importLines)
 		if err != nil {
 			return err
 		}
@@ -192,10 +156,25 @@ func RewriteAstFile(fset *token.FileSet, filePkg *ast.Package, file *ast.File, f
 	if err != nil {
 		return err
 	}
-	source, err = format.Source(source)
+	rewritten, err = format.Source(rewritten)
 	if err != nil {
 		return err
 	}
+
+	// imports.LocalPrefix = "github.com/domonda/"
+	// rewritten, err = imports.Process(filePath, rewritten, &imports.Options{Comments: true, FormatOnly: true})
+	// if err != nil {
+	// 	return err
+	// }
+
+	// if verbose {
+	// 	var sortedImportLines []string
+	// 	for l := range importLines {
+	// 		sortedImportLines = append(sortedImportLines, l)
+	// 	}
+	// 	sort.Strings(sortedImportLines)
+	// 	fmt.Println("imports:", sortedImportLines)
+	// }
 
 	if printTo != nil {
 		if verbose {
@@ -377,4 +356,103 @@ func parseImplementsComment(implementor, comment string) (wrappedFunc string, im
 		return "", 0, err
 	}
 	return wrappedFunc, impl, nil
+}
+
+type packageFuncs struct {
+	Location *astvisit.PackageLocation
+	Funcs    map[string]funcDeclInFile
+}
+
+func localAndImportedFunctions(fset *token.FileSet, filePkg *ast.Package, file *ast.File, pkgDir string) (map[string]packageFuncs, error) {
+	pkgFuncs := make(map[string]funcDeclInFile)
+	for _, f := range filePkg.Files {
+		for _, decl := range f.Decls {
+			if funcDecl, ok := decl.(*ast.FuncDecl); ok {
+				pkgFuncs[funcDecl.Name.Name] = funcDeclInFile{
+					Decl: funcDecl,
+					File: f,
+				}
+			}
+		}
+	}
+	functions := map[string]packageFuncs{
+		"": {
+			Location: &astvisit.PackageLocation{
+				PkgName:    filePkg.Name,
+				SourcePath: pkgDir,
+			},
+			Funcs: pkgFuncs,
+		},
+	}
+
+	for _, imp := range file.Imports {
+		importName, pkgLocation, err := astvisit.ImportSpecInfo(pkgDir, imp)
+		if err != nil {
+			return nil, err
+		}
+		if pkgLocation.Std {
+			continue
+		}
+		impPkg, err := astvisit.ParsePackage(fset, pkgLocation.SourcePath, filterOutTests)
+		if err != nil {
+			return nil, err
+		}
+		exportedFuncs := make(map[string]funcDeclInFile)
+		for _, f := range impPkg.Files {
+			for _, decl := range f.Decls {
+				funcDecl, ok := decl.(*ast.FuncDecl)
+				if ok && funcDecl.Name.IsExported() {
+					exportedFuncs[funcDecl.Name.Name] = funcDeclInFile{
+						Decl: funcDecl,
+						File: f,
+					}
+				}
+			}
+		}
+		functions[importName] = packageFuncs{
+			Location: pkgLocation,
+			Funcs:    exportedFuncs,
+		}
+	}
+
+	return functions, nil
+}
+
+func gatherFunctionImports(file *ast.File, funcType *ast.FuncType, outImportLines map[string]struct{}) error {
+	funcSelectors := make(map[string]struct{})
+	recursiveExprSelectors(funcType, funcSelectors)
+	// fmt.Println(funcSelectors)
+	for _, imp := range file.Imports {
+		if imp.Name != nil {
+			if _, ok := funcSelectors[imp.Name.Name]; ok {
+				delete(outImportLines, imp.Path.Value)
+				outImportLines[imp.Name.Name+" "+imp.Path.Value] = struct{}{}
+			}
+			continue
+		}
+		guessedName, err := guessPackageNameFromPath(imp.Path.Value)
+		if err != nil {
+			return err
+		}
+		if _, ok := funcSelectors[guessedName]; ok {
+			if _, ok = outImportLines[guessedName+" "+imp.Path.Value]; !ok {
+				outImportLines[imp.Path.Value] = struct{}{}
+			}
+		}
+	}
+	return nil
+}
+
+func guessPackageNameFromPath(path string) (string, error) {
+	pkg := path
+	if len(pkg) >= 2 && pkg[0] == '"' && pkg[len(pkg)-1] == '"' {
+		pkg = pkg[1 : len(pkg)-1]
+	}
+	pkg = pkg[strings.LastIndex(pkg, "/")+1:]
+	pkg = strings.TrimPrefix(pkg, "go-")
+	pkg = strings.TrimSuffix(pkg, ".go")
+	if pkg == "" || strings.ContainsAny(pkg, ".-") {
+		return "", fmt.Errorf("could not guess package name from import path %s", path)
+	}
+	return pkg, nil
 }

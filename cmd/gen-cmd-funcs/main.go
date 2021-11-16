@@ -51,7 +51,7 @@ func main() {
 			filePath = filepath.Join(filePath, "...")
 		}
 	}
-	info, err := os.Stat(filePath)
+	info, err := os.Stat(strings.TrimSuffix(filePath, "..."))
 	if err != nil {
 		fmt.Fprintln(os.Stderr, "gen-cmd-funcs error:", err)
 		os.Exit(2)

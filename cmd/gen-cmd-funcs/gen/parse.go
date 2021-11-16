@@ -9,12 +9,12 @@ import (
 	"strings"
 )
 
-type funcInfo struct {
+type funcDeclInFile struct {
 	Decl *ast.FuncDecl
 	File *ast.File
 }
 
-func parsePackage(pkgDir, excludeFilename string, onlyFuncs ...string) (pkgName string, funcs map[string]funcInfo, err error) {
+func parsePackage(pkgDir, excludeFilename string, onlyFuncs ...string) (pkgName string, funcs map[string]funcDeclInFile, err error) {
 	fset := token.NewFileSet()
 	pkgs, err := parser.ParseDir(fset, pkgDir, filterGoFiles(excludeFilename), 0)
 	if err != nil {
@@ -42,7 +42,7 @@ func parsePackage(pkgDir, excludeFilename string, onlyFuncs ...string) (pkgName 
 	// 	return nil, err
 	// }
 
-	funcs = make(map[string]funcInfo)
+	funcs = make(map[string]funcDeclInFile)
 	for _, file := range files {
 		// ast.Print(fileSet, file.Imports)
 		for _, obj := range file.Scope.Objects {
@@ -54,12 +54,12 @@ func parsePackage(pkgDir, excludeFilename string, onlyFuncs ...string) (pkgName 
 			if len(onlyFuncs) > 0 {
 				for _, name := range onlyFuncs {
 					if funcDecl.Name.Name == name {
-						funcs[name] = funcInfo{Decl: funcDecl, File: file}
+						funcs[name] = funcDeclInFile{Decl: funcDecl, File: file}
 						break
 					}
 				}
 			} else if funcDecl.Name.IsExported() {
-				funcs[funcDecl.Name.Name] = funcInfo{Decl: funcDecl, File: file}
+				funcs[funcDecl.Name.Name] = funcDeclInFile{Decl: funcDecl, File: file}
 			}
 		}
 	}
