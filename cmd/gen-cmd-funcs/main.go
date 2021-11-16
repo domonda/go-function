@@ -51,11 +51,21 @@ func main() {
 			filePath = filepath.Join(filePath, "...")
 		}
 	}
+	info, err := os.Stat(filePath)
+	if err != nil {
+		fmt.Fprintln(os.Stderr, "gen-cmd-funcs error:", err)
+		os.Exit(2)
+	}
+
 	var printOnlyWriter io.Writer
 	if printOnly {
 		printOnlyWriter = os.Stdout
 	}
-	err := gen.Rewrite(filePath, verbose, printOnlyWriter)
+	if info.IsDir() {
+		err = gen.RewriteDir(filePath, verbose, printOnlyWriter)
+	} else {
+		err = gen.RewriteFile(filePath, verbose, printOnlyWriter)
+	}
 	if err != nil {
 		fmt.Fprintln(os.Stderr, "gen-cmd-funcs error:", err)
 		os.Exit(2)

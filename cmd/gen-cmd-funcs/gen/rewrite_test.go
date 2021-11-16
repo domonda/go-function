@@ -11,26 +11,26 @@ func Test_parseImplementsComment(t *testing.T) {
 		name            string
 		args            args
 		wantWrappedFunc string
-		wantImplements  Impl
+		wantImpl        Impl
 		wantErr         bool
 	}{
 		{
 			name:            "function.Wrapper (generated code)",
 			args:            args{implementor: "myFunction", comment: "myFunction wraps my.Function as function.Wrapper (generated code)"},
 			wantWrappedFunc: "my.Function",
-			wantImplements:  ImplWrapper,
+			wantImpl:        ImplWrapper,
 		},
 		{
 			name:            "function.Wrapper",
 			args:            args{implementor: "myFunction", comment: " myFunction wraps my.Function as function.Wrapper "},
 			wantWrappedFunc: "my.Function",
-			wantImplements:  ImplWrapper,
+			wantImpl:        ImplWrapper,
 		},
 		{
 			name:            "function.Description",
 			args:            args{implementor: "myFunction", comment: "myFunction wraps MyFunction as function.Description (generated code)"},
 			wantWrappedFunc: "MyFunction",
-			wantImplements:  ImplDescription,
+			wantImpl:        ImplDescription,
 		},
 
 		// Invalid:
@@ -55,8 +55,8 @@ func Test_parseImplementsComment(t *testing.T) {
 			if gotWrappedFunc != tt.wantWrappedFunc {
 				t.Errorf("parseImplementsComment() gotWrappedFunc = %v, want %v", gotWrappedFunc, tt.wantWrappedFunc)
 			}
-			if gotImplements != tt.wantImplements {
-				t.Errorf("parseImplementsComment() gotImplements = %v, want %v", gotImplements, tt.wantImplements)
+			if gotImplements != tt.wantImpl {
+				t.Errorf("parseImplementsComment() gotImplements = %v, want %v", gotImplements, tt.wantImpl)
 			}
 		})
 	}

@@ -15,7 +15,7 @@ import (
 	"github.com/ungerik/go-astvisit"
 )
 
-func Rewrite(path string, verbose bool, printOnly io.Writer) (err error) {
+func RewriteDir(path string, verbose bool, printOnly io.Writer) (err error) {
 	recursive := strings.HasSuffix(path, "...")
 	if recursive {
 		path = filepath.Clean(strings.TrimSuffix(path, "..."))
@@ -56,7 +56,7 @@ func Rewrite(path string, verbose bool, printOnly io.Writer) (err error) {
 		if !file.IsDir() || fileName[0] == '.' || fileName == "node_modules" {
 			continue
 		}
-		err = Rewrite(filepath.Join(path, fileName, "..."), verbose, printOnly)
+		err = RewriteDir(filepath.Join(path, fileName, "..."), verbose, printOnly)
 		if err != nil {
 			return err
 		}
@@ -83,10 +83,10 @@ func RewriteFile(filePath string, verbose bool, printOnly io.Writer) (err error)
 func RewriteAstFile(fset *token.FileSet, filePkg *ast.Package, file *ast.File, filePath string, verbose bool, printTo io.Writer) (err error) {
 	// ast.Print(fset, file)
 
-	funcImpls := findFuncImpls(fset, file)
-	if len(funcImpls) == 0 {
+	wrappers := findWrappers(fset, file)
+	if len(wrappers) == 0 {
 		if verbose {
-			fmt.Println("nothing found to rewrite in", filePath)
+			fmt.Println("no wrappers found to rewrite in", filePath)
 		}
 		return nil
 	}
@@ -95,7 +95,7 @@ func RewriteAstFile(fset *token.FileSet, filePkg *ast.Package, file *ast.File, f
 
 	// Gather imported packages of file
 	// and parse packages for function declarations
-	// that could be referenced by command.Function implementations
+	// that could be referenced by function.Wrapper implementations
 	type importedPkg struct {
 		Location *astvisit.PackageLocation
 		Funcs    map[string]funcInfo
@@ -152,8 +152,8 @@ func RewriteAstFile(fset *token.FileSet, filePkg *ast.Package, file *ast.File, f
 	}
 
 	var replacements astvisit.NodeReplacements
-	for _, fun := range funcImpls {
-		importName, funcName := fun.WrappedFuncPkgAndFuncName()
+	for _, wrapper := range wrappers {
+		importName, funcName := wrapper.WrappedFuncPkgAndFuncName()
 		referencedPkg, ok := functions[importName]
 		if !ok {
 			return fmt.Errorf("can't find package %s in imports of file %s", importName, filePath)
@@ -166,15 +166,15 @@ func RewriteAstFile(fset *token.FileSet, filePkg *ast.Package, file *ast.File, f
 		var repl strings.Builder
 		// fmt.Fprintf(&newSrc, "////////////////////////////////////////\n")
 		// fmt.Fprintf(&newSrc, "// %s\n\n", impl.WrappedFunc)
-		fmt.Fprintf(&repl, "// %s wraps %s as %s (generated code)\n", fun.VarName, fun.WrappedFunc, fun.Implements)
-		fmt.Fprintf(&repl, "var %[1]s %[1]sT\n\n", fun.VarName)
-		err = fun.Implements.WriteFunction(&repl, file, wrappedFunc.Decl, fun.VarName+"T", importName)
+		fmt.Fprintf(&repl, "// %s wraps %s as %s (generated code)\n", wrapper.VarName, wrapper.WrappedFunc, wrapper.Impl)
+		fmt.Fprintf(&repl, "var %[1]s %[1]sT\n\n", wrapper.VarName)
+		err = wrapper.Impl.WriteFunction(&repl, file, wrappedFunc.Decl, wrapper.VarName+"T", importName)
 		if err != nil {
 			return err
 		}
 
 		var implReplacements astvisit.NodeReplacements
-		for i, node := range fun.Nodes {
+		for i, node := range wrapper.Nodes {
 			if i == 0 {
 				implReplacements.AddReplacement(node, repl.String())
 			} else {
@@ -210,15 +210,15 @@ func RewriteAstFile(fset *token.FileSet, filePkg *ast.Package, file *ast.File, f
 	return ioutil.WriteFile(filePath, rewritten, 0660)
 }
 
-type funcImpl struct {
+type wrapper struct {
 	VarName     string
 	WrappedFunc string
 	Type        string
 	Nodes       []ast.Node
-	Implements  Impl
+	Impl        Impl
 }
 
-func (impl *funcImpl) WrappedFuncPkgAndFuncName() (pkgName, funcName string) {
+func (impl *wrapper) WrappedFuncPkgAndFuncName() (pkgName, funcName string) {
 	dot := strings.IndexByte(impl.WrappedFunc, '.')
 	if dot == -1 {
 		return "", impl.WrappedFunc
@@ -226,10 +226,10 @@ func (impl *funcImpl) WrappedFuncPkgAndFuncName() (pkgName, funcName string) {
 	return impl.WrappedFunc[:dot], impl.WrappedFunc[dot+1:]
 }
 
-func findFuncImpls(fset *token.FileSet, file *ast.File) []*funcImpl {
-	ordered := make([]*funcImpl, 0)
-	named := make(map[string]*funcImpl)
-	typed := make(map[string]*funcImpl)
+func findWrappers(fset *token.FileSet, file *ast.File) []*wrapper {
+	ordered := make([]*wrapper, 0)
+	named := make(map[string]*wrapper)
+	typed := make(map[string]*wrapper)
 
 	for _, decl := range file.Decls {
 		// ast.Print(fset, decl)
@@ -256,13 +256,13 @@ func findFuncImpls(fset *token.FileSet, file *ast.File) []*funcImpl {
 					}
 					impl := named[implVarName]
 					if impl == nil {
-						impl = new(funcImpl)
+						impl = new(wrapper)
 						ordered = append(ordered, impl)
 						named[implVarName] = impl
 					}
 					impl.VarName = implVarName
 					impl.WrappedFunc = wrappedFunc
-					impl.Implements |= implements
+					impl.Impl |= implements
 					impl.Type = astvisit.ExprString(valueSpec.Type)
 					if decl.Doc != nil {
 						impl.Nodes = append(impl.Nodes, decl.Doc)
@@ -290,13 +290,13 @@ func findFuncImpls(fset *token.FileSet, file *ast.File) []*funcImpl {
 				}
 				impl := named[implVarName]
 				if impl == nil {
-					impl = new(funcImpl)
+					impl = new(wrapper)
 					ordered = append(ordered, impl)
 					named[implVarName] = impl
 				}
 				impl.VarName = implVarName
 				impl.WrappedFunc = astvisit.ExprString(callExpr.Args[0])
-				impl.Implements |= implements
+				impl.Impl |= implements
 				if decl.Doc != nil {
 					impl.Nodes = append(impl.Nodes, decl.Doc)
 				}
@@ -318,7 +318,7 @@ func findFuncImpls(fset *token.FileSet, file *ast.File) []*funcImpl {
 				}
 				impl := typed[implTypeName]
 				if impl == nil {
-					impl = new(funcImpl)
+					impl = new(wrapper)
 					ordered = append(ordered, impl)
 					typed[implTypeName] = impl
 					impl.Type = implTypeName
@@ -329,7 +329,7 @@ func findFuncImpls(fset *token.FileSet, file *ast.File) []*funcImpl {
 					impl.VarName = implTypeName
 				}
 				impl.WrappedFunc = wrappedFunc
-				impl.Implements |= implements
+				impl.Impl |= implements
 				if decl.Doc != nil {
 					impl.Nodes = append(impl.Nodes, decl.Doc)
 				}
@@ -364,7 +364,7 @@ func findFuncImpls(fset *token.FileSet, file *ast.File) []*funcImpl {
 // or:
 //   // documentCanUserReadT wraps document.CanUserRead as function.Wrapper (generated code)
 //   type documentCanUserReadT struct{}
-func parseImplementsComment(implementor, comment string) (wrappedFunc string, implements Impl, err error) {
+func parseImplementsComment(implementor, comment string) (wrappedFunc string, impl Impl, err error) {
 	comment = strings.TrimSuffix(strings.TrimSpace(comment), " (generated code)")
 	prefix := implementor + " wraps "
 	asPos := strings.Index(comment, " as ")
@@ -372,9 +372,9 @@ func parseImplementsComment(implementor, comment string) (wrappedFunc string, im
 		return "", 0, errors.New("no implementation comment")
 	}
 	wrappedFunc = comment[len(prefix):asPos]
-	implements, err = ImplFromString(comment[asPos+len(" as "):])
+	impl, err = ImplFromString(comment[asPos+len(" as "):])
 	if err != nil {
 		return "", 0, err
 	}
-	return wrappedFunc, implements, nil
+	return wrappedFunc, impl, nil
 }

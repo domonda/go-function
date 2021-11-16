@@ -264,43 +264,6 @@ func (impl Impl) FunctionString(file *ast.File, funcDecl *ast.FuncDecl, implType
 	return b.String(), nil
 }
 
-func GetFunctionImports(outImportLines map[string]bool, file *ast.File, funcDecl *ast.FuncDecl) error {
-	funcSelectors := make(map[string]struct{})
-	recursiveExprSelectors(funcDecl.Type, funcSelectors)
-	// fmt.Println(funcSelectors)
-	for _, imp := range file.Imports {
-		if imp.Name != nil {
-			if _, ok := funcSelectors[imp.Name.Name]; ok {
-				delete(outImportLines, imp.Path.Value)
-				outImportLines[imp.Name.Name+" "+imp.Path.Value] = true
-			}
-			continue
-		}
-		guessedName, err := guessPackageNameFromPath(imp.Path.Value)
-		if err != nil {
-			return err
-		}
-		if _, ok := funcSelectors[guessedName]; ok && !outImportLines[guessedName+" "+imp.Path.Value] {
-			outImportLines[imp.Path.Value] = true
-		}
-	}
-	return nil
-}
-
-func guessPackageNameFromPath(path string) (string, error) {
-	pkg := path
-	if len(pkg) >= 2 && pkg[0] == '"' && pkg[len(pkg)-1] == '"' {
-		pkg = pkg[1 : len(pkg)-1]
-	}
-	pkg = pkg[strings.LastIndex(pkg, "/")+1:]
-	pkg = strings.TrimPrefix(pkg, "go-")
-	pkg = strings.TrimSuffix(pkg, ".go")
-	if pkg == "" || strings.ContainsAny(pkg, ".-") {
-		return "", fmt.Errorf("could not guess package name from import path %s", path)
-	}
-	return pkg, nil
-}
-
 func reflectTypeOfTypeName(typeName string) string {
 	typeName = strings.Replace(typeName, "...", "[]", 1)
 	if strings.HasPrefix(typeName, "*") || strings.HasPrefix(typeName, "[]") || strings.HasPrefix(typeName, "map[") {
