@@ -7,7 +7,6 @@ import (
 	"go/format"
 	"go/token"
 	"io"
-	"io/fs"
 	"io/ioutil"
 	"os"
 	"path/filepath"
@@ -19,7 +18,7 @@ import (
 func Rewrite(path string, verbose bool, printOnly io.Writer) (err error) {
 	recursive := strings.HasSuffix(path, "...")
 	if recursive {
-		path = strings.TrimSuffix(path, "...")
+		path = filepath.Clean(strings.TrimSuffix(path, "..."))
 	}
 	fileInfo, err := os.Stat(path)
 	if err != nil {
@@ -31,28 +30,36 @@ func Rewrite(path string, verbose bool, printOnly io.Writer) (err error) {
 
 	fset := token.NewFileSet()
 	pkg, err := astvisit.ParsePackage(fset, path, filterOutTests)
-	if err != nil {
-		if errors.Is(err, astvisit.ErrPackageNotFound) {
-			return nil
-		}
+	if err != nil && (!recursive || !errors.Is(err, astvisit.ErrPackageNotFound)) {
 		return err
 	}
-	for fileName, file := range pkg.Files {
-		err = RewriteAstFile(fset, pkg, file, fileName, verbose, printOnly)
-		if err != nil {
-			return err
+	if err == nil {
+		for fileName, file := range pkg.Files {
+			err = RewriteAstFile(fset, pkg, file, fileName, verbose, printOnly)
+			if err != nil {
+				return err
+			}
 		}
+	} else if verbose {
+		fmt.Println(err)
 	}
 	if !recursive {
 		return nil
 	}
 
-	return filepath.WalkDir(path, func(path string, d fs.DirEntry, err error) error {
-		if !d.IsDir() {
-			return nil
+	files, err := ioutil.ReadDir(path)
+	if err != nil {
+		return err
+	}
+	for _, file := range files {
+		if file.IsDir() {
+			err = Rewrite(filepath.Join(path, file.Name(), "..."), verbose, printOnly)
+			if err != nil {
+				return err
+			}
 		}
-		return Rewrite(filepath.Join(path, d.Name())+"...", verbose, printOnly)
-	})
+	}
+	return nil
 }
 
 func RewriteFile(filePath string, verbose bool, printOnly io.Writer) (err error) {
@@ -189,6 +196,9 @@ func RewriteAstFile(fset *token.FileSet, filePkg *ast.Package, file *ast.File, f
 	}
 
 	if printTo != nil {
+		if verbose {
+			fmt.Println(filePath, "would be rewritten as:")
+		}
 		_, err = printTo.Write(rewritten)
 		return err
 	}

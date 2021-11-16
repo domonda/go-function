@@ -6,6 +6,7 @@ import (
 	"io"
 	"os"
 	"path/filepath"
+	"strings"
 
 	"github.com/domonda/go-function/cmd/gen-cmd-funcs/gen"
 )
@@ -32,25 +33,23 @@ func main() {
 		os.Exit(2)
 	}
 
-	args := flag.Args()
-
-	// if exportedFuncs {
-	// 	if len(args) < 1 {
-	// 		fmt.Fprintln(os.Stderr, "gen-cmd-funcs needs package path argument")
-	// 		os.Exit(1)
-	// 	}
-	// 	pkgDir, onlyFuncs := filepath.Clean(args[0]), args[1:]
-	// 	err := gen.PackageFunctions(pkgDir, genFilename, namePrefix, printOnly, onlyFuncs...)
-	// 	if err != nil {
-	// 		fmt.Fprintln(os.Stderr, "gen-cmd-funcs error:", err)
-	// 		os.Exit(2)
-	// 	}
-	// 	return
-	// }
-
-	filePath, _ := os.Getwd()
-	if len(args) > 0 && args[0] != "." {
-		filePath = filepath.Clean(args[0])
+	var (
+		args     = flag.Args()
+		cwd, _   = os.Getwd()
+		filePath string
+	)
+	if len(args) == 0 {
+		filePath = cwd
+	} else {
+		recursive := strings.HasSuffix(args[0], "...")
+		if args[0] == "." || args[0] == "./..." {
+			filePath = cwd
+		} else {
+			filePath = filepath.Clean(strings.TrimSuffix(args[0], "..."))
+		}
+		if recursive {
+			filePath = filepath.Join(filePath, "...")
+		}
 	}
 	var printOnlyWriter io.Writer
 	if printOnly {
