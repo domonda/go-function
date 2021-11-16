@@ -52,11 +52,13 @@ func Rewrite(path string, verbose bool, printOnly io.Writer) (err error) {
 		return err
 	}
 	for _, file := range files {
-		if file.IsDir() {
-			err = Rewrite(filepath.Join(path, file.Name(), "..."), verbose, printOnly)
-			if err != nil {
-				return err
-			}
+		fileName := file.Name()
+		if !file.IsDir() || fileName[0] == '.' || fileName == "node_modules" {
+			continue
+		}
+		err = Rewrite(filepath.Join(path, fileName, "..."), verbose, printOnly)
+		if err != nil {
+			return err
 		}
 	}
 	return nil

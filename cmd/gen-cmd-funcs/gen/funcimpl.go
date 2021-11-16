@@ -55,15 +55,15 @@ func (impl Impl) String() string {
 }
 
 func (impl Impl) WriteFunction(w io.Writer, file *ast.File, funcDecl *ast.FuncDecl, implType, funcPackageSel string) error {
-	argNames := funcDeclArgNames(funcDecl)
-	argDescriptions := funcDeclArgDescriptions(funcDecl)
-	argTypes := funcDeclArgTypes(funcDecl)
-	if len(argNames) != len(argTypes) {
-		panic("len(argNames) != len(argTypes)")
-	}
-	resultTypes := funcDeclResultTypes(funcDecl)
-	hasContextArg := len(argTypes) > 0 && argTypes[0] == "context.Context"
-	hasErrorResult := len(resultTypes) > 0 && resultTypes[len(resultTypes)-1] == "error"
+	var (
+		argNames        = funcDeclArgNames(funcDecl)
+		argDescriptions = funcDeclArgDescriptions(funcDecl)
+		argTypes        = funcDeclArgTypes(funcDecl)
+		numArgs         = len(argNames)
+		resultTypes     = funcDeclResultTypes(funcDecl)
+		hasContextArg   = len(argTypes) > 0 && argTypes[0] == "context.Context"
+		hasErrorResult  = len(resultTypes) > 0 && resultTypes[len(resultTypes)-1] == "error"
+	)
 	if funcPackageSel != "" && !strings.HasSuffix(funcPackageSel, ".") {
 		funcPackageSel += "."
 	}
@@ -135,8 +135,8 @@ func (impl Impl) WriteFunction(w io.Writer, file *ast.File, funcDecl *ast.FuncDe
 			fmt.Fprintf(w, "\treturn nil\n")
 		} else {
 			fmt.Fprintf(w, "\treturn []reflect.Type{\n")
-			for _, t := range argTypes {
-				fmt.Fprintf(w, "\t\treflect.TypeOf((*%s)(nil)).Elem(),\n", strings.Replace(t, "...", "[]", 1))
+			for _, argType := range argTypes {
+				fmt.Fprintf(w, "\t\t%s,\n", reflectTypeOfTypeName(argType))
 			}
 			fmt.Fprintf(w, "\t}\n")
 		}
@@ -147,8 +147,8 @@ func (impl Impl) WriteFunction(w io.Writer, file *ast.File, funcDecl *ast.FuncDe
 			fmt.Fprintf(w, "\treturn nil\n")
 		} else {
 			fmt.Fprintf(w, "\treturn []reflect.Type{\n")
-			for _, t := range resultTypes {
-				fmt.Fprintf(w, "\t\treflect.TypeOf((*%s)(nil)).Elem(),\n", t)
+			for _, resultType := range resultTypes {
+				fmt.Fprintf(w, "\t\t%s,\n", reflectTypeOfTypeName(resultType))
 			}
 			fmt.Fprintf(w, "\t}\n")
 		}
@@ -161,7 +161,7 @@ func (impl Impl) WriteFunction(w io.Writer, file *ast.File, funcDecl *ast.FuncDe
 	}
 	strsArgName := "strs"
 	argsArgName := "args"
-	if len(argNames) == 0 || hasContextArg && len(argNames) == 1 {
+	if numArgs == 0 || hasContextArg && numArgs == 1 {
 		strsArgName = "_"
 		argsArgName = "_"
 	}
@@ -175,6 +175,7 @@ func (impl Impl) WriteFunction(w io.Writer, file *ast.File, funcDecl *ast.FuncDe
 					args[0] = "ctx"
 					continue
 				}
+				argType = strings.Replace(argType, "...", "[]", 1)
 				argsIndex := i
 				if hasContextArg {
 					argsIndex--
@@ -208,10 +209,10 @@ func (impl Impl) WriteFunction(w io.Writer, file *ast.File, funcDecl *ast.FuncDe
 				if argTypes[i] == "string" {
 					fmt.Fprintf(w, "\t\t%s = strs[%d]\n", argName, strsIndex)
 				} else {
-					fmt.Fprintf(w, "\t\terr = command.AssignFromString(&%s, strs[%d])\n", argName, strsIndex)
+					fmt.Fprintf(w, "\t\terr = function.ScanString(strs[%d], &%s)\n", strsIndex, argName)
 					fmt.Fprintf(w, "\t\tif err != nil {\n")
 					{
-						fmt.Fprintf(w, "\t\t\treturn nil, command.NewErrParseArgString(err, f, %q)\n", argName)
+						fmt.Fprintf(w, "\t\t\treturn nil, function.NewErrParseArgString(err, f, %q)\n", argName)
 					}
 					fmt.Fprintf(w, "\t\t}\n")
 				}
@@ -237,10 +238,10 @@ func (impl Impl) WriteFunction(w io.Writer, file *ast.File, funcDecl *ast.FuncDe
 				if argTypes[i] == "string" {
 					fmt.Fprintf(w, "\t\t%s = str\n", argName)
 				} else {
-					fmt.Fprintf(w, "\t\terr = command.AssignFromString(&%s, str)\n", argName)
+					fmt.Fprintf(w, "\t\terr = function.ScanString(str, &%s)\n", argName)
 					fmt.Fprintf(w, "\t\tif err != nil {\n")
 					{
-						fmt.Fprintf(w, "\t\t\treturn nil, command.NewErrParseArgString(err, f, %q)\n", argName)
+						fmt.Fprintf(w, "\t\t\treturn nil, function.NewErrParseArgString(err, f, %q)\n", argName)
 					}
 					fmt.Fprintf(w, "\t\t}\n")
 				}
@@ -298,4 +299,12 @@ func guessPackageNameFromPath(path string) (string, error) {
 		return "", fmt.Errorf("could not guess package name from import path %s", path)
 	}
 	return pkg, nil
+}
+
+func reflectTypeOfTypeName(typeName string) string {
+	typeName = strings.Replace(typeName, "...", "[]", 1)
+	if strings.HasPrefix(typeName, "*") || strings.HasPrefix(typeName, "[]") || strings.HasPrefix(typeName, "map[") {
+		return fmt.Sprintf("reflect.TypeOf((%s)(nil))", typeName)
+	}
+	return fmt.Sprintf("reflect.TypeOf((*%s)(nil)).Elem()", typeName)
 }

@@ -18,7 +18,8 @@ func PackageFunctions(pkgDir, genFilename, namePrefix string, printOnly bool, on
 
 	importLines := map[string]bool{
 		`"reflect"`: true,
-		`command "github.com/ungerik/go-command"`: true,
+		`"context"`: true,
+		`function "github.com/domonda/go-function"`: true,
 	}
 	for _, fun := range funcs {
 		err = GetFunctionImports(importLines, fun.File, fun.Decl)
@@ -54,7 +55,7 @@ func PackageFunctions(pkgDir, genFilename, namePrefix string, printOnly bool, on
 	genFileData := b.Bytes()
 	genFilePath := filepath.Join(pkgDir, genFilename)
 
-	imports.LocalPrefix = "github.com/ungerik/"
+	imports.LocalPrefix = "github.com/domonda/"
 	genFileData, err = imports.Process(genFilePath, genFileData, &imports.Options{Comments: true, FormatOnly: true})
 	if err != nil {
 		return err
