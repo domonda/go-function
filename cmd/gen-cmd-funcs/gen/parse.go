@@ -47,6 +47,9 @@ func parsePackage(pkgDir, excludeFilename string, onlyFuncs ...string) (pkg *ast
 				continue
 			}
 			funcDecl := obj.Decl.(*ast.FuncDecl)
+			if funcDecl.Recv != nil {
+				continue
+			}
 			if len(onlyFuncs) > 0 {
 				for _, name := range onlyFuncs {
 					if funcDecl.Name.Name == name {

@@ -87,8 +87,7 @@ func RewriteFile(filePath string, verbose bool, printOnly io.Writer) (err error)
 
 func RewriteAstFile(fset *token.FileSet, filePkg *ast.Package, astFile *ast.File, filePath string, verbose bool, printTo io.Writer) (err error) {
 	// ast.Print(fset, file)
-
-	wrappers := findWrappers(fset, astFile)
+	wrappers := findFunctionWrappers(fset, astFile)
 	if len(wrappers) == 0 {
 		if verbose {
 			fmt.Println("no wrappers found to rewrite in", filePath)
@@ -220,7 +219,7 @@ func (impl *wrapper) WrappedFuncPkgAndFuncName() (pkgName, funcName string) {
 	return impl.WrappedFunc[:dot], impl.WrappedFunc[dot+1:]
 }
 
-func findWrappers(fset *token.FileSet, file *ast.File) []*wrapper {
+func findFunctionWrappers(fset *token.FileSet, file *ast.File) []*wrapper {
 	ordered := make([]*wrapper, 0)
 	named := make(map[string]*wrapper)
 	typed := make(map[string]*wrapper)

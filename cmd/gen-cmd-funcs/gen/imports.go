@@ -16,11 +16,12 @@ type packageFuncs struct {
 
 // localAndImportedFunctions returns a map of packageFuncs with the package
 func localAndImportedFunctions(fset *token.FileSet, filePkg *ast.Package, file *ast.File, pkgDir string) (map[string]packageFuncs, error) {
-	pkgFuncs := make(map[string]funcDeclInFile)
+	localFuncs := make(map[string]funcDeclInFile)
 	for _, f := range filePkg.Files {
 		for _, decl := range f.Decls {
-			if funcDecl, ok := decl.(*ast.FuncDecl); ok {
-				pkgFuncs[funcDecl.Name.Name] = funcDeclInFile{
+			funcDecl, ok := decl.(*ast.FuncDecl)
+			if ok && funcDecl.Recv == nil {
+				localFuncs[funcDecl.Name.Name] = funcDeclInFile{
 					Decl: funcDecl,
 					File: f,
 				}
@@ -33,7 +34,7 @@ func localAndImportedFunctions(fset *token.FileSet, filePkg *ast.Package, file *
 				PkgName:    filePkg.Name,
 				SourcePath: pkgDir,
 			},
-			Funcs: pkgFuncs,
+			Funcs: localFuncs,
 		},
 	}
 
@@ -53,7 +54,7 @@ func localAndImportedFunctions(fset *token.FileSet, filePkg *ast.Package, file *
 		for _, f := range impPkg.Files {
 			for _, decl := range f.Decls {
 				funcDecl, ok := decl.(*ast.FuncDecl)
-				if ok && funcDecl.Name.IsExported() {
+				if ok && funcDecl.Recv == nil && funcDecl.Name.IsExported() {
 					exportedFuncs[funcDecl.Name.Name] = funcDeclInFile{
 						Decl: funcDecl,
 						File: f,
