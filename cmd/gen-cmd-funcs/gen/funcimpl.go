@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"go/ast"
 	"io"
+	"strconv"
 	"strings"
 
 	"github.com/ungerik/go-astvisit"
@@ -54,21 +55,26 @@ func (impl Impl) String() string {
 	}
 }
 
-func (impl Impl) WriteFunctionWrapper(w io.Writer, file *ast.File, funcDecl *ast.FuncDecl, implType, funcPackageSel string, setImportLines map[string]struct{}) error {
+func (impl Impl) WriteFunctionWrapper(w io.Writer, funcFile *ast.File, funcDecl *ast.FuncDecl, implType, funcPackage string, neededImportLines map[string]struct{}) error {
 	var (
 		argNames        = funcDeclArgNames(funcDecl)
 		argDescriptions = funcDeclArgDescriptions(funcDecl)
-		argTypes        = funcDeclArgTypes(funcDecl)
+		argTypes        = funcDeclArgTypes(funcDecl, funcPackage)
 		numArgs         = len(argTypes)
-		resultTypes     = funcDeclResultTypes(funcDecl)
+		resultTypes     = funcDeclResultTypes(funcDecl, funcPackage)
 		hasContextArg   = numArgs > 0 && argTypes[0] == "context.Context"
 		hasErrorResult  = len(resultTypes) > 0 && resultTypes[len(resultTypes)-1] == "error"
+		funcPackageSel  = ""
 	)
-	if funcPackageSel != "" && !strings.HasSuffix(funcPackageSel, ".") {
-		funcPackageSel += "."
+	if funcPackage != "" {
+		funcPackageSel = funcPackage + "."
 	}
 
-	err := gatherFunctionImports(file, funcDecl.Type, setImportLines)
+	// if funcDecl.Name.Name == "MyFunc" {
+	// 	fmt.Println(funcDecl.Name.Name)
+	// }
+
+	err := gatherFunctionImports(funcFile, funcDecl.Type, neededImportLines)
 	if err != nil {
 		return err
 	}
@@ -115,7 +121,7 @@ func (impl Impl) WriteFunctionWrapper(w io.Writer, file *ast.File, funcDecl *ast
 	fmt.Fprintf(w, "}\n\n")
 
 	if impl&ImplDescription != 0 {
-		setImportLines[`"reflect"`] = struct{}{}
+		neededImportLines[`"reflect"`] = struct{}{}
 
 		fmt.Fprintf(w, "func (%s) Name() string {\n", implType)
 		fmt.Fprintf(w, "\treturn \"%s\"\n", funcDecl.Name.Name)
@@ -175,7 +181,7 @@ func (impl Impl) WriteFunctionWrapper(w io.Writer, file *ast.File, funcDecl *ast
 	}
 
 	if impl&ImplCallWrapper != 0 {
-		setImportLines[`"context"`] = struct{}{}
+		neededImportLines[`"context"`] = struct{}{}
 
 		fmt.Fprintf(w, "func (f %s) Call(%s context.Context, %s []interface{}) (results []interface{}, err error) {\n", implType, ctxArgName, argsArgName)
 		{
@@ -185,14 +191,13 @@ func (impl Impl) WriteFunctionWrapper(w io.Writer, file *ast.File, funcDecl *ast
 					args[0] = "ctx"
 					continue
 				}
-				argType = strings.Replace(argType, "...", "[]", 1)
 				argsIndex := i
 				if hasContextArg {
 					argsIndex--
 				}
 				args[i] = fmt.Sprintf("args[%d]", argsIndex)
 				if argType != "interface{}" {
-					args[i] += ".(" + argType + ")"
+					args[i] += ".(" + strings.Replace(argType, "...", "[]", 1) + ")"
 				}
 			}
 			writeFuncCall(args)
@@ -201,8 +206,8 @@ func (impl Impl) WriteFunctionWrapper(w io.Writer, file *ast.File, funcDecl *ast
 	}
 
 	if impl&ImplCallWithStringsWrapper != 0 {
-		setImportLines[`"context"`] = struct{}{}
-		setImportLines[`"github.com/domonda/go-function"`] = struct{}{}
+		neededImportLines[`"context"`] = struct{}{}
+		neededImportLines[`"github.com/domonda/go-function"`] = struct{}{}
 
 		fmt.Fprintf(w, "func (f %s) CallWithStrings(%s context.Context, %s ...string) (results []interface{}, err error) {\n", implType, ctxArgName, strsArgName)
 		{
@@ -217,7 +222,17 @@ func (impl Impl) WriteFunctionWrapper(w io.Writer, file *ast.File, funcDecl *ast
 				if hasContextArg {
 					strsIndex--
 				}
-				fmt.Fprintf(w, "\tvar %s %s\n", argName, strings.Replace(argTypes[i], "...", "[]", 1))
+
+				argType := strings.Replace(argTypes[i], "...", "[]", 1)
+
+				if argName == "_" {
+					argName := "ignoredArg" + strconv.Itoa(i)
+					argNames[i] = argName
+					fmt.Fprintf(w, "\tvar %s %s\n", argName, argType)
+					continue
+				}
+
+				fmt.Fprintf(w, "\tvar %s %s\n", argName, argType)
 				fmt.Fprintf(w, "\tif len(strs) > %d {\n", strsIndex)
 				if argTypes[i] == "string" {
 					fmt.Fprintf(w, "\t\t%s = strs[%d]\n", argName, strsIndex)
@@ -237,8 +252,8 @@ func (impl Impl) WriteFunctionWrapper(w io.Writer, file *ast.File, funcDecl *ast
 	}
 
 	if impl&ImplCallWithNamedStringsWrapper != 0 {
-		setImportLines[`"context"`] = struct{}{}
-		setImportLines[`"github.com/domonda/go-function"`] = struct{}{}
+		neededImportLines[`"context"`] = struct{}{}
+		neededImportLines[`"github.com/domonda/go-function"`] = struct{}{}
 
 		fmt.Fprintf(w, "func (f %s) CallWithNamedStrings(%s context.Context, %s map[string]string) (results []interface{}, err error) {\n", implType, ctxArgName, strsArgName)
 		{
@@ -249,7 +264,17 @@ func (impl Impl) WriteFunctionWrapper(w io.Writer, file *ast.File, funcDecl *ast
 					}
 					continue
 				}
-				fmt.Fprintf(w, "\tvar %s %s\n", argName, strings.Replace(argTypes[i], "...", "[]", 1))
+
+				argType := strings.Replace(argTypes[i], "...", "[]", 1)
+
+				if argName == "_" {
+					argName := "ignoredArg" + strconv.Itoa(i)
+					argNames[i] = argName
+					fmt.Fprintf(w, "\tvar %s %s\n", argName, argType)
+					continue
+				}
+
+				fmt.Fprintf(w, "\tvar %s %s\n", argName, argType)
 				fmt.Fprintf(w, "\tif str, ok := strs[%q]; ok {\n", argName)
 				if argTypes[i] == "string" {
 					fmt.Fprintf(w, "\t\t%s = str\n", argName)

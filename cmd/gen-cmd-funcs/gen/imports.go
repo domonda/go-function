@@ -70,13 +70,12 @@ func localAndImportedFunctions(fset *token.FileSet, filePkg *ast.Package, file *
 	return functions, nil
 }
 
-func gatherFunctionImports(file *ast.File, funcType *ast.FuncType, setImportLines map[string]struct{}) error {
-	funcSelectors := make(map[string]struct{})
-	recursiveExprSelectors(funcType, funcSelectors)
-	// fmt.Println(funcSelectors)
-	for _, imp := range file.Imports {
+func gatherFunctionImports(funcFile *ast.File, funcType *ast.FuncType, setImportLines map[string]struct{}) error {
+	packageNames := make(map[string]struct{})
+	astvisit.TypeExprNameQualifyers(funcType, packageNames)
+	for _, imp := range funcFile.Imports {
 		if imp.Name != nil {
-			if _, ok := funcSelectors[imp.Name.Name]; ok {
+			if _, ok := packageNames[imp.Name.Name]; ok {
 				delete(setImportLines, imp.Path.Value)
 				setImportLines[imp.Name.Name+" "+imp.Path.Value] = struct{}{}
 			}
@@ -86,7 +85,7 @@ func gatherFunctionImports(file *ast.File, funcType *ast.FuncType, setImportLine
 		if err != nil {
 			return err
 		}
-		if _, ok := funcSelectors[guessedName]; ok {
+		if _, ok := packageNames[guessedName]; ok {
 			if _, ok = setImportLines[guessedName+" "+imp.Path.Value]; !ok {
 				setImportLines[imp.Path.Value] = struct{}{}
 			}

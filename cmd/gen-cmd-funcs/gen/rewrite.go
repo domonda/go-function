@@ -17,6 +17,7 @@ import (
 
 	"github.com/ungerik/go-astvisit"
 	"golang.org/x/tools/go/ast/astutil"
+	"golang.org/x/tools/imports"
 )
 
 func RewriteDir(path string, verbose bool, printOnly io.Writer) (err error) {
@@ -108,23 +109,18 @@ func RewriteAstFile(fset *token.FileSet, filePkg *ast.Package, astFile *ast.File
 		return err
 	}
 
-	importLines := make(map[string]struct{})
+	neededImportLines := make(map[string]struct{})
 
 	var replacements astvisit.NodeReplacements
 	for _, wrapper := range wrappers {
-		importName, funcName := wrapper.WrappedFuncPkgAndFuncName()
-		referencedPkg, ok := functions[importName]
+		wrappedFuncPackage, wrappedFuncName := wrapper.WrappedFuncPkgAndFuncName()
+		referencedPkg, ok := functions[wrappedFuncPackage]
 		if !ok {
-			return fmt.Errorf("can't find package %s in imports of file %s", importName, filePath)
+			return fmt.Errorf("can't find package %s in imports of file %s", wrappedFuncPackage, filePath)
 		}
-		wrappedFunc, ok := referencedPkg.Funcs[funcName]
+		wrappedFunc, ok := referencedPkg.Funcs[wrappedFuncName]
 		if !ok {
-			return fmt.Errorf("can't find function %s in package %s", funcName, importName)
-		}
-
-		err = gatherFunctionImports(astFile, wrappedFunc.Decl.Type, importLines)
-		if err != nil {
-			return err
+			return fmt.Errorf("can't find function %s in package %s", wrappedFuncName, wrappedFuncPackage)
 		}
 
 		var repl strings.Builder
@@ -132,7 +128,7 @@ func RewriteAstFile(fset *token.FileSet, filePkg *ast.Package, astFile *ast.File
 		// fmt.Fprintf(&newSrc, "// %s\n\n", impl.WrappedFunc)
 		fmt.Fprintf(&repl, "// %s wraps %s as %s (generated code)\n", wrapper.VarName, wrapper.WrappedFunc, wrapper.Impl)
 		fmt.Fprintf(&repl, "var %[1]s %[1]sT\n\n", wrapper.VarName)
-		err = wrapper.Impl.WriteFunctionWrapper(&repl, astFile, wrappedFunc.Decl, wrapper.VarName+"T", importName, importLines)
+		err = wrapper.Impl.WriteFunctionWrapper(&repl, wrappedFunc.File, wrappedFunc.Decl, wrapper.VarName+"T", wrappedFuncPackage, neededImportLines)
 		if err != nil {
 			return err
 		}
@@ -168,8 +164,8 @@ func RewriteAstFile(fset *token.FileSet, filePkg *ast.Package, astFile *ast.File
 		return err
 	}
 	// Sort import lines to add the missing ones in repeatable order
-	sortedImportLines := make([]string, 0, len(importLines))
-	for l := range importLines {
+	sortedImportLines := make([]string, 0, len(neededImportLines))
+	for l := range neededImportLines {
 		sortedImportLines = append(sortedImportLines, l)
 	}
 	sort.Strings(sortedImportLines)
@@ -187,12 +183,13 @@ func RewriteAstFile(fset *token.FileSet, filePkg *ast.Package, astFile *ast.File
 	}
 	rewritten = buf.Bytes()
 
+	// TODO replace by something more efficient that re-parsing everything
 	// import "golang.org/x/tools/imports"
-	// imports.LocalPrefix = "github.com/domonda/"
-	// rewritten, err = imports.Process(filePath, rewritten, &imports.Options{Comments: true, FormatOnly: true})
-	// if err != nil {
-	// 	return err
-	// }
+	imports.LocalPrefix = "github.com/domonda/"
+	rewritten, err = imports.Process(filePath, rewritten, &imports.Options{Comments: true, FormatOnly: true})
+	if err != nil {
+		return err
+	}
 
 	if printTo != nil {
 		if verbose {

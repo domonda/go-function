@@ -14,21 +14,17 @@ type funcDeclInFile struct {
 	File *ast.File
 }
 
-func parsePackage(pkgDir, excludeFilename string, onlyFuncs ...string) (pkgName string, funcs map[string]funcDeclInFile, err error) {
+func parsePackage(pkgDir, excludeFilename string, onlyFuncs ...string) (pkg *ast.Package, funcs map[string]funcDeclInFile, err error) {
 	fset := token.NewFileSet()
 	pkgs, err := parser.ParseDir(fset, pkgDir, filterGoFiles(excludeFilename), 0)
 	if err != nil {
-		return "", nil, err
+		return nil, nil, err
 	}
 	if len(pkgs) != 1 {
-		return "", nil, fmt.Errorf("%d packages found in %s", len(pkgs), pkgDir)
+		return nil, nil, fmt.Errorf("%d packages found in %s", len(pkgs), pkgDir)
 	}
-	var files []*ast.File
 	for _, p := range pkgs {
-		pkgName = p.Name
-		for _, file := range p.Files {
-			files = append(files, file)
-		}
+		pkg = p
 	}
 
 	// // typesInfo.Uses allows to lookup import paths for identifiers.
@@ -43,7 +39,7 @@ func parsePackage(pkgDir, excludeFilename string, onlyFuncs ...string) (pkgName 
 	// }
 
 	funcs = make(map[string]funcDeclInFile)
-	for _, file := range files {
+	for _, file := range pkg.Files {
 		// ast.Print(fileSet, file.Imports)
 		for _, obj := range file.Scope.Objects {
 			if obj.Kind != ast.Fun {
@@ -63,7 +59,7 @@ func parsePackage(pkgDir, excludeFilename string, onlyFuncs ...string) (pkgName 
 			}
 		}
 	}
-	return pkgName, funcs, nil
+	return pkg, funcs, nil
 }
 
 func filterGoFiles(excludeFilenames ...string) func(info os.FileInfo) bool {
