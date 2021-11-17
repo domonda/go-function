@@ -12,11 +12,11 @@ var (
 
 type ErrParseArgString struct {
 	Err  error
-	Func Description
+	Func fmt.Stringer
 	Arg  string
 }
 
-func NewErrParseArgString(err error, f Description, arg string) ErrParseArgString {
+func NewErrParseArgString(err error, f fmt.Stringer, arg string) ErrParseArgString {
 	return ErrParseArgString{Err: err, Func: f, Arg: arg}
 }
 
@@ -30,11 +30,11 @@ func (e ErrParseArgString) Unwrap() error {
 
 type ErrParseArgJSON struct {
 	Err  error
-	Func Description
+	Func fmt.Stringer
 	Arg  string
 }
 
-func NewErrParseArgJSON(err error, f Description, arg string) ErrParseArgJSON {
+func NewErrParseArgJSON(err error, f fmt.Stringer, arg string) ErrParseArgJSON {
 	return ErrParseArgJSON{Err: err, Func: f, Arg: arg}
 }
 

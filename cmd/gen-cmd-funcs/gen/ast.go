@@ -58,38 +58,38 @@ func funcDeclResultTypes(funcDecl *ast.FuncDecl) (types []string) {
 	return types
 }
 
-func recursiveExprSelectors(expr ast.Expr, outSelectors map[string]struct{}) {
+func recursiveExprSelectors(expr ast.Expr, setSelectors map[string]struct{}) {
 	switch e := expr.(type) {
 	case *ast.Ident:
 		// Name without selector
 	case *ast.SelectorExpr:
-		outSelectors[e.X.(*ast.Ident).Name] = struct{}{}
+		setSelectors[e.X.(*ast.Ident).Name] = struct{}{}
 	case *ast.StarExpr:
-		recursiveExprSelectors(e.X, outSelectors)
+		recursiveExprSelectors(e.X, setSelectors)
 	case *ast.Ellipsis:
-		recursiveExprSelectors(e.Elt, outSelectors)
+		recursiveExprSelectors(e.Elt, setSelectors)
 	case *ast.ArrayType:
-		recursiveExprSelectors(e.Elt, outSelectors)
+		recursiveExprSelectors(e.Elt, setSelectors)
 	case *ast.StructType:
 		for _, f := range e.Fields.List {
-			recursiveExprSelectors(f.Type, outSelectors)
+			recursiveExprSelectors(f.Type, setSelectors)
 		}
 	case *ast.CompositeLit:
 		for _, elt := range e.Elts {
-			recursiveExprSelectors(elt, outSelectors)
+			recursiveExprSelectors(elt, setSelectors)
 		}
 	case *ast.MapType:
-		recursiveExprSelectors(e.Key, outSelectors)
-		recursiveExprSelectors(e.Value, outSelectors)
+		recursiveExprSelectors(e.Key, setSelectors)
+		recursiveExprSelectors(e.Value, setSelectors)
 	case *ast.ChanType:
-		recursiveExprSelectors(e.Value, outSelectors)
+		recursiveExprSelectors(e.Value, setSelectors)
 	case *ast.FuncType:
 		for _, p := range e.Params.List {
-			recursiveExprSelectors(p.Type, outSelectors)
+			recursiveExprSelectors(p.Type, setSelectors)
 		}
 		if e.Results != nil {
 			for _, r := range e.Results.List {
-				recursiveExprSelectors(r.Type, outSelectors)
+				recursiveExprSelectors(r.Type, setSelectors)
 			}
 		}
 	default:
