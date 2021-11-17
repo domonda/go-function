@@ -56,12 +56,15 @@ func (impl Impl) String() string {
 }
 
 func (impl Impl) WriteFunctionWrapper(w io.Writer, funcFile *ast.File, funcDecl *ast.FuncDecl, implType, funcPackage string, neededImportLines map[string]struct{}) error {
+	// if funcDecl.Name.Name == "XXX" {
+	// 	fmt.Println("DEBUG:", funcDecl.Name.Name)
+	// }
 	var (
-		argNames        = funcDeclArgNames(funcDecl)
+		argNames        = funcTypeArgNames(funcDecl.Type)
 		argDescriptions = funcDeclArgDescriptions(funcDecl)
-		argTypes        = funcDeclArgTypes(funcDecl, funcPackage)
+		argTypes        = funcTypeArgTypes(funcDecl.Type, funcPackage)
 		numArgs         = len(argTypes)
-		resultTypes     = funcDeclResultTypes(funcDecl, funcPackage)
+		resultTypes     = funcTypeResultTypes(funcDecl.Type, funcPackage)
 		hasContextArg   = numArgs > 0 && argTypes[0] == "context.Context"
 		hasErrorResult  = len(resultTypes) > 0 && resultTypes[len(resultTypes)-1] == "error"
 		funcPackageSel  = ""
@@ -70,14 +73,13 @@ func (impl Impl) WriteFunctionWrapper(w io.Writer, funcFile *ast.File, funcDecl 
 		funcPackageSel = funcPackage + "."
 	}
 
-	// if funcDecl.Name.Name == "MyFunc" {
-	// 	fmt.Println(funcDecl.Name.Name)
+	// if funcDecl.Name.Name == "XXX" {
+	// 	fmt.Println("=====================================================")
+	// 	fmt.Println("DEBUG:", funcDecl.Name.Name)
+	// 	fmt.Println("argNames:", argNames)
+	// 	fmt.Println("argTypes:", argTypes)
+	// 	fmt.Println("=====================================================")
 	// }
-
-	err := gatherFunctionImports(funcFile, funcDecl.Type, neededImportLines)
-	if err != nil {
-		return err
-	}
 
 	writeFuncCall := func(args []string) {
 		numResultsWithoutErr := len(resultTypes)
@@ -120,8 +122,20 @@ func (impl Impl) WriteFunctionWrapper(w io.Writer, funcFile *ast.File, funcDecl 
 	fmt.Fprintf(w, "\treturn \"%s%s%s\"\n", funcPackageSel, funcDecl.Name.Name, astvisit.FuncTypeString(funcDecl.Type))
 	fmt.Fprintf(w, "}\n\n")
 
+	// Always get imports of function arguments
+	err := gatherFieldListImports(funcFile, funcDecl.Type.Params, neededImportLines)
+	if err != nil {
+		return err
+	}
+
 	if impl&ImplDescription != 0 {
 		neededImportLines[`"reflect"`] = struct{}{}
+
+		// Get imports of results only for function.Description.ArgTypes() method
+		err = gatherFieldListImports(funcFile, funcDecl.Type.Results, neededImportLines)
+		if err != nil {
+			return err
+		}
 
 		fmt.Fprintf(w, "func (%s) Name() string {\n", implType)
 		fmt.Fprintf(w, "\treturn \"%s\"\n", funcDecl.Name.Name)

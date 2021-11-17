@@ -22,7 +22,11 @@ func PackageFunctions(pkgDir, genFilename, namePrefix string, printOnly bool, on
 		`function "github.com/domonda/go-function"`: {},
 	}
 	for _, fun := range funcs {
-		err = gatherFunctionImports(fun.File, fun.Decl.Type, importLines)
+		err = gatherFieldListImports(fun.File, fun.Decl.Type.Params, importLines)
+		if err != nil {
+			return err
+		}
+		err = gatherFieldListImports(fun.File, fun.Decl.Type.Results, importLines)
 		if err != nil {
 			return err
 		}

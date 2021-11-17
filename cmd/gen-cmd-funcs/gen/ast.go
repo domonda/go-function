@@ -7,8 +7,8 @@ import (
 	"github.com/ungerik/go-astvisit"
 )
 
-func funcDeclArgNames(funcDecl *ast.FuncDecl) (names []string) {
-	for _, field := range funcDecl.Type.Params.List {
+func funcTypeArgNames(funcType *ast.FuncType) (names []string) {
+	for _, field := range funcType.Params.List {
 		for _, name := range field.Names {
 			names = append(names, name.Name)
 		}
@@ -16,8 +16,8 @@ func funcDeclArgNames(funcDecl *ast.FuncDecl) (names []string) {
 	return names
 }
 
-func funcDeclArgTypes(funcDecl *ast.FuncDecl, exportedNameQualifyer string) (types []string) {
-	for _, field := range funcDecl.Type.Params.List {
+func funcTypeArgTypes(funcType *ast.FuncType, exportedNameQualifyer string) (types []string) {
+	for _, field := range funcType.Params.List {
 		for range field.Names {
 			types = append(types, astvisit.ExprStringWithExportedNameQualifyer(field.Type, exportedNameQualifyer))
 		}
@@ -44,11 +44,11 @@ func funcDeclArgDescriptions(funcDecl *ast.FuncDecl) (descriptions []string) {
 	return descriptions
 }
 
-func funcDeclResultTypes(funcDecl *ast.FuncDecl, exportedNameQualifyer string) (types []string) {
-	if funcDecl.Type.Results == nil {
+func funcTypeResultTypes(funcType *ast.FuncType, exportedNameQualifyer string) (types []string) {
+	if funcType.Results == nil {
 		return nil
 	}
-	for _, field := range funcDecl.Type.Results.List {
+	for _, field := range funcType.Results.List {
 		types = append(types, astvisit.ExprStringWithExportedNameQualifyer(field.Type, exportedNameQualifyer))
 		for i := 1; i < len(field.Names); i++ {
 			types = append(types, astvisit.ExprStringWithExportedNameQualifyer(field.Type, exportedNameQualifyer))

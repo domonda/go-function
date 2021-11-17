@@ -70,9 +70,14 @@ func localAndImportedFunctions(fset *token.FileSet, filePkg *ast.Package, file *
 	return functions, nil
 }
 
-func gatherFunctionImports(funcFile *ast.File, funcType *ast.FuncType, setImportLines map[string]struct{}) error {
+func gatherFieldListImports(funcFile *ast.File, fieldList *ast.FieldList, setImportLines map[string]struct{}) error {
+	if fieldList == nil {
+		return nil
+	}
 	packageNames := make(map[string]struct{})
-	astvisit.TypeExprNameQualifyers(funcType, packageNames)
+	for _, field := range fieldList.List {
+		astvisit.TypeExprNameQualifyers(field.Type, packageNames)
+	}
 	for _, imp := range funcFile.Imports {
 		if imp.Name != nil {
 			if _, ok := packageNames[imp.Name.Name]; ok {
