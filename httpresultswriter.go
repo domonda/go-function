@@ -96,21 +96,6 @@ func RespondJSONField(fieldName string) HTTPResultsWriterFunc {
 	}
 }
 
-type RespondStaticJSON string
-
-func (json RespondStaticJSON) WriteResults(results []interface{}, resultErr error, writer http.ResponseWriter, request *http.Request) error {
-	if resultErr != nil {
-		return resultErr
-	}
-	if request.Context().Err() != nil {
-		return request.Context().Err() // Don't respond to cancelled request
-	}
-
-	writer.Header().Set("Content-Type", "application/json; charset=utf-8")
-	writer.Write([]byte(json))
-	return nil
-}
-
 var RespondXML HTTPResultsWriterFunc = func(results []interface{}, resultErr error, writer http.ResponseWriter, request *http.Request) error {
 	if resultErr != nil {
 		return resultErr
@@ -128,21 +113,6 @@ var RespondXML HTTPResultsWriterFunc = func(results []interface{}, resultErr err
 	}
 	writer.Header().Set("Content-Type", "application/xml; charset=utf-8")
 	writer.Write(buf)
-	return nil
-}
-
-type RespondStaticXML string
-
-func (xml RespondStaticXML) WriteResults(results []interface{}, resultErr error, writer http.ResponseWriter, request *http.Request) error {
-	if resultErr != nil {
-		return resultErr
-	}
-	if request.Context().Err() != nil {
-		return request.Context().Err() // Don't respond to cancelled request
-	}
-
-	writer.Header().Set("Content-Type", "application/xml; charset=utf-8")
-	writer.Write([]byte(xml))
 	return nil
 }
 
@@ -166,21 +136,6 @@ var RespondPlaintext HTTPResultsWriterFunc = func(results []interface{}, resultE
 	return nil
 }
 
-type RespondStaticPlaintext string
-
-func (text RespondStaticPlaintext) WriteResults(results []interface{}, resultErr error, writer http.ResponseWriter, request *http.Request) error {
-	if resultErr != nil {
-		return resultErr
-	}
-	if request.Context().Err() != nil {
-		return request.Context().Err() // Don't respond to cancelled request
-	}
-
-	writer.Header().Add("Content-Type", "text/plain; charset=utf-8")
-	writer.Write([]byte(text))
-	return nil
-}
-
 var RespondHTML HTTPResultsWriterFunc = func(results []interface{}, resultErr error, writer http.ResponseWriter, request *http.Request) error {
 	if resultErr != nil {
 		return resultErr
@@ -198,21 +153,6 @@ var RespondHTML HTTPResultsWriterFunc = func(results []interface{}, resultErr er
 	}
 	writer.Header().Add("Content-Type", "text/html; charset=utf-8")
 	writer.Write(buf.Bytes())
-	return nil
-}
-
-type RespondStaticHTML string
-
-func (html RespondStaticHTML) WriteResults(results []interface{}, resultErr error, writer http.ResponseWriter, request *http.Request) error {
-	if resultErr != nil {
-		return resultErr
-	}
-	if request.Context().Err() != nil {
-		return request.Context().Err() // Don't respond to cancelled request
-	}
-
-	writer.Header().Add("Content-Type", "text/html; charset=utf-8")
-	writer.Write([]byte(html))
 	return nil
 }
 
@@ -258,10 +198,6 @@ func RespondContentType(contentType string) HTTPResultsWriter {
 	})
 }
 
-var RespondNothing HTTPResultsWriterFunc = func(results []interface{}, resultErr error, writer http.ResponseWriter, request *http.Request) error {
-	return resultErr
-}
-
 // DetectContentType tries to detect the MIME content-type of data,
 // or returns "application/octet-stream" if none could be identified.
 func DetectContentType(data []byte) string {
@@ -284,4 +220,101 @@ func encodeXML(response interface{}) ([]byte, error) {
 		return xml.MarshalIndent(response, "", PrettyPrintIndent)
 	}
 	return xml.Marshal(response)
+}
+
+// Static content HTTPResultsWriter also implement http.Handler
+var (
+	_ HTTPResultsWriter = RespondNothing
+	_ HTTPResultsWriter = RespondStaticHTML("")
+	_ HTTPResultsWriter = RespondStaticXML("")
+	_ HTTPResultsWriter = RespondStaticJSON("")
+	_ HTTPResultsWriter = RespondStaticPlaintext("")
+
+	_ http.Handler = RespondNothing
+	_ http.Handler = RespondStaticHTML("")
+	_ http.Handler = RespondStaticXML("")
+	_ http.Handler = RespondStaticJSON("")
+	_ http.Handler = RespondStaticPlaintext("")
+)
+
+var RespondNothing respondNothing
+
+type respondNothing struct{}
+
+func (respondNothing) WriteResults(results []interface{}, resultErr error, writer http.ResponseWriter, request *http.Request) error {
+	return nil
+}
+
+func (respondNothing) ServeHTTP(writer http.ResponseWriter, _ *http.Request) {}
+
+type RespondStaticHTML string
+
+func (html RespondStaticHTML) WriteResults(results []interface{}, resultErr error, writer http.ResponseWriter, request *http.Request) error {
+	if resultErr != nil {
+		return resultErr
+	}
+	if request.Context().Err() != nil {
+		return request.Context().Err() // Don't respond to cancelled request
+	}
+	html.ServeHTTP(writer, request)
+	return nil
+}
+
+func (html RespondStaticHTML) ServeHTTP(writer http.ResponseWriter, _ *http.Request) {
+	writer.Header().Add("Content-Type", "text/html; charset=utf-8")
+	writer.Write([]byte(html))
+}
+
+type RespondStaticXML string
+
+func (xml RespondStaticXML) WriteResults(results []interface{}, resultErr error, writer http.ResponseWriter, request *http.Request) error {
+	if resultErr != nil {
+		return resultErr
+	}
+	if request.Context().Err() != nil {
+		return request.Context().Err() // Don't respond to cancelled request
+	}
+	xml.ServeHTTP(writer, request)
+	return nil
+}
+
+func (xml RespondStaticXML) ServeHTTP(writer http.ResponseWriter, _ *http.Request) {
+	writer.Header().Set("Content-Type", "application/xml; charset=utf-8")
+	writer.Write([]byte(xml))
+}
+
+type RespondStaticJSON string
+
+func (json RespondStaticJSON) WriteResults(results []interface{}, resultErr error, writer http.ResponseWriter, request *http.Request) error {
+	if resultErr != nil {
+		return resultErr
+	}
+	if request.Context().Err() != nil {
+		return request.Context().Err() // Don't respond to cancelled request
+	}
+	json.ServeHTTP(writer, request)
+	return nil
+}
+
+func (json RespondStaticJSON) ServeHTTP(writer http.ResponseWriter, _ *http.Request) {
+	writer.Header().Set("Content-Type", "application/json; charset=utf-8")
+	writer.Write([]byte(json))
+}
+
+type RespondStaticPlaintext string
+
+func (text RespondStaticPlaintext) WriteResults(results []interface{}, resultErr error, writer http.ResponseWriter, request *http.Request) error {
+	if resultErr != nil {
+		return resultErr
+	}
+	if request.Context().Err() != nil {
+		return request.Context().Err() // Don't respond to cancelled request
+	}
+	text.ServeHTTP(writer, request)
+	return nil
+}
+
+func (text RespondStaticPlaintext) ServeHTTP(writer http.ResponseWriter, _ *http.Request) {
+	writer.Header().Add("Content-Type", "text/plain; charset=utf-8")
+	writer.Write([]byte(text))
 }

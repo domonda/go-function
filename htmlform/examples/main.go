@@ -12,7 +12,6 @@ import (
 
 	"github.com/ungerik/go-fs"
 	"github.com/ungerik/go-httpx/httperr"
-	"github.com/ungerik/go-httpx/respond"
 
 	"github.com/domonda/go-function/htmlform"
 )
@@ -29,7 +28,7 @@ func main() {
 			}),
 		)
 
-	handler, err := htmlform.NewHandler(wrappedExample, "Example Form", respond.StaticHTML("<h1>Success!</h1>"))
+	handler, err := htmlform.NewHandler(wrappedExample, "Example Form", function.RespondStaticHTML("<h1>Success!</h1>"))
 	if err != nil {
 		log.FatalAndPanic(err)
 	}
