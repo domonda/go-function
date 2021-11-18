@@ -108,7 +108,7 @@ func (disp *StringArgsDispatcher) HasDefaultCommnd() bool {
 func (disp *StringArgsDispatcher) Dispatch(ctx context.Context, command string, args ...string) error {
 	cmd, found := disp.comm[command]
 	if !found {
-		return ErrCommandNotFound
+		return fmt.Errorf("%w: %s", ErrCommandNotFound, command)
 	}
 	for _, logger := range disp.loggers {
 		logger.LogStringArgsCommand(command, args)
