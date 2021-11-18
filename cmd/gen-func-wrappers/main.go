@@ -8,7 +8,7 @@ import (
 	"path/filepath"
 	"strings"
 
-	"github.com/domonda/go-function/cmd/gen-cmd-funcs/gen"
+	"github.com/domonda/go-function/cmd/gen-func-wrappers/gen"
 )
 
 var (
@@ -53,7 +53,7 @@ func main() {
 	}
 	info, err := os.Stat(strings.TrimSuffix(filePath, "..."))
 	if err != nil {
-		fmt.Fprintln(os.Stderr, "gen-cmd-funcs error:", err)
+		fmt.Fprintln(os.Stderr, "gen-func-wrappers error:", err)
 		os.Exit(2)
 	}
 
@@ -67,7 +67,7 @@ func main() {
 		err = gen.RewriteFile(filePath, verbose, printOnlyWriter)
 	}
 	if err != nil {
-		fmt.Fprintln(os.Stderr, "gen-cmd-funcs error:", err)
+		fmt.Fprintln(os.Stderr, "gen-func-wrappers error:", err)
 		os.Exit(2)
 	}
 }
