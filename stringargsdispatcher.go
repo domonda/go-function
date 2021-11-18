@@ -169,6 +169,7 @@ func (disp *StringArgsDispatcher) PrintCommands(appName string) {
 		for _, desc := range cmd.commandFunc.ArgDescriptions() {
 			if desc != "" {
 				hasAnyArgDesc = true
+				break
 			}
 		}
 		if hasAnyArgDesc {

@@ -168,10 +168,11 @@ func (disp *SuperStringArgsDispatcher) PrintCommands(appName string) {
 		for _, desc := range cmd.commandFunc.ArgDescriptions() {
 			if desc != "" {
 				hasAnyArgDesc = true
+				break
 			}
 		}
 		if hasAnyArgDesc {
-			for _, desc := range cmd.commandFunc.ArgDescriptions() {
+			for i, desc := range cmd.commandFunc.ArgDescriptions() {
 				CommandDescriptionColor.Printf("          <%s:%s> %s\n", cmd.commandFunc.ArgNames()[i], derefType(cmd.commandFunc.ArgTypes()[i]), desc)
 			}
 		}
