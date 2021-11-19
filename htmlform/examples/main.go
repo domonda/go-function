@@ -70,8 +70,9 @@ const (
 //   - aFloat: A float
 //   - color:  Select a color
 //   - file:   Upload file
-func Example(aBool bool, anInt int, aFloat float64, color Color, file fs.FileReader /*, aDate date.Date, aTime time.Time*/) error {
+func Example(ctx context.Context, aBool bool, anInt int, aFloat float64, color Color, file fs.FileReader /*, aDate date.Date, aTime time.Time*/) error {
 	log.Info("Example").
+		Ctx(ctx).
 		Bool("aBool", aBool).
 		Int("anInt", anInt).
 		Float("aFloat", aFloat).
@@ -96,28 +97,29 @@ var wrappedExample wrappedExampleT
 type wrappedExampleT struct{}
 
 func (wrappedExampleT) String() string {
-	return "Example(aBool bool, anInt int, aFloat float64, color Color, file fs.FileReader) error"
+	return "Example(ctx context.Context, aBool bool, anInt int, aFloat float64, color Color, file fs.FileReader) error"
 }
 
 func (wrappedExampleT) Name() string {
 	return "Example"
 }
 
-func (wrappedExampleT) NumArgs() int      { return 5 }
-func (wrappedExampleT) ContextArg() bool  { return false }
+func (wrappedExampleT) NumArgs() int      { return 6 }
+func (wrappedExampleT) ContextArg() bool  { return true }
 func (wrappedExampleT) NumResults() int   { return 1 }
 func (wrappedExampleT) ErrorResult() bool { return true }
 
 func (wrappedExampleT) ArgNames() []string {
-	return []string{"aBool", "anInt", "aFloat", "color", "file"}
+	return []string{"ctx", "aBool", "anInt", "aFloat", "color", "file"}
 }
 
 func (wrappedExampleT) ArgDescriptions() []string {
-	return []string{"A bool", "An integer", "A float", "Select a color", "Upload file"}
+	return []string{"", "A bool", "An integer", "A float", "Select a color", "Upload file"}
 }
 
 func (wrappedExampleT) ArgTypes() []reflect.Type {
 	return []reflect.Type{
+		reflect.TypeOf((*context.Context)(nil)).Elem(),
 		reflect.TypeOf((*bool)(nil)).Elem(),
 		reflect.TypeOf((*int)(nil)).Elem(),
 		reflect.TypeOf((*float64)(nil)).Elem(),
@@ -132,12 +134,12 @@ func (wrappedExampleT) ResultTypes() []reflect.Type {
 	}
 }
 
-func (f wrappedExampleT) Call(_ context.Context, args []interface{}) (results []interface{}, err error) {
-	err = Example(args[0].(bool), args[1].(int), args[2].(float64), args[3].(Color), args[4].(fs.FileReader)) // call
+func (f wrappedExampleT) Call(ctx context.Context, args []interface{}) (results []interface{}, err error) {
+	err = Example(ctx, args[0].(bool), args[1].(int), args[2].(float64), args[3].(Color), args[4].(fs.FileReader)) // call
 	return results, err
 }
 
-func (f wrappedExampleT) CallWithStrings(_ context.Context, strs ...string) (results []interface{}, err error) {
+func (f wrappedExampleT) CallWithStrings(ctx context.Context, strs ...string) (results []interface{}, err error) {
 	var aBool bool
 	if len(strs) > 0 {
 		err = function.ScanString(strs[0], &aBool)
@@ -173,11 +175,11 @@ func (f wrappedExampleT) CallWithStrings(_ context.Context, strs ...string) (res
 			return nil, function.NewErrParseArgString(err, f, "file")
 		}
 	}
-	err = Example(aBool, anInt, aFloat, color, file) // call
+	err = Example(ctx, aBool, anInt, aFloat, color, file) // call
 	return results, err
 }
 
-func (f wrappedExampleT) CallWithNamedStrings(_ context.Context, strs map[string]string) (results []interface{}, err error) {
+func (f wrappedExampleT) CallWithNamedStrings(ctx context.Context, strs map[string]string) (results []interface{}, err error) {
 	var aBool bool
 	if str, ok := strs["aBool"]; ok {
 		err = function.ScanString(str, &aBool)
@@ -213,6 +215,6 @@ func (f wrappedExampleT) CallWithNamedStrings(_ context.Context, strs map[string
 			return nil, function.NewErrParseArgString(err, f, "file")
 		}
 	}
-	err = Example(aBool, anInt, aFloat, color, file) // call
+	err = Example(ctx, aBool, anInt, aFloat, color, file) // call
 	return results, err
 }

@@ -117,6 +117,9 @@ func (handler *Handler) ServeHTTP(response http.ResponseWriter, request *http.Re
 func (handler *Handler) get(response http.ResponseWriter, request *http.Request) {
 	handler.form.Fields = nil
 	for i, argName := range handler.wrappedFunc.ArgNames() {
+		if i == 0 && handler.wrappedFunc.ContextArg() {
+			continue
+		}
 		argDescription := handler.wrappedFunc.ArgDescriptions()[i]
 		argType := handler.wrappedFunc.ArgTypes()[i]
 		field := formField{

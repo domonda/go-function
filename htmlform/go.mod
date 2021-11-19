@@ -3,7 +3,7 @@ module github.com/domonda/go-function/htmlform
 go 1.17
 
 require (
-	github.com/domonda/go-function v0.0.0-20211118065321-4fecf8dfab87
+	github.com/domonda/go-function v0.0.0-20211119091303-2046920e2cad
 	github.com/domonda/go-types v0.0.0-20211102102730-19d5810cb0f9
 	github.com/domonda/golog v0.0.0-20211006070356-fffd194e2da4
 	github.com/ungerik/go-fs v0.0.0-20211026033919-c01ec0166b2d
@@ -22,3 +22,5 @@ require (
 	github.com/rivo/uniseg v0.2.0 // indirect
 	golang.org/x/sys v0.0.0-20211117180635-dee7805ff2e1 // indirect
 )
+
+replace github.com/domonda/go-function => ../
