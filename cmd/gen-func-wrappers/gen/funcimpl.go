@@ -56,9 +56,6 @@ func (impl Impl) String() string {
 }
 
 func (impl Impl) WriteFunctionWrapper(w io.Writer, funcFile *ast.File, funcDecl *ast.FuncDecl, implType, funcPackage string, neededImportLines map[string]struct{}) error {
-	// if funcDecl.Name.Name == "XXX" {
-	// 	fmt.Println("DEBUG:", funcDecl.Name.Name)
-	// }
 	var (
 		argNames        = funcTypeArgNames(funcDecl.Type)
 		argDescriptions = funcDeclArgDescriptions(funcDecl)
@@ -199,22 +196,24 @@ func (impl Impl) WriteFunctionWrapper(w io.Writer, funcFile *ast.File, funcDecl 
 
 		fmt.Fprintf(w, "func (f %s) Call(%s context.Context, %s []interface{}) (results []interface{}, err error) {\n", implType, ctxArgName, argsArgName)
 		{
-			args := make([]string, numArgs)
+			callParams := make([]string, numArgs)
 			for i, argType := range argTypes {
 				if i == 0 && hasContextArg {
-					args[0] = "ctx"
+					callParams[0] = "ctx"
 					continue
 				}
+				argType = strings.Replace(argType, "...", "[]", 1)
 				argsIndex := i
 				if hasContextArg {
 					argsIndex--
 				}
-				args[i] = fmt.Sprintf("args[%d]", argsIndex)
-				if argType != "interface{}" {
-					args[i] += ".(" + strings.Replace(argType, "...", "[]", 1) + ")"
+				if argType == "interface{}" {
+					callParams[i] = fmt.Sprintf("args[%d]", argsIndex) // no type conversion needed
+				} else {
+					callParams[i] = fmt.Sprintf("args[%d].(%s)", argsIndex, argType)
 				}
 			}
-			writeFuncCall(args)
+			writeFuncCall(callParams)
 		}
 		fmt.Fprintf(w, "}\n\n")
 	}
@@ -225,42 +224,52 @@ func (impl Impl) WriteFunctionWrapper(w io.Writer, funcFile *ast.File, funcDecl 
 
 		fmt.Fprintf(w, "func (f %s) CallWithStrings(%s context.Context, %s ...string) (results []interface{}, err error) {\n", implType, ctxArgName, strsArgName)
 		{
-			for i, argName := range argNames {
-				if i == 0 && hasContextArg {
-					if argName != "ctx" {
-						fmt.Fprintf(w, "\t%s := ctx\n", argName)
+			var callParams []string
+			switch {
+			case numArgs == 1 && hasContextArg:
+				callParams = []string{"ctx"}
+
+			case numArgs > 0:
+				callParams = make([]string, len(argNames))
+				fmt.Fprintf(w, "\tvar a struct {\n")
+				for i, argName := range argNames {
+					if i == 0 && hasContextArg {
+						callParams[i] = "ctx"
+						continue
 					}
-					continue
-				}
-				strsIndex := i
-				if hasContextArg {
-					strsIndex--
-				}
-
-				argType := strings.Replace(argTypes[i], "...", "[]", 1)
-
-				if argName == "_" {
-					argName := "ignoredArg" + strconv.Itoa(i)
-					argNames[i] = argName
-					fmt.Fprintf(w, "\tvar %s %s\n", argName, argType)
-					continue
-				}
-
-				fmt.Fprintf(w, "\tvar %s %s\n", argName, argType)
-				fmt.Fprintf(w, "\tif len(strs) > %d {\n", strsIndex)
-				if argTypes[i] == "string" {
-					fmt.Fprintf(w, "\t\t%s = strs[%d]\n", argName, strsIndex)
-				} else {
-					fmt.Fprintf(w, "\t\terr = function.ScanString(strs[%d], &%s)\n", strsIndex, argName)
-					fmt.Fprintf(w, "\t\tif err != nil {\n")
-					{
-						fmt.Fprintf(w, "\t\t\treturn nil, function.NewErrParseArgString(err, f, %q)\n", argName)
+					if argName == "_" {
+						argName = "ignoredArg" + strconv.Itoa(i)
 					}
-					fmt.Fprintf(w, "\t\t}\n")
+					argType := strings.Replace(argTypes[i], "...", "[]", 1)
+					fmt.Fprintf(w, "\t\t%s %s\n", argName, argType)
+
+					callParams[i] = "a." + argName
 				}
 				fmt.Fprintf(w, "\t}\n")
+
+				for i, argName := range argNames {
+					if i == 0 && hasContextArg || argName == "_" {
+						continue
+					}
+					strsIndex := i
+					if hasContextArg {
+						strsIndex--
+					}
+					fmt.Fprintf(w, "\tif %d < len(strs) {\n", strsIndex)
+					if argTypes[i] == "string" {
+						fmt.Fprintf(w, "\t\t%s = strs[%d]\n", callParams[i], strsIndex)
+					} else {
+						fmt.Fprintf(w, "\t\terr = function.ScanString(strs[%d], &%s)\n", strsIndex, callParams[i])
+						fmt.Fprintf(w, "\t\tif err != nil {\n")
+						{
+							fmt.Fprintf(w, "\t\t\treturn nil, function.NewErrParseArgString(err, f, %q)\n", argName)
+						}
+						fmt.Fprintf(w, "\t\t}\n")
+					}
+					fmt.Fprintf(w, "\t}\n")
+				}
 			}
-			writeFuncCall(argNames)
+			writeFuncCall(callParams)
 		}
 		fmt.Fprintf(w, "}\n\n")
 	}
@@ -271,38 +280,81 @@ func (impl Impl) WriteFunctionWrapper(w io.Writer, funcFile *ast.File, funcDecl 
 
 		fmt.Fprintf(w, "func (f %s) CallWithNamedStrings(%s context.Context, %s map[string]string) (results []interface{}, err error) {\n", implType, ctxArgName, strsArgName)
 		{
-			for i, argName := range argNames {
-				if i == 0 && hasContextArg {
-					if argName != "ctx" {
-						fmt.Fprintf(w, "\t%s := ctx\n", argName)
+			var callParams []string
+			switch {
+			case numArgs == 1 && hasContextArg:
+				callParams = []string{"ctx"}
+
+			case numArgs > 0:
+				callParams = make([]string, len(argNames))
+				fmt.Fprintf(w, "\tvar a struct {\n")
+				for i, argName := range argNames {
+					if i == 0 && hasContextArg {
+						callParams[i] = "ctx"
+						continue
 					}
-					continue
-				}
-
-				argType := strings.Replace(argTypes[i], "...", "[]", 1)
-
-				if argName == "_" {
-					argName := "ignoredArg" + strconv.Itoa(i)
-					argNames[i] = argName
-					fmt.Fprintf(w, "\tvar %s %s\n", argName, argType)
-					continue
-				}
-
-				fmt.Fprintf(w, "\tvar %s %s\n", argName, argType)
-				fmt.Fprintf(w, "\tif str, ok := strs[%q]; ok {\n", argName)
-				if argTypes[i] == "string" {
-					fmt.Fprintf(w, "\t\t%s = str\n", argName)
-				} else {
-					fmt.Fprintf(w, "\t\terr = function.ScanString(str, &%s)\n", argName)
-					fmt.Fprintf(w, "\t\tif err != nil {\n")
-					{
-						fmt.Fprintf(w, "\t\t\treturn nil, function.NewErrParseArgString(err, f, %q)\n", argName)
+					if argName == "_" {
+						argName = "ignoredArg" + strconv.Itoa(i)
 					}
-					fmt.Fprintf(w, "\t\t}\n")
+					argType := strings.Replace(argTypes[i], "...", "[]", 1)
+					fmt.Fprintf(w, "\t\t%s %s\n", argName, argType)
+
+					callParams[i] = "a." + argName
 				}
 				fmt.Fprintf(w, "\t}\n")
+
+				for i, argName := range argNames {
+					if i == 0 && hasContextArg || argName == "_" {
+						continue
+					}
+					fmt.Fprintf(w, "\tif str, ok := strs[%q]; ok {\n", argName)
+					if argTypes[i] == "string" {
+						fmt.Fprintf(w, "\t\t%s = str\n", callParams[i])
+					} else {
+						fmt.Fprintf(w, "\t\terr = function.ScanString(str, &%s)\n", callParams[i])
+						fmt.Fprintf(w, "\t\tif err != nil {\n")
+						{
+							fmt.Fprintf(w, "\t\t\treturn nil, function.NewErrParseArgString(err, f, %q)\n", argName)
+						}
+						fmt.Fprintf(w, "\t\t}\n")
+					}
+					fmt.Fprintf(w, "\t}\n")
+				}
 			}
-			writeFuncCall(argNames)
+			writeFuncCall(callParams)
+
+			// for i, argName := range argNames {
+			// 	if i == 0 && hasContextArg {
+			// 		if argName != "ctx" {
+			// 			fmt.Fprintf(w, "\t%s := ctx\n", argName)
+			// 		}
+			// 		continue
+			// 	}
+
+			// 	argType := strings.Replace(argTypes[i], "...", "[]", 1)
+
+			// 	if argName == "_" {
+			// 		argName := "ignoredArg" + strconv.Itoa(i)
+			// 		argNames[i] = argName
+			// 		fmt.Fprintf(w, "\tvar %s %s\n", argName, argType)
+			// 		continue
+			// 	}
+
+			// 	fmt.Fprintf(w, "\tvar %s %s\n", argName, argType)
+			// 	fmt.Fprintf(w, "\tif str, ok := strs[%q]; ok {\n", argName)
+			// 	if argTypes[i] == "string" {
+			// 		fmt.Fprintf(w, "\t\t%s = str\n", argName)
+			// 	} else {
+			// 		fmt.Fprintf(w, "\t\terr = function.ScanString(str, &%s)\n", argName)
+			// 		fmt.Fprintf(w, "\t\tif err != nil {\n")
+			// 		{
+			// 			fmt.Fprintf(w, "\t\t\treturn nil, function.NewErrParseArgString(err, f, %q)\n", argName)
+			// 		}
+			// 		fmt.Fprintf(w, "\t\t}\n")
+			// 	}
+			// 	fmt.Fprintf(w, "\t}\n")
+			// }
+			// writeFuncCall(argNames)
 		}
 		fmt.Fprintf(w, "}\n")
 	}

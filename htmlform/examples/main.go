@@ -1,6 +1,6 @@
 package main
 
-//go:generate gen-func-wrappers
+//go:generate gen-func-wrappers $GOFILE
 
 import (
 	"context"
