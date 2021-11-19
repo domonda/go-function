@@ -51,23 +51,23 @@ func HTTPRequestBodyJSONFieldsAsArgs(request *http.Request) (map[string]string, 
 	if err != nil {
 		return nil, err
 	}
+	return namedStringsFromJSON(body)
+}
+
+func namedStringsFromJSON(jsonObject []byte) (map[string]string, error) {
 	fields := make(map[string]json.RawMessage)
-	err = json.Unmarshal(body, &fields)
+	err := json.Unmarshal(jsonObject, &fields)
 	if err != nil {
 		return nil, err
 	}
 	args := make(map[string]string)
 	for name, rawJSON := range fields {
-		if len(rawJSON) == 0 {
-			// should never happen with well formed JSON
-			return nil, fmt.Errorf("JSON body field %q is empty", name)
-		}
-		if rawJSON[0] == '"' {
+		if len(rawJSON) > 0 && rawJSON[0] == '"' {
 			// Unescape JSON string
 			var str string
 			err = json.Unmarshal(rawJSON, &str)
 			if err != nil {
-				return nil, fmt.Errorf("can't unmarshal JSON body field %q as string because of: %w", name, err)
+				return nil, fmt.Errorf("can't unmarshal JSON object value %q as string because of: %w", name, err)
 			}
 			args[name] = str
 			continue
@@ -75,4 +75,5 @@ func HTTPRequestBodyJSONFieldsAsArgs(request *http.Request) (map[string]string, 
 		args[name] = string(rawJSON)
 	}
 	return args, nil
+
 }
