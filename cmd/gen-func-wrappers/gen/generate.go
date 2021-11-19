@@ -10,7 +10,7 @@ import (
 	"golang.org/x/tools/imports"
 )
 
-func PackageFunctions(pkgDir, genFilename, namePrefix string, printOnly bool, onlyFuncs ...string) error {
+func PackageFunctions(pkgDir, genFilename, namePrefix string, printOnly bool, jsonTypeReplacements map[string]string, onlyFuncs ...string) error {
 	pkg, funcs, err := parsePackage(pkgDir, genFilename, onlyFuncs...)
 	if err != nil {
 		return err
@@ -50,7 +50,7 @@ func PackageFunctions(pkgDir, genFilename, namePrefix string, printOnly bool, on
 	}
 
 	for funName, fun := range funcs {
-		err = ImplWrapper.WriteFunctionWrapper(b, fun.File, fun.Decl, namePrefix+funName, "", importLines)
+		err = ImplWrapper.WriteFunctionWrapper(b, fun.File, fun.Decl, namePrefix+funName, "", importLines, jsonTypeReplacements)
 		if err != nil {
 			return err
 		}

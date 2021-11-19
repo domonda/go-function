@@ -45,3 +45,21 @@ func (e ErrParseArgJSON) Error() string {
 func (e ErrParseArgJSON) Unwrap() error {
 	return e.Err
 }
+
+type ErrParseArgsJSON struct {
+	Err  error
+	Func fmt.Stringer
+	JSON string
+}
+
+func NewErrParseArgsJSON(err error, f fmt.Stringer, argsJSON []byte) ErrParseArgsJSON {
+	return ErrParseArgsJSON{Err: err, Func: f, JSON: string(argsJSON)}
+}
+
+func (e ErrParseArgsJSON) Error() string {
+	return fmt.Sprintf("error unmarshalling JSON object for arguments of function %s: %s", e.Func, e.Err)
+}
+
+func (e ErrParseArgsJSON) Unwrap() error {
+	return e.Err
+}

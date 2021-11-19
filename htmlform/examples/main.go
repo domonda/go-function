@@ -4,6 +4,7 @@ package main
 
 import (
 	"context"
+	"encoding/json"
 	"net/http"
 	"reflect"
 
@@ -140,81 +141,101 @@ func (f wrappedExampleT) Call(ctx context.Context, args []interface{}) (results 
 }
 
 func (f wrappedExampleT) CallWithStrings(ctx context.Context, strs ...string) (results []interface{}, err error) {
-	var aBool bool
-	if len(strs) > 0 {
-		err = function.ScanString(strs[0], &aBool)
+	var a struct {
+		aBool  bool
+		anInt  int
+		aFloat float64
+		color  Color
+		file   fs.FileReader
+	}
+	if 0 < len(strs) {
+		err = function.ScanString(strs[0], &a.aBool)
 		if err != nil {
 			return nil, function.NewErrParseArgString(err, f, "aBool")
 		}
 	}
-	var anInt int
-	if len(strs) > 1 {
-		err = function.ScanString(strs[1], &anInt)
+	if 1 < len(strs) {
+		err = function.ScanString(strs[1], &a.anInt)
 		if err != nil {
 			return nil, function.NewErrParseArgString(err, f, "anInt")
 		}
 	}
-	var aFloat float64
-	if len(strs) > 2 {
-		err = function.ScanString(strs[2], &aFloat)
+	if 2 < len(strs) {
+		err = function.ScanString(strs[2], &a.aFloat)
 		if err != nil {
 			return nil, function.NewErrParseArgString(err, f, "aFloat")
 		}
 	}
-	var color Color
-	if len(strs) > 3 {
-		err = function.ScanString(strs[3], &color)
+	if 3 < len(strs) {
+		err = function.ScanString(strs[3], &a.color)
 		if err != nil {
 			return nil, function.NewErrParseArgString(err, f, "color")
 		}
 	}
-	var file fs.FileReader
-	if len(strs) > 4 {
-		err = function.ScanString(strs[4], &file)
+	if 4 < len(strs) {
+		err = function.ScanString(strs[4], &a.file)
 		if err != nil {
 			return nil, function.NewErrParseArgString(err, f, "file")
 		}
 	}
-	err = Example(ctx, aBool, anInt, aFloat, color, file) // call
+	err = Example(ctx, a.aBool, a.anInt, a.aFloat, a.color, a.file) // call
 	return results, err
 }
 
 func (f wrappedExampleT) CallWithNamedStrings(ctx context.Context, strs map[string]string) (results []interface{}, err error) {
-	var aBool bool
+	var a struct {
+		aBool  bool
+		anInt  int
+		aFloat float64
+		color  Color
+		file   fs.FileReader
+	}
 	if str, ok := strs["aBool"]; ok {
-		err = function.ScanString(str, &aBool)
+		err = function.ScanString(str, &a.aBool)
 		if err != nil {
 			return nil, function.NewErrParseArgString(err, f, "aBool")
 		}
 	}
-	var anInt int
 	if str, ok := strs["anInt"]; ok {
-		err = function.ScanString(str, &anInt)
+		err = function.ScanString(str, &a.anInt)
 		if err != nil {
 			return nil, function.NewErrParseArgString(err, f, "anInt")
 		}
 	}
-	var aFloat float64
 	if str, ok := strs["aFloat"]; ok {
-		err = function.ScanString(str, &aFloat)
+		err = function.ScanString(str, &a.aFloat)
 		if err != nil {
 			return nil, function.NewErrParseArgString(err, f, "aFloat")
 		}
 	}
-	var color Color
 	if str, ok := strs["color"]; ok {
-		err = function.ScanString(str, &color)
+		err = function.ScanString(str, &a.color)
 		if err != nil {
 			return nil, function.NewErrParseArgString(err, f, "color")
 		}
 	}
-	var file fs.FileReader
 	if str, ok := strs["file"]; ok {
-		err = function.ScanString(str, &file)
+		err = function.ScanString(str, &a.file)
 		if err != nil {
 			return nil, function.NewErrParseArgString(err, f, "file")
 		}
 	}
-	err = Example(ctx, aBool, anInt, aFloat, color, file) // call
+	err = Example(ctx, a.aBool, a.anInt, a.aFloat, a.color, a.file) // call
+	return results, err
+}
+
+func (f wrappedExampleT) CallWithJSON(ctx context.Context, argsJSON []byte) (results []interface{}, err error) {
+	var a struct {
+		ABool  bool
+		AnInt  int
+		AFloat float64
+		Color  Color
+		File   fs.File
+	}
+	err = json.Unmarshal(argsJSON, &a)
+	if err != nil {
+		return nil, function.NewErrParseArgsJSON(err, f, argsJSON)
+	}
+	err = Example(ctx, a.ABool, a.AnInt, a.AFloat, a.Color, a.File) // call
 	return results, err
 }

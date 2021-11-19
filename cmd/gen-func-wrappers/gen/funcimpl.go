@@ -17,8 +17,9 @@ const (
 	ImplCallWrapper
 	ImplCallWithStringsWrapper
 	ImplCallWithNamedStringsWrapper
+	ImplCallWithJSONWrapper
 
-	ImplWrapper = ImplDescription | ImplCallWrapper | ImplCallWithStringsWrapper | ImplCallWithNamedStringsWrapper
+	ImplWrapper = ImplDescription | ImplCallWrapper | ImplCallWithStringsWrapper | ImplCallWithNamedStringsWrapper | ImplCallWithJSONWrapper
 )
 
 func ImplFromString(str string) (Impl, error) {
@@ -33,6 +34,8 @@ func ImplFromString(str string) (Impl, error) {
 		return ImplCallWithStringsWrapper, nil
 	case "function.CallWithNamedStringsWrapper":
 		return ImplCallWithNamedStringsWrapper, nil
+	case "function.ImplCallWithJSONWrapper":
+		return ImplCallWithJSONWrapper, nil
 	default:
 		return 0, fmt.Errorf("can't implement %q", str)
 	}
@@ -50,12 +53,14 @@ func (impl Impl) String() string {
 		return "function.CallWithStringsWrapper"
 	case ImplCallWithNamedStringsWrapper:
 		return "function.CallWithNamedStringsWrapper"
+	case ImplCallWithJSONWrapper:
+		return "function.CallWithJSONWrapper"
 	default:
 		return fmt.Sprintf("Impl(%d)", impl)
 	}
 }
 
-func (impl Impl) WriteFunctionWrapper(w io.Writer, funcFile *ast.File, funcDecl *ast.FuncDecl, implType, funcPackage string, neededImportLines map[string]struct{}) error {
+func (impl Impl) WriteFunctionWrapper(w io.Writer, funcFile *ast.File, funcDecl *ast.FuncDecl, implType, funcPackage string, neededImportLines map[string]struct{}, jsonTypeReplacements map[string]string) error {
 	var (
 		argNames        = funcTypeArgNames(funcDecl.Type)
 		argDescriptions = funcDeclArgDescriptions(funcDecl)
@@ -184,15 +189,14 @@ func (impl Impl) WriteFunctionWrapper(w io.Writer, funcFile *ast.File, funcDecl 
 	if !hasContextArg {
 		ctxArgName = "_"
 	}
-	strsArgName := "strs"
-	argsArgName := "args"
-	if numArgs == 0 || hasContextArg && numArgs == 1 {
-		strsArgName = "_"
-		argsArgName = "_"
-	}
 
 	if impl&ImplCallWrapper != 0 {
 		neededImportLines[`"context"`] = struct{}{}
+
+		argsArgName := "args"
+		if numArgs == 0 || hasContextArg && numArgs == 1 {
+			argsArgName = "_"
+		}
 
 		fmt.Fprintf(w, "func (f %s) Call(%s context.Context, %s []interface{}) (results []interface{}, err error) {\n", implType, ctxArgName, argsArgName)
 		{
@@ -221,6 +225,11 @@ func (impl Impl) WriteFunctionWrapper(w io.Writer, funcFile *ast.File, funcDecl 
 	if impl&ImplCallWithStringsWrapper != 0 {
 		neededImportLines[`"context"`] = struct{}{}
 		neededImportLines[`"github.com/domonda/go-function"`] = struct{}{}
+
+		strsArgName := "strs"
+		if numArgs == 0 || hasContextArg && numArgs == 1 {
+			strsArgName = "_"
+		}
 
 		fmt.Fprintf(w, "func (f %s) CallWithStrings(%s context.Context, %s ...string) (results []interface{}, err error) {\n", implType, ctxArgName, strsArgName)
 		{
@@ -278,6 +287,11 @@ func (impl Impl) WriteFunctionWrapper(w io.Writer, funcFile *ast.File, funcDecl 
 		neededImportLines[`"context"`] = struct{}{}
 		neededImportLines[`"github.com/domonda/go-function"`] = struct{}{}
 
+		strsArgName := "strs"
+		if numArgs == 0 || hasContextArg && numArgs == 1 {
+			strsArgName = "_"
+		}
+
 		fmt.Fprintf(w, "func (f %s) CallWithNamedStrings(%s context.Context, %s map[string]string) (results []interface{}, err error) {\n", implType, ctxArgName, strsArgName)
 		{
 			var callParams []string
@@ -322,41 +336,61 @@ func (impl Impl) WriteFunctionWrapper(w io.Writer, funcFile *ast.File, funcDecl 
 				}
 			}
 			writeFuncCall(callParams)
-
-			// for i, argName := range argNames {
-			// 	if i == 0 && hasContextArg {
-			// 		if argName != "ctx" {
-			// 			fmt.Fprintf(w, "\t%s := ctx\n", argName)
-			// 		}
-			// 		continue
-			// 	}
-
-			// 	argType := strings.Replace(argTypes[i], "...", "[]", 1)
-
-			// 	if argName == "_" {
-			// 		argName := "ignoredArg" + strconv.Itoa(i)
-			// 		argNames[i] = argName
-			// 		fmt.Fprintf(w, "\tvar %s %s\n", argName, argType)
-			// 		continue
-			// 	}
-
-			// 	fmt.Fprintf(w, "\tvar %s %s\n", argName, argType)
-			// 	fmt.Fprintf(w, "\tif str, ok := strs[%q]; ok {\n", argName)
-			// 	if argTypes[i] == "string" {
-			// 		fmt.Fprintf(w, "\t\t%s = str\n", argName)
-			// 	} else {
-			// 		fmt.Fprintf(w, "\t\terr = function.ScanString(str, &%s)\n", argName)
-			// 		fmt.Fprintf(w, "\t\tif err != nil {\n")
-			// 		{
-			// 			fmt.Fprintf(w, "\t\t\treturn nil, function.NewErrParseArgString(err, f, %q)\n", argName)
-			// 		}
-			// 		fmt.Fprintf(w, "\t\t}\n")
-			// 	}
-			// 	fmt.Fprintf(w, "\t}\n")
-			// }
-			// writeFuncCall(argNames)
 		}
-		fmt.Fprintf(w, "}\n")
+		fmt.Fprintf(w, "}\n\n")
+
+		if impl&ImplCallWithJSONWrapper != 0 {
+			neededImportLines[`"context"`] = struct{}{}
+			neededImportLines[`"github.com/domonda/go-function"`] = struct{}{}
+
+			argsJSONArgName := "argsJSON"
+			if numArgs == 0 || numArgs == 1 && hasContextArg {
+				argsJSONArgName = "_"
+			} else {
+				neededImportLines[`"encoding/json"`] = struct{}{}
+			}
+
+			fmt.Fprintf(w, "func (f %s) CallWithJSON(%s context.Context, %s []byte) (results []interface{}, err error) {\n", implType, ctxArgName, argsJSONArgName)
+			{
+				var callParams []string
+				switch {
+				case numArgs == 1 && hasContextArg:
+					callParams = []string{"ctx"}
+
+				case numArgs > 0:
+					callParams = make([]string, len(argNames))
+					fmt.Fprintf(w, "\tvar a struct {\n")
+					for i, argName := range argNames {
+						if i == 0 && hasContextArg {
+							callParams[i] = "ctx"
+							continue
+						}
+						if argName == "_" {
+							argName = "ignoredArg" + strconv.Itoa(i)
+						} else {
+							argName = strings.ToUpper(argName[:1]) + argName[1:]
+						}
+						argType := strings.Replace(argTypes[i], "...", "[]", 1)
+						if replacementType, ok := jsonTypeReplacements[argType]; ok {
+							argType = replacementType
+						}
+						fmt.Fprintf(w, "\t\t%s %s\n", argName, argType)
+
+						callParams[i] = "a." + argName
+					}
+					fmt.Fprintf(w, "\t}\n")
+
+					fmt.Fprintf(w, "\terr = json.Unmarshal(argsJSON, &a)\n")
+					fmt.Fprintf(w, "\tif err != nil {\n")
+					{
+						fmt.Fprintf(w, "\t\treturn nil, function.NewErrParseArgsJSON(err, f, argsJSON)\n")
+					}
+					fmt.Fprintf(w, "\t}\n")
+				}
+				writeFuncCall(callParams)
+			}
+			fmt.Fprintf(w, "}\n\n")
+		}
 	}
 
 	return nil

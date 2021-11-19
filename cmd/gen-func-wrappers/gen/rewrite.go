@@ -20,7 +20,7 @@ import (
 	"golang.org/x/tools/imports"
 )
 
-func RewriteDir(path string, verbose bool, printOnly io.Writer) (err error) {
+func RewriteDir(path string, verbose bool, printOnly io.Writer, jsonTypeReplacements map[string]string) (err error) {
 	recursive := strings.HasSuffix(path, "...")
 	if recursive {
 		path = filepath.Clean(strings.TrimSuffix(path, "..."))
@@ -30,7 +30,7 @@ func RewriteDir(path string, verbose bool, printOnly io.Writer) (err error) {
 		return err
 	}
 	if !fileInfo.IsDir() {
-		return RewriteFile(path, verbose, printOnly)
+		return RewriteFile(path, verbose, printOnly, jsonTypeReplacements)
 	}
 
 	fset := token.NewFileSet()
@@ -40,7 +40,7 @@ func RewriteDir(path string, verbose bool, printOnly io.Writer) (err error) {
 	}
 	if err == nil {
 		for fileName, file := range pkg.Files {
-			err = RewriteAstFile(fset, pkg, file, fileName, verbose, printOnly)
+			err = RewriteAstFile(fset, pkg, file, fileName, verbose, printOnly, jsonTypeReplacements)
 			if err != nil {
 				return err
 			}
@@ -61,7 +61,7 @@ func RewriteDir(path string, verbose bool, printOnly io.Writer) (err error) {
 		if !file.IsDir() || fileName[0] == '.' || fileName == "node_modules" {
 			continue
 		}
-		err = RewriteDir(filepath.Join(path, fileName, "..."), verbose, printOnly)
+		err = RewriteDir(filepath.Join(path, fileName, "..."), verbose, printOnly, jsonTypeReplacements)
 		if err != nil {
 			return err
 		}
@@ -69,7 +69,7 @@ func RewriteDir(path string, verbose bool, printOnly io.Writer) (err error) {
 	return nil
 }
 
-func RewriteFile(filePath string, verbose bool, printOnly io.Writer) (err error) {
+func RewriteFile(filePath string, verbose bool, printOnly io.Writer, jsonTypeReplacements map[string]string) (err error) {
 	fileInfo, err := os.Stat(filePath)
 	if err != nil {
 		return err
@@ -82,10 +82,10 @@ func RewriteFile(filePath string, verbose bool, printOnly io.Writer) (err error)
 	if err != nil {
 		return err
 	}
-	return RewriteAstFile(fset, pkg, pkg.Files[filePath], filePath, verbose, printOnly)
+	return RewriteAstFile(fset, pkg, pkg.Files[filePath], filePath, verbose, printOnly, jsonTypeReplacements)
 }
 
-func RewriteAstFile(fset *token.FileSet, filePkg *ast.Package, astFile *ast.File, filePath string, verbose bool, printTo io.Writer) (err error) {
+func RewriteAstFile(fset *token.FileSet, filePkg *ast.Package, astFile *ast.File, filePath string, verbose bool, printTo io.Writer, jsonTypeReplacements map[string]string) (err error) {
 	// ast.Print(fset, file)
 	wrappers := findFunctionWrappers(fset, astFile)
 	if len(wrappers) == 0 {
@@ -127,7 +127,7 @@ func RewriteAstFile(fset *token.FileSet, filePkg *ast.Package, astFile *ast.File
 		// fmt.Fprintf(&newSrc, "// %s\n\n", impl.WrappedFunc)
 		fmt.Fprintf(&repl, "// %s wraps %s as %s (generated code)\n", wrapper.VarName, wrapper.WrappedFunc, wrapper.Impl)
 		fmt.Fprintf(&repl, "var %[1]s %[1]sT\n\n", wrapper.VarName)
-		err = wrapper.Impl.WriteFunctionWrapper(&repl, wrappedFunc.File, wrappedFunc.Decl, wrapper.VarName+"T", wrappedFuncPackage, neededImportLines)
+		err = wrapper.Impl.WriteFunctionWrapper(&repl, wrappedFunc.File, wrappedFunc.Decl, wrapper.VarName+"T", wrappedFuncPackage, neededImportLines, jsonTypeReplacements)
 		if err != nil {
 			return err
 		}

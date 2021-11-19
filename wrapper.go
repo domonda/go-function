@@ -10,6 +10,7 @@ type Wrapper interface {
 	CallWrapper
 	CallWithStringsWrapper
 	CallWithNamedStringsWrapper
+	CallWithJSONWrapper
 }
 
 func WrapperTODO(function interface{}) Wrapper {
@@ -52,11 +53,23 @@ func CallWithNamedStringsWrapperTODO(function interface{}) CallWithNamedStringsW
 	panic("function.CallWithNamedStringsWrapperTODO: run gen-func-wrappers")
 }
 
+type CallWithJSONWrapper interface {
+	CallWithJSON(ctx context.Context, argsJSON []byte) (results []interface{}, err error)
+}
+
+func CallWithJSONWrapperTODO(function interface{}) CallWithJSONWrapper {
+	if reflect.ValueOf(function).Kind() != reflect.Func {
+		panic("function.CallWithJSONWrapperTODO must be used with a function as argument, then run gen-func-wrappers to replace it with generated code")
+	}
+	panic("function.CallWithJSONWrapperTODO: run gen-func-wrappers")
+}
+
 // Implementations of the call interfaces as higher order functions
 var (
 	_ CallWrapper                 = CallWrapperFunc(nil)
 	_ CallWithStringsWrapper      = CallWithStringsWrapperFunc(nil)
 	_ CallWithNamedStringsWrapper = CallWithNamedStringsWrapperFunc(nil)
+	_ CallWithJSONWrapper         = CallWithJSONWrapperFunc(nil)
 )
 
 type CallWrapperFunc func(ctx context.Context, args []interface{}) (results []interface{}, err error)
@@ -75,4 +88,10 @@ type CallWithNamedStringsWrapperFunc func(ctx context.Context, args map[string]s
 
 func (f CallWithNamedStringsWrapperFunc) CallWithNamedStrings(ctx context.Context, args map[string]string) (results []interface{}, err error) {
 	return f(ctx, args)
+}
+
+type CallWithJSONWrapperFunc func(ctx context.Context, argsJSON []byte) (results []interface{}, err error)
+
+func (f CallWithJSONWrapperFunc) CallWithJSON(ctx context.Context, argsJSON []byte) (results []interface{}, err error) {
+	return f(ctx, argsJSON)
 }
