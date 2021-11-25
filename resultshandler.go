@@ -32,7 +32,11 @@ func makeResultsPrintable(results []interface{}) ([]interface{}, error) {
 				return nil, fmt.Errorf("can't print command result as JSON because: %w", err)
 			}
 			results[i] = string(b)
-			continue
+
+		case reflect.Func, reflect.Chan:
+			// Use Go source representation for functional types
+			// that have no useful printable value
+			results[i] = fmt.Sprintf("%#v", result)
 		}
 	}
 	return results, nil
@@ -178,9 +182,8 @@ func (t PrintlnText) HandleResults(ctx context.Context, results []interface{}, r
 	return err
 }
 
-// derefValue dereferences val until a non pointer type or nil is found
-func derefValue(val interface{}) reflect.Value {
-	v := reflect.ValueOf(val)
+// derefValue dereferences a reflect.Value until a non pointer type or nil is found
+func derefValue(v reflect.Value) reflect.Value {
 	for v.Kind() == reflect.Ptr && !v.IsNil() {
 		v = v.Elem()
 	}
