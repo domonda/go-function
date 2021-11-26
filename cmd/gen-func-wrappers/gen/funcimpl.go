@@ -368,7 +368,7 @@ func (impl Impl) WriteFunctionWrapper(w io.Writer, funcFile *ast.File, funcDecl 
 						if argName == "_" {
 							argName = "ignoredArg" + strconv.Itoa(i)
 						} else {
-							argName = strings.ToUpper(argName[:1]) + argName[1:]
+							argName = exportedName(argName)
 						}
 						argType := strings.Replace(argTypes[i], "...", "[]", 1)
 						if replacementType, ok := jsonTypeReplacements[argType]; ok {
@@ -411,4 +411,25 @@ func reflectTypeOfTypeName(typeName string) string {
 		return fmt.Sprintf("reflect.TypeOf((%s)(nil))", typeName)
 	}
 	return fmt.Sprintf("reflect.TypeOf((*%s)(nil)).Elem()", typeName)
+}
+
+func exportedName(name string) string {
+	if name == "id" {
+		return "ID"
+	}
+	numUpper := 1
+	for _, u := range allUpper {
+		if strings.HasPrefix(name, u) {
+			numUpper = len(u)
+			break
+		}
+	}
+	return strings.ToUpper(name[:numUpper]) + name[numUpper:]
+}
+
+var allUpper = []string{
+	"xml",
+	"html",
+	"json",
+	"http",
 }
