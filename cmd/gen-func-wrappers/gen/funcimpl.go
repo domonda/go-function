@@ -67,24 +67,17 @@ func (impl Impl) WriteFunctionWrapper(w io.Writer, funcFile *ast.File, funcDecl 
 		argTypes        = funcTypeArgTypes(funcDecl.Type, funcPackage)
 		numArgs         = len(argTypes)
 		resultTypes     = funcTypeResultTypes(funcDecl.Type, funcPackage)
+		numResults      = len(resultTypes)
 		hasContextArg   = numArgs > 0 && argTypes[0] == "context.Context"
-		hasErrorResult  = len(resultTypes) > 0 && resultTypes[len(resultTypes)-1] == "error"
+		hasErrorResult  = numResults > 0 && resultTypes[numResults-1] == "error"
 		funcPackageSel  = ""
 	)
 	if funcPackage != "" {
 		funcPackageSel = funcPackage + "."
 	}
 
-	// if funcDecl.Name.Name == "XXX" {
-	// 	fmt.Println("=====================================================")
-	// 	fmt.Println("DEBUG:", funcDecl.Name.Name)
-	// 	fmt.Println("argNames:", argNames)
-	// 	fmt.Println("argTypes:", argTypes)
-	// 	fmt.Println("=====================================================")
-	// }
-
 	writeFuncCall := func(args []string) {
-		numResultsWithoutErr := len(resultTypes)
+		numResultsWithoutErr := numResults
 		if hasErrorResult {
 			numResultsWithoutErr--
 		}
@@ -105,7 +98,7 @@ func (impl Impl) WriteFunctionWrapper(w io.Writer, funcFile *ast.File, funcDecl 
 				fmt.Fprintf(w, ", err")
 			}
 		}
-		if len(resultTypes) > 0 {
+		if numResults > 0 {
 			fmt.Fprintf(w, " = ")
 		}
 		ellipsis := ""
@@ -113,7 +106,11 @@ func (impl Impl) WriteFunctionWrapper(w io.Writer, funcFile *ast.File, funcDecl 
 			ellipsis = "..."
 		}
 		fmt.Fprintf(w, "%s%s(%s%s) // call\n", funcPackageSel, funcDecl.Name.Name, strings.Join(args, ", "), ellipsis)
-		fmt.Fprintf(w, "\treturn results, err\n")
+		if numResults > 0 {
+			fmt.Fprintf(w, "\treturn results, err\n")
+		} else {
+			fmt.Fprintf(w, "\treturn nil, nil\n")
+		}
 	}
 
 	fmt.Fprintf(w, "// %s wraps %s%s as %s (generated code)\n", implType, funcPackageSel, funcDecl.Name.Name, impl)
@@ -145,7 +142,7 @@ func (impl Impl) WriteFunctionWrapper(w io.Writer, funcFile *ast.File, funcDecl 
 
 		fmt.Fprintf(w, "func (%s) NumArgs() int      { return %d }\n", implType, numArgs)
 		fmt.Fprintf(w, "func (%s) ContextArg() bool  { return %t }\n", implType, hasContextArg)
-		fmt.Fprintf(w, "func (%s) NumResults() int   { return %d }\n", implType, len(resultTypes))
+		fmt.Fprintf(w, "func (%s) NumResults() int   { return %d }\n", implType, numResults)
 		fmt.Fprintf(w, "func (%s) ErrorResult() bool { return %t }\n\n", implType, hasErrorResult)
 
 		fmt.Fprintf(w, "func (%s) ArgNames() []string {\n", implType)
@@ -173,7 +170,7 @@ func (impl Impl) WriteFunctionWrapper(w io.Writer, funcFile *ast.File, funcDecl 
 		fmt.Fprintf(w, "}\n\n")
 
 		fmt.Fprintf(w, "func (%s) ResultTypes() []reflect.Type {\n", implType)
-		if len(resultTypes) == 0 {
+		if numResults == 0 {
 			fmt.Fprintf(w, "\treturn nil\n")
 		} else {
 			fmt.Fprintf(w, "\treturn []reflect.Type{\n")
@@ -185,20 +182,29 @@ func (impl Impl) WriteFunctionWrapper(w io.Writer, funcFile *ast.File, funcDecl 
 		fmt.Fprintf(w, "}\n\n")
 	}
 
-	ctxArgName := "ctx"
-	if !hasContextArg {
-		ctxArgName = "_"
+	var ctxArgName string
+	if hasContextArg {
+		ctxArgName = "ctx "
+	} else if numArgs > 0 {
+		ctxArgName = "_ "
+	}
+
+	resultsDecl := "(results []interface{}, err error)"
+	if numResults == 0 {
+		resultsDecl = "([]interface{}, error)"
 	}
 
 	if impl&ImplCallWrapper != 0 {
 		neededImportLines[`"context"`] = struct{}{}
 
-		argsArgName := "args"
-		if numArgs == 0 || hasContextArg && numArgs == 1 {
-			argsArgName = "_"
+		var argsArgName string
+		if !hasContextArg && numArgs > 0 || hasContextArg && numArgs > 1 {
+			argsArgName = "args "
+		} else if hasContextArg {
+			argsArgName = "_ "
 		}
 
-		fmt.Fprintf(w, "func (f %s) Call(%s context.Context, %s []interface{}) (results []interface{}, err error) {\n", implType, ctxArgName, argsArgName)
+		fmt.Fprintf(w, "func (f %s) Call(%scontext.Context, %s[]interface{}) %s {\n", implType, ctxArgName, argsArgName, resultsDecl)
 		{
 			callParams := make([]string, numArgs)
 			for i, argType := range argTypes {
@@ -226,12 +232,14 @@ func (impl Impl) WriteFunctionWrapper(w io.Writer, funcFile *ast.File, funcDecl 
 		neededImportLines[`"context"`] = struct{}{}
 		neededImportLines[`"github.com/domonda/go-function"`] = struct{}{}
 
-		strsArgName := "strs"
-		if numArgs == 0 || hasContextArg && numArgs == 1 {
-			strsArgName = "_"
+		var strsArgName string
+		if !hasContextArg && numArgs > 0 || hasContextArg && numArgs > 1 {
+			strsArgName = "strs "
+		} else if hasContextArg {
+			strsArgName = "_ "
 		}
 
-		fmt.Fprintf(w, "func (f %s) CallWithStrings(%s context.Context, %s ...string) (results []interface{}, err error) {\n", implType, ctxArgName, strsArgName)
+		fmt.Fprintf(w, "func (f %s) CallWithStrings(%scontext.Context, %s...string) %s {\n", implType, ctxArgName, strsArgName, resultsDecl)
 		{
 			var callParams []string
 			switch {
@@ -268,7 +276,7 @@ func (impl Impl) WriteFunctionWrapper(w io.Writer, funcFile *ast.File, funcDecl 
 					if argTypes[i] == "string" {
 						fmt.Fprintf(w, "\t\t%s = strs[%d]\n", callParams[i], strsIndex)
 					} else {
-						fmt.Fprintf(w, "\t\terr = function.ScanString(strs[%d], &%s)\n", strsIndex, callParams[i])
+						fmt.Fprintf(w, "\t\terr := function.ScanString(strs[%d], &%s)\n", strsIndex, callParams[i])
 						fmt.Fprintf(w, "\t\tif err != nil {\n")
 						{
 							fmt.Fprintf(w, "\t\t\treturn nil, function.NewErrParseArgString(err, f, %q)\n", argName)
@@ -287,12 +295,14 @@ func (impl Impl) WriteFunctionWrapper(w io.Writer, funcFile *ast.File, funcDecl 
 		neededImportLines[`"context"`] = struct{}{}
 		neededImportLines[`"github.com/domonda/go-function"`] = struct{}{}
 
-		strsArgName := "strs"
-		if numArgs == 0 || hasContextArg && numArgs == 1 {
-			strsArgName = "_"
+		var strsArgName string
+		if !hasContextArg && numArgs > 0 || hasContextArg && numArgs > 1 {
+			strsArgName = "strs "
+		} else if hasContextArg {
+			strsArgName = "_ "
 		}
 
-		fmt.Fprintf(w, "func (f %s) CallWithNamedStrings(%s context.Context, %s map[string]string) (results []interface{}, err error) {\n", implType, ctxArgName, strsArgName)
+		fmt.Fprintf(w, "func (f %s) CallWithNamedStrings(%scontext.Context, %smap[string]string) %s {\n", implType, ctxArgName, strsArgName, resultsDecl)
 		{
 			var callParams []string
 			switch {
@@ -325,7 +335,7 @@ func (impl Impl) WriteFunctionWrapper(w io.Writer, funcFile *ast.File, funcDecl 
 					if argTypes[i] == "string" {
 						fmt.Fprintf(w, "\t\t%s = str\n", callParams[i])
 					} else {
-						fmt.Fprintf(w, "\t\terr = function.ScanString(str, &%s)\n", callParams[i])
+						fmt.Fprintf(w, "\t\terr := function.ScanString(str, &%s)\n", callParams[i])
 						fmt.Fprintf(w, "\t\tif err != nil {\n")
 						{
 							fmt.Fprintf(w, "\t\t\treturn nil, function.NewErrParseArgString(err, f, %q)\n", argName)
@@ -343,14 +353,15 @@ func (impl Impl) WriteFunctionWrapper(w io.Writer, funcFile *ast.File, funcDecl 
 			neededImportLines[`"context"`] = struct{}{}
 			neededImportLines[`"github.com/domonda/go-function"`] = struct{}{}
 
-			argsJSONArgName := "argsJSON"
-			if numArgs == 0 || numArgs == 1 && hasContextArg {
-				argsJSONArgName = "_"
-			} else {
+			var argsJSONArgName string
+			if !hasContextArg && numArgs > 0 || hasContextArg && numArgs > 1 {
 				neededImportLines[`"encoding/json"`] = struct{}{}
+				argsJSONArgName = "argsJSON "
+			} else if hasContextArg {
+				argsJSONArgName = "_ "
 			}
 
-			fmt.Fprintf(w, "func (f %s) CallWithJSON(%s context.Context, %s []byte) (results []interface{}, err error) {\n", implType, ctxArgName, argsJSONArgName)
+			fmt.Fprintf(w, "func (f %s) CallWithJSON(%scontext.Context, %s[]byte) (results []interface{}, err error) {\n", implType, ctxArgName, argsJSONArgName)
 			{
 				var callParams []string
 				switch {
