@@ -1,6 +1,6 @@
 package main
 
-//go:generate gen-func-wrappers $GOFILE
+//go:generate gen-func-wrappers -replaceForJSON=fs.FileReader:fs.File $GOFILE
 
 import (
 	"context"
