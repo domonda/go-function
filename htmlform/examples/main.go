@@ -136,7 +136,7 @@ func (wrappedExampleT) ResultTypes() []reflect.Type {
 }
 
 func (f wrappedExampleT) Call(ctx context.Context, args []interface{}) (results []interface{}, err error) {
-	err = Example(ctx, args[0].(bool), args[1].(int), args[2].(float64), args[3].(Color), args[4].(fs.FileReader)) // call
+	err = Example(ctx, args[0].(bool), args[1].(int), args[2].(float64), args[3].(Color), args[4].(fs.FileReader)) // wrapped call
 	return results, err
 }
 
@@ -149,36 +149,36 @@ func (f wrappedExampleT) CallWithStrings(ctx context.Context, strs ...string) (r
 		file   fs.FileReader
 	}
 	if 0 < len(strs) {
-		err = function.ScanString(strs[0], &a.aBool)
+		err := function.ScanString(strs[0], &a.aBool)
 		if err != nil {
 			return nil, function.NewErrParseArgString(err, f, "aBool")
 		}
 	}
 	if 1 < len(strs) {
-		err = function.ScanString(strs[1], &a.anInt)
+		err := function.ScanString(strs[1], &a.anInt)
 		if err != nil {
 			return nil, function.NewErrParseArgString(err, f, "anInt")
 		}
 	}
 	if 2 < len(strs) {
-		err = function.ScanString(strs[2], &a.aFloat)
+		err := function.ScanString(strs[2], &a.aFloat)
 		if err != nil {
 			return nil, function.NewErrParseArgString(err, f, "aFloat")
 		}
 	}
 	if 3 < len(strs) {
-		err = function.ScanString(strs[3], &a.color)
+		err := function.ScanString(strs[3], &a.color)
 		if err != nil {
 			return nil, function.NewErrParseArgString(err, f, "color")
 		}
 	}
 	if 4 < len(strs) {
-		err = function.ScanString(strs[4], &a.file)
+		err := function.ScanString(strs[4], &a.file)
 		if err != nil {
 			return nil, function.NewErrParseArgString(err, f, "file")
 		}
 	}
-	err = Example(ctx, a.aBool, a.anInt, a.aFloat, a.color, a.file) // call
+	err = Example(ctx, a.aBool, a.anInt, a.aFloat, a.color, a.file) // wrapped call
 	return results, err
 }
 
@@ -191,36 +191,36 @@ func (f wrappedExampleT) CallWithNamedStrings(ctx context.Context, strs map[stri
 		file   fs.FileReader
 	}
 	if str, ok := strs["aBool"]; ok {
-		err = function.ScanString(str, &a.aBool)
+		err := function.ScanString(str, &a.aBool)
 		if err != nil {
 			return nil, function.NewErrParseArgString(err, f, "aBool")
 		}
 	}
 	if str, ok := strs["anInt"]; ok {
-		err = function.ScanString(str, &a.anInt)
+		err := function.ScanString(str, &a.anInt)
 		if err != nil {
 			return nil, function.NewErrParseArgString(err, f, "anInt")
 		}
 	}
 	if str, ok := strs["aFloat"]; ok {
-		err = function.ScanString(str, &a.aFloat)
+		err := function.ScanString(str, &a.aFloat)
 		if err != nil {
 			return nil, function.NewErrParseArgString(err, f, "aFloat")
 		}
 	}
 	if str, ok := strs["color"]; ok {
-		err = function.ScanString(str, &a.color)
+		err := function.ScanString(str, &a.color)
 		if err != nil {
 			return nil, function.NewErrParseArgString(err, f, "color")
 		}
 	}
 	if str, ok := strs["file"]; ok {
-		err = function.ScanString(str, &a.file)
+		err := function.ScanString(str, &a.file)
 		if err != nil {
 			return nil, function.NewErrParseArgString(err, f, "file")
 		}
 	}
-	err = Example(ctx, a.aBool, a.anInt, a.aFloat, a.color, a.file) // call
+	err = Example(ctx, a.aBool, a.anInt, a.aFloat, a.color, a.file) // wrapped call
 	return results, err
 }
 
@@ -236,6 +236,6 @@ func (f wrappedExampleT) CallWithJSON(ctx context.Context, argsJSON []byte) (res
 	if err != nil {
 		return nil, function.NewErrParseArgsJSON(err, f, argsJSON)
 	}
-	err = Example(ctx, a.ABool, a.AnInt, a.AFloat, a.Color, a.File) // call
+	err = Example(ctx, a.ABool, a.AnInt, a.AFloat, a.Color, a.File) // wrapped call
 	return results, err
 }

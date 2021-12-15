@@ -105,7 +105,7 @@ func (impl Impl) WriteFunctionWrapper(w io.Writer, funcFile *ast.File, funcDecl 
 		if numArgs > 0 && strings.HasPrefix(argTypes[numArgs-1], "...") {
 			ellipsis = "..."
 		}
-		fmt.Fprintf(w, "%s%s(%s%s) // call\n", funcPackageSel, funcDecl.Name.Name, strings.Join(args, ", "), ellipsis)
+		fmt.Fprintf(w, "%s%s(%s%s) // wrapped call\n", funcPackageSel, funcDecl.Name.Name, strings.Join(args, ", "), ellipsis)
 		if numResults > 0 {
 			fmt.Fprintf(w, "\treturn results, err\n")
 		} else {
