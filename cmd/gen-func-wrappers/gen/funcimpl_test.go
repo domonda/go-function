@@ -13,6 +13,8 @@ func Test_exportedName(t *testing.T) {
 		"jsonParser":     "JSONParser",
 		"http":           "HTTP",
 		"httpRequest":    "HTTPRequest",
+		"acl":            "ACL",
+		"aclFile":        "ACLFile",
 	}
 	for name, want := range tests {
 		t.Run(name, func(t *testing.T) {
