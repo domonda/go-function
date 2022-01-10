@@ -1,6 +1,8 @@
 package function
 
 import (
+	"context"
+	"reflect"
 	"time"
 
 	"github.com/fatih/color"
@@ -43,8 +45,8 @@ var (
 	}
 )
 
-// var (
-// 	typeOfError          = reflect.TypeOf((*error)(nil)).Elem()
-// 	typeOfContext        = reflect.TypeOf((*context.Context)(nil)).Elem()
-// 	typeOfEmptyInterface = reflect.TypeOf((*interface{})(nil)).Elem()
-// )
+var (
+	typeOfError          = reflect.TypeOf((*error)(nil)).Elem()
+	typeOfContext        = reflect.TypeOf((*context.Context)(nil)).Elem()
+	typeOfEmptyInterface = reflect.TypeOf((*interface{})(nil)).Elem()
+)
