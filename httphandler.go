@@ -60,7 +60,7 @@ func HTTPHandler(getArgs HTTPRequestArgsGetter, function CallWithNamedStringsWra
 
 // HTTPHandlerNoWrapper returns an http.Handler for a function without a wrapper
 // of type func(context.Context) ([]byte, error) that returns response bytes.
-func HTTPHandlerNoWrapper(getArgs HTTPRequestArgsGetter, function func(context.Context) ([]byte, error), resultsWriter HTTPResultsWriter, errHandlers ...httperr.Handler) http.HandlerFunc {
+func HTTPHandlerNoWrapper(function func(context.Context) ([]byte, error), resultsWriter HTTPResultsWriter, errHandlers ...httperr.Handler) http.HandlerFunc {
 	return func(writer http.ResponseWriter, request *http.Request) {
 		if CatchHTTPHandlerPanics {
 			defer func() {
