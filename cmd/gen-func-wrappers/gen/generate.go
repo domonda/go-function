@@ -69,7 +69,7 @@ func PackageFunctions(pkgDir, genFilename, namePrefix string, printOnly bool, js
 		fmt.Println(genFileData)
 	} else {
 		fmt.Println("Writing file", genFilePath)
-		err = ioutil.WriteFile(genFilePath, genFileData, 0660)
+		err = ioutil.WriteFile(genFilePath, genFileData, 0600)
 		if err != nil {
 			return err
 		}

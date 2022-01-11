@@ -35,8 +35,8 @@ var RespondJSON HTTPResultsWriterFunc = func(results []interface{}, resultErr er
 		buf = append(buf, b...)
 	}
 	writer.Header().Set("Content-Type", "application/json; charset=utf-8")
-	writer.Write(buf)
-	return nil
+	_, err = writer.Write(buf)
+	return err
 }
 
 // RespondBinary responds with contentType using the binary data from results of type []byte, string, or io.Reader.
@@ -62,8 +62,8 @@ func RespondBinary(contentType string) HTTPResultsWriterFunc {
 			}
 		}
 		writer.Header().Set("Content-Type", contentType)
-		writer.Write(buf.Bytes())
-		return nil
+		_, err = writer.Write(buf.Bytes())
+		return err
 	}
 }
 
@@ -82,8 +82,8 @@ func RespondJSONField(fieldName string) HTTPResultsWriterFunc {
 			return err
 		}
 		writer.Header().Set("Content-Type", "application/json; charset=utf-8")
-		writer.Write(buf)
-		return nil
+		_, err = writer.Write(buf)
+		return err
 	}
 }
 
@@ -100,8 +100,8 @@ var RespondXML HTTPResultsWriterFunc = func(results []interface{}, resultErr err
 		buf = append(buf, b...)
 	}
 	writer.Header().Set("Content-Type", "application/xml; charset=utf-8")
-	writer.Write(buf)
-	return nil
+	_, err = writer.Write(buf)
+	return err
 }
 
 var RespondPlaintext HTTPResultsWriterFunc = func(results []interface{}, resultErr error, writer http.ResponseWriter, request *http.Request) error {
@@ -117,8 +117,8 @@ var RespondPlaintext HTTPResultsWriterFunc = func(results []interface{}, resultE
 		}
 	}
 	writer.Header().Add("Content-Type", "text/plain; charset=utf-8")
-	writer.Write(buf.Bytes())
-	return nil
+	_, err = writer.Write(buf.Bytes())
+	return err
 }
 
 var RespondHTML HTTPResultsWriterFunc = func(results []interface{}, resultErr error, writer http.ResponseWriter, request *http.Request) error {
@@ -134,8 +134,8 @@ var RespondHTML HTTPResultsWriterFunc = func(results []interface{}, resultErr er
 		}
 	}
 	writer.Header().Add("Content-Type", "text/html; charset=utf-8")
-	writer.Write(buf.Bytes())
-	return nil
+	_, err = writer.Write(buf.Bytes())
+	return err
 }
 
 var RespondDetectContentType HTTPResultsWriterFunc = func(results []interface{}, resultErr error, writer http.ResponseWriter, request *http.Request) error {
@@ -151,8 +151,8 @@ var RespondDetectContentType HTTPResultsWriterFunc = func(results []interface{},
 	}
 
 	writer.Header().Add("Content-Type", DetectContentType(data))
-	writer.Write(data)
-	return nil
+	_, err = writer.Write(data)
+	return err
 }
 
 func RespondContentType(contentType string) HTTPResultsWriter {
@@ -169,8 +169,8 @@ func RespondContentType(contentType string) HTTPResultsWriter {
 		}
 
 		writer.Header().Add("Content-Type", contentType)
-		writer.Write(data)
-		return nil
+		_, err = writer.Write(data)
+		return err
 	})
 }
 
@@ -235,7 +235,7 @@ func (html RespondStaticHTML) WriteResults(results []interface{}, resultErr erro
 
 func (html RespondStaticHTML) ServeHTTP(writer http.ResponseWriter, _ *http.Request) {
 	writer.Header().Add("Content-Type", "text/html; charset=utf-8")
-	writer.Write([]byte(html))
+	writer.Write([]byte(html)) //#nosec G104
 }
 
 type RespondStaticXML string
@@ -250,7 +250,7 @@ func (xml RespondStaticXML) WriteResults(results []interface{}, resultErr error,
 
 func (xml RespondStaticXML) ServeHTTP(writer http.ResponseWriter, _ *http.Request) {
 	writer.Header().Set("Content-Type", "application/xml; charset=utf-8")
-	writer.Write([]byte(xml))
+	writer.Write([]byte(xml)) //#nosec G104
 }
 
 type RespondStaticJSON string
@@ -265,7 +265,7 @@ func (json RespondStaticJSON) WriteResults(results []interface{}, resultErr erro
 
 func (json RespondStaticJSON) ServeHTTP(writer http.ResponseWriter, _ *http.Request) {
 	writer.Header().Set("Content-Type", "application/json; charset=utf-8")
-	writer.Write([]byte(json))
+	writer.Write([]byte(json)) //#nosec G104
 }
 
 type RespondStaticPlaintext string
@@ -280,5 +280,5 @@ func (text RespondStaticPlaintext) WriteResults(results []interface{}, resultErr
 
 func (text RespondStaticPlaintext) ServeHTTP(writer http.ResponseWriter, _ *http.Request) {
 	writer.Header().Add("Content-Type", "text/plain; charset=utf-8")
-	writer.Write([]byte(text))
+	writer.Write([]byte(text)) //#nosec G104
 }

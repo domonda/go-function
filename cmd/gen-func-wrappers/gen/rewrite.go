@@ -143,7 +143,7 @@ func RewriteAstFile(fset *token.FileSet, filePkg *ast.Package, astFile *ast.File
 		replacements.Add(implReplacements)
 	}
 
-	source, err := os.ReadFile(filePath)
+	source, err := os.ReadFile(filePath) //#nosec G304
 	if err != nil {
 		return err
 	}
@@ -200,7 +200,7 @@ func RewriteAstFile(fset *token.FileSet, filePkg *ast.Package, astFile *ast.File
 	if verbose {
 		fmt.Println("rewriting", filePath)
 	}
-	return ioutil.WriteFile(filePath, rewritten, 0660)
+	return ioutil.WriteFile(filePath, rewritten, 0600)
 }
 
 type wrapper struct {
