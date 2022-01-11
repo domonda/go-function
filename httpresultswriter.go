@@ -35,7 +35,7 @@ var RespondJSON HTTPResultsWriterFunc = func(results []interface{}, resultErr er
 		buf = append(buf, b...)
 	}
 	writer.Header().Set("Content-Type", "application/json; charset=utf-8")
-	_, err = writer.Write(buf)
+	_, err := writer.Write(buf)
 	return err
 }
 
@@ -100,7 +100,7 @@ var RespondXML HTTPResultsWriterFunc = func(results []interface{}, resultErr err
 		buf = append(buf, b...)
 	}
 	writer.Header().Set("Content-Type", "application/xml; charset=utf-8")
-	_, err = writer.Write(buf)
+	_, err := writer.Write(buf)
 	return err
 }
 
@@ -117,7 +117,7 @@ var RespondPlaintext HTTPResultsWriterFunc = func(results []interface{}, resultE
 		}
 	}
 	writer.Header().Add("Content-Type", "text/plain; charset=utf-8")
-	_, err = writer.Write(buf.Bytes())
+	_, err := writer.Write(buf.Bytes())
 	return err
 }
 
@@ -134,7 +134,7 @@ var RespondHTML HTTPResultsWriterFunc = func(results []interface{}, resultErr er
 		}
 	}
 	writer.Header().Add("Content-Type", "text/html; charset=utf-8")
-	_, err = writer.Write(buf.Bytes())
+	_, err := writer.Write(buf.Bytes())
 	return err
 }
 
@@ -151,7 +151,7 @@ var RespondDetectContentType HTTPResultsWriterFunc = func(results []interface{},
 	}
 
 	writer.Header().Add("Content-Type", DetectContentType(data))
-	_, err = writer.Write(data)
+	_, err := writer.Write(data)
 	return err
 }
 
@@ -169,7 +169,7 @@ func RespondContentType(contentType string) HTTPResultsWriter {
 		}
 
 		writer.Header().Add("Content-Type", contentType)
-		_, err = writer.Write(data)
+		_, err := writer.Write(data)
 		return err
 	})
 }
