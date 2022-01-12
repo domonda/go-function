@@ -70,6 +70,7 @@ func RewriteDir(path string, verbose bool, printOnly io.Writer, jsonTypeReplacem
 }
 
 func RewriteFile(filePath string, verbose bool, printOnly io.Writer, jsonTypeReplacements map[string]string) (err error) {
+	filePath = filepath.Clean(filePath)
 	fileInfo, err := os.Stat(filePath)
 	if err != nil {
 		return err
@@ -86,6 +87,8 @@ func RewriteFile(filePath string, verbose bool, printOnly io.Writer, jsonTypeRep
 }
 
 func RewriteAstFile(fset *token.FileSet, filePkg *ast.Package, astFile *ast.File, filePath string, verbose bool, printTo io.Writer, jsonTypeReplacements map[string]string) (err error) {
+	filePath = filepath.Clean(filePath)
+
 	// ast.Print(fset, file)
 	wrappers := findFunctionWrappers(fset, astFile)
 	if len(wrappers) == 0 {
