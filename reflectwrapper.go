@@ -33,8 +33,8 @@ func ReflectWrapper(function interface{}, argNames ...string) (Wrapper, error) {
 }
 
 // MustReflectWrapper calls ReflectWrapper and panics any error.
-func MustReflectWrapper(function interface{}) Wrapper {
-	w, err := ReflectWrapper(function)
+func MustReflectWrapper(function interface{}, argNames ...string) Wrapper {
+	w, err := ReflectWrapper(function, argNames...)
 	if err != nil {
 		panic(err)
 	}
