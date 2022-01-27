@@ -15,6 +15,20 @@ import (
 // of type context.Context then "ctx" is assumed
 // as argument name in case no name has been passed.
 func ReflectWrapper(function interface{}, argNames ...string) (Wrapper, error) {
+	return newReflectWrapper(function, argNames)
+}
+
+// MustReflectWrapper calls ReflectWrapper and panics any error.
+func MustReflectWrapper(function interface{}, argNames ...string) Wrapper {
+	w, err := newReflectWrapper(function, argNames)
+	if err != nil {
+		panic(err)
+	}
+	return w
+}
+
+// newReflectWrapper unexported function returns testable struct type
+func newReflectWrapper(function interface{}, argNames []string) (*reflectWrapper, error) {
 	var (
 		funcVal  = reflect.ValueOf(function)
 		funcType = funcVal.Type()
@@ -30,15 +44,6 @@ func ReflectWrapper(function interface{}, argNames ...string) (Wrapper, error) {
 		return nil, fmt.Errorf("%d argNames passed, but %s has %d arguments", len(argNames), funcType, funcType.NumIn())
 	}
 	return &reflectWrapper{funcVal, funcType, argNames}, nil
-}
-
-// MustReflectWrapper calls ReflectWrapper and panics any error.
-func MustReflectWrapper(function interface{}, argNames ...string) Wrapper {
-	w, err := ReflectWrapper(function, argNames...)
-	if err != nil {
-		panic(err)
-	}
-	return w
 }
 
 type reflectWrapper struct {
