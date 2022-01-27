@@ -16,9 +16,12 @@ func TestReflectWrapper(t *testing.T) {
 		argNames []string
 	}
 	type call struct {
-		args    []interface{}
-		results []interface{}
-		wantErr bool
+		args         []interface{}
+		argsStrings  []string
+		argsNamedStr map[string]string
+		argsJSON     []byte
+		results      []interface{}
+		wantErr      bool
 	}
 	tests := []struct {
 		name    string
@@ -39,9 +42,12 @@ func TestReflectWrapper(t *testing.T) {
 			},
 			wantErr: false,
 			call: call{
-				args:    nil,
-				results: []interface{}{},
-				wantErr: false,
+				args:         nil,
+				argsStrings:  nil,
+				argsNamedStr: nil,
+				argsJSON:     []byte(`{}`),
+				results:      []interface{}{},
+				wantErr:      false,
 			},
 		},
 		{
@@ -57,9 +63,12 @@ func TestReflectWrapper(t *testing.T) {
 			},
 			wantErr: false,
 			call: call{
-				args:    []interface{}{666},
-				results: []interface{}{},
-				wantErr: false,
+				args:         []interface{}{666},
+				argsStrings:  []string{"666"},
+				argsNamedStr: map[string]string{"i": "666"},
+				argsJSON:     []byte(`{"i":666}`),
+				results:      []interface{}{},
+				wantErr:      false,
 			},
 		},
 		{
@@ -75,9 +84,12 @@ func TestReflectWrapper(t *testing.T) {
 			},
 			wantErr: false,
 			call: call{
-				args:    []interface{}{666},
-				results: []interface{}{666 * 2},
-				wantErr: false,
+				args:         []interface{}{666},
+				argsStrings:  []string{"666"},
+				argsNamedStr: map[string]string{"i": "666"},
+				argsJSON:     []byte(`{"i":666}`),
+				results:      []interface{}{666 * 2},
+				wantErr:      false,
 			},
 		},
 		// TODO test errors
@@ -100,6 +112,33 @@ func TestReflectWrapper(t *testing.T) {
 			}
 			if !reflect.DeepEqual(gotResults, tt.call.results) {
 				t.Errorf("reflectWrapper.Call() = %v, want %v", gotResults, tt.call.results)
+			}
+
+			gotResults, gotErr = got.CallWithStrings(context.Background(), tt.call.argsStrings...)
+			if (gotErr != nil) != tt.call.wantErr {
+				t.Errorf("reflectWrapper.CallWithStrings() error = %v, call.wantErr %v", gotErr, tt.call.wantErr)
+				return
+			}
+			if !reflect.DeepEqual(gotResults, tt.call.results) {
+				t.Errorf("reflectWrapper.CallWithStrings() = %v, want %v", gotResults, tt.call.results)
+			}
+
+			gotResults, gotErr = got.CallWithNamedStrings(context.Background(), tt.call.argsNamedStr)
+			if (gotErr != nil) != tt.call.wantErr {
+				t.Errorf("reflectWrapper.CallWithNamedStrings() error = %v, call.wantErr %v", gotErr, tt.call.wantErr)
+				return
+			}
+			if !reflect.DeepEqual(gotResults, tt.call.results) {
+				t.Errorf("reflectWrapper.CallWithNamedStrings() = %v, want %v", gotResults, tt.call.results)
+			}
+
+			gotResults, gotErr = got.CallWithJSON(context.Background(), tt.call.argsJSON)
+			if (gotErr != nil) != tt.call.wantErr {
+				t.Errorf("reflectWrapper.CallWithJSON() error = %v, call.wantErr %v", gotErr, tt.call.wantErr)
+				return
+			}
+			if !reflect.DeepEqual(gotResults, tt.call.results) {
+				t.Errorf("reflectWrapper.CallWithJSON() = %v, want %v", gotResults, tt.call.results)
 			}
 		})
 	}
