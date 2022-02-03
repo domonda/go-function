@@ -62,7 +62,7 @@ func (f *reflectWrapper) Name() string {
 }
 
 func (f *reflectWrapper) NumArgs() int {
-	return f.funcVal.Type().NumIn()
+	return f.funcType.NumIn()
 }
 
 func (f *reflectWrapper) ContextArg() bool {
@@ -70,11 +70,12 @@ func (f *reflectWrapper) ContextArg() bool {
 }
 
 func (f *reflectWrapper) NumResults() int {
-	return f.funcVal.Type().NumOut()
+	return f.funcType.NumOut()
 }
 
 func (f *reflectWrapper) ErrorResult() bool {
-	return f.funcType.NumOut() > 0 && f.funcType.In(f.funcType.NumOut()-1) == typeOfError
+	numOunt := f.funcType.NumOut()
+	return numOunt > 0 && f.funcType.In(numOunt-1) == typeOfError
 }
 
 func (f *reflectWrapper) ArgNames() []string {
@@ -82,11 +83,19 @@ func (f *reflectWrapper) ArgNames() []string {
 }
 
 func (f *reflectWrapper) ArgDescriptions() []string {
-	return make([]string, f.NumArgs())
+	numIn := f.funcType.NumIn()
+	if numIn == 0 {
+		return nil
+	}
+	return make([]string, numIn)
 }
 
 func (f *reflectWrapper) ArgTypes() []reflect.Type {
-	a := make([]reflect.Type, f.funcType.NumIn())
+	numIn := f.funcType.NumIn()
+	if numIn == 0 {
+		return nil
+	}
+	a := make([]reflect.Type, numIn)
 	for i := range a {
 		a[i] = f.funcType.In(i)
 	}
@@ -94,7 +103,11 @@ func (f *reflectWrapper) ArgTypes() []reflect.Type {
 }
 
 func (f *reflectWrapper) ResultTypes() []reflect.Type {
-	r := make([]reflect.Type, f.funcType.NumOut())
+	numOut := f.funcType.NumOut()
+	if numOut == 0 {
+		return nil
+	}
+	r := make([]reflect.Type, numOut)
 	for i := range r {
 		r[i] = f.funcType.Out(i)
 	}

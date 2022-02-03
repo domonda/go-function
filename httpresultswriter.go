@@ -161,11 +161,11 @@ func RespondContentType(contentType string) HTTPResultsWriter {
 			return resultErr
 		}
 		if len(results) != 1 {
-			return fmt.Errorf("RespondDetectContentType needs 1 result, got %d", len(results))
+			return fmt.Errorf("RespondContentType(%s) needs 1 result, got %d: %#v", contentType, len(results), results)
 		}
 		data, ok := results[0].([]byte)
 		if !ok {
-			return fmt.Errorf("RespondDetectContentType needs []byte result, got %T", results[0])
+			return fmt.Errorf("RespondContentType(%s)  needs []byte result, got %T", contentType, results[0])
 		}
 
 		writer.Header().Add("Content-Type", contentType)
