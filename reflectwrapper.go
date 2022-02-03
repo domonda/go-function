@@ -70,12 +70,16 @@ func (f *reflectWrapper) ContextArg() bool {
 }
 
 func (f *reflectWrapper) NumResults() int {
-	return f.funcType.NumOut()
+	numResults := f.funcType.NumOut()
+	if numResults > 0 && f.funcType.Out(numResults-1) == typeOfError {
+		numResults--
+	}
+	return numResults
 }
 
 func (f *reflectWrapper) ErrorResult() bool {
-	numOunt := f.funcType.NumOut()
-	return numOunt > 0 && f.funcType.In(numOunt-1) == typeOfError
+	numOut := f.funcType.NumOut()
+	return numOut > 0 && f.funcType.Out(numOut-1) == typeOfError
 }
 
 func (f *reflectWrapper) ArgNames() []string {
@@ -103,11 +107,11 @@ func (f *reflectWrapper) ArgTypes() []reflect.Type {
 }
 
 func (f *reflectWrapper) ResultTypes() []reflect.Type {
-	numOut := f.funcType.NumOut()
-	if numOut == 0 {
+	numResults := f.NumResults()
+	if numResults == 0 {
 		return nil
 	}
-	r := make([]reflect.Type, numOut)
+	r := make([]reflect.Type, numResults)
 	for i := range r {
 		r[i] = f.funcType.Out(i)
 	}

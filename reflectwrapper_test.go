@@ -51,15 +51,15 @@ func TestReflectWrapper(t *testing.T) {
 		ResultTypes: []reflect.Type{reflect.TypeOf(0)},
 	}
 
-	ferr := func(i int, e error) (int, error) { return i * 2, e }
+	ferr := func(ctx context.Context, i int, e error) (int, error) { return i * 2, e }
 	ferrdesc := description{
-		NumArgs:     2,
-		ContextArg:  false,
-		NumResults:  2,
+		NumArgs:     3,
+		ContextArg:  true,
+		NumResults:  1,
 		ErrorResult: true,
-		ArgNames:    []string{"i", "e"},
-		ArgTypes:    []reflect.Type{reflect.TypeOf(0), typeOfError},
-		ResultTypes: []reflect.Type{reflect.TypeOf(0), typeOfError},
+		ArgNames:    []string{"ctx", "i", "e"},
+		ArgTypes:    []reflect.Type{typeOfContext, reflect.TypeOf(0), typeOfError},
+		ResultTypes: []reflect.Type{reflect.TypeOf(0)},
 	}
 
 	type args struct {
@@ -148,15 +148,15 @@ func TestReflectWrapper(t *testing.T) {
 			desc: f1rdesc,
 		},
 		{
-			name: "func(i int, e error = nil) (int, error)",
+			name: "func(ctx context.Context, i int, e error = nil) (int, error)",
 			args: args{
 				function: ferr,
-				argNames: []string{"i", "e"},
+				argNames: []string{"ctx", "i", "e"},
 			},
 			want: &reflectWrapper{
 				funcVal:  reflect.ValueOf(ferr),
 				funcType: reflect.TypeOf(ferr),
-				argNames: []string{"i", "e"},
+				argNames: []string{"ctx", "i", "e"},
 			},
 			wantErr: false,
 			call: call{
@@ -170,15 +170,15 @@ func TestReflectWrapper(t *testing.T) {
 			desc: ferrdesc,
 		},
 		{
-			name: "func(i int, e error = ERROR) (int, error)",
+			name: "func(ctx context.Context, i int, e error = ERROR) (int, error)",
 			args: args{
 				function: ferr,
-				argNames: []string{"i", "e"},
+				argNames: []string{"ctx", "i", "e"},
 			},
 			want: &reflectWrapper{
 				funcVal:  reflect.ValueOf(ferr),
 				funcType: reflect.TypeOf(ferr),
-				argNames: []string{"i", "e"},
+				argNames: []string{"ctx", "i", "e"},
 			},
 			wantErr: false,
 			call: call{
