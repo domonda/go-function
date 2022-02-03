@@ -53,6 +53,14 @@ func scanString(sourceStr string, destVal reflect.Value) (err error) {
 		*dest = sourceStr
 		return nil
 
+	case *error:
+		if sourceStr == "" {
+			*dest = nil
+		} else {
+			*dest = errors.New(sourceStr)
+		}
+		return nil
+
 	case *time.Time:
 		if isNilString(sourceStr) {
 			*dest = time.Time{}

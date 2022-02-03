@@ -2,6 +2,7 @@ package function
 
 import (
 	"context"
+	"errors"
 	"reflect"
 	"testing"
 )
@@ -10,6 +11,7 @@ func TestReflectWrapper(t *testing.T) {
 	f0 := func() {}
 	f1 := func(i int) {}
 	f1r := func(i int) int { return i * 2 }
+	ferr := func(i int, e error) (int, error) { return i * 2, e }
 
 	type args struct {
 		function interface{}
@@ -92,13 +94,54 @@ func TestReflectWrapper(t *testing.T) {
 				wantErr:      false,
 			},
 		},
-		// TODO test errors
+		{
+			name: "func(i int, e error = nil) (int, error)",
+			args: args{
+				function: ferr,
+				argNames: []string{"i", "e"},
+			},
+			want: &reflectWrapper{
+				funcVal:  reflect.ValueOf(ferr),
+				funcType: reflect.TypeOf(ferr),
+				argNames: []string{"i", "e"},
+			},
+			wantErr: false,
+			call: call{
+				args:         []interface{}{666, nil},
+				argsStrings:  []string{"666", ""},
+				argsNamedStr: map[string]string{"i": "666", "e": ""},
+				argsJSON:     []byte(`{"i":666,"e":null}`),
+				results:      []interface{}{666 * 2},
+				wantErr:      false,
+			},
+		},
+		{
+			name: "func(i int, e error = ERROR) (int, error)",
+			args: args{
+				function: ferr,
+				argNames: []string{"i", "e"},
+			},
+			want: &reflectWrapper{
+				funcVal:  reflect.ValueOf(ferr),
+				funcType: reflect.TypeOf(ferr),
+				argNames: []string{"i", "e"},
+			},
+			wantErr: false,
+			call: call{
+				args:         []interface{}{666, errors.New("ERROR")},
+				argsStrings:  []string{"666", "ERROR"},
+				argsNamedStr: map[string]string{"i": "666", "e": "ERROR"},
+				argsJSON:     []byte(`{"i":666,"e":"ERROR"}`),
+				results:      []interface{}{666 * 2},
+				wantErr:      true,
+			},
+		},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			got, err := newReflectWrapper(tt.args.function, tt.args.argNames)
 			if (err != nil) != tt.wantErr {
-				t.Errorf("newReflectWrapper() error = %v, wantErr %v", err, tt.wantErr)
+				t.Errorf("newReflectWrapper() error = %v, wantErr = %v", err, tt.wantErr)
 				return
 			}
 			if !reflect.DeepEqual(got, tt.want) {
@@ -107,7 +150,7 @@ func TestReflectWrapper(t *testing.T) {
 
 			gotResults, gotErr := got.Call(context.Background(), tt.call.args)
 			if (gotErr != nil) != tt.call.wantErr {
-				t.Errorf("reflectWrapper.Call() error = %v, call.wantErr %v", gotErr, tt.call.wantErr)
+				t.Errorf("reflectWrapper.Call() error = %v, call.wantErr = %v", gotErr, tt.call.wantErr)
 				return
 			}
 			if !reflect.DeepEqual(gotResults, tt.call.results) {
@@ -116,7 +159,7 @@ func TestReflectWrapper(t *testing.T) {
 
 			gotResults, gotErr = got.CallWithStrings(context.Background(), tt.call.argsStrings...)
 			if (gotErr != nil) != tt.call.wantErr {
-				t.Errorf("reflectWrapper.CallWithStrings() error = %v, call.wantErr %v", gotErr, tt.call.wantErr)
+				t.Errorf("reflectWrapper.CallWithStrings() error = %v, call.wantErr = %v", gotErr, tt.call.wantErr)
 				return
 			}
 			if !reflect.DeepEqual(gotResults, tt.call.results) {
@@ -125,7 +168,7 @@ func TestReflectWrapper(t *testing.T) {
 
 			gotResults, gotErr = got.CallWithNamedStrings(context.Background(), tt.call.argsNamedStr)
 			if (gotErr != nil) != tt.call.wantErr {
-				t.Errorf("reflectWrapper.CallWithNamedStrings() error = %v, call.wantErr %v", gotErr, tt.call.wantErr)
+				t.Errorf("reflectWrapper.CallWithNamedStrings() error = %v, call.wantErr = %v", gotErr, tt.call.wantErr)
 				return
 			}
 			if !reflect.DeepEqual(gotResults, tt.call.results) {
@@ -134,7 +177,7 @@ func TestReflectWrapper(t *testing.T) {
 
 			gotResults, gotErr = got.CallWithJSON(context.Background(), tt.call.argsJSON)
 			if (gotErr != nil) != tt.call.wantErr {
-				t.Errorf("reflectWrapper.CallWithJSON() error = %v, call.wantErr %v", gotErr, tt.call.wantErr)
+				t.Errorf("reflectWrapper.CallWithJSON() error = %v, call.wantErr = %v", gotErr, tt.call.wantErr)
 				return
 			}
 			if !reflect.DeepEqual(gotResults, tt.call.results) {

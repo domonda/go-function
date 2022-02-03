@@ -3,6 +3,7 @@ package function
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"reflect"
 )
@@ -101,11 +102,17 @@ func (f *reflectWrapper) ResultTypes() []reflect.Type {
 }
 
 func (f *reflectWrapper) call(in []reflect.Value) (results []interface{}, err error) {
+	// Replace untyped nil values with typed zero values
+	for i := range in {
+		if !in[i].IsValid() {
+			in[i] = reflect.Zero(f.funcType.In(i))
+		}
+	}
 	out := f.funcVal.Call(in)
 	resultsLen := len(out)
 	if f.ErrorResult() {
 		resultsLen--
-		err = out[len(out)-1].Interface().(error)
+		err, _ = out[len(out)-1].Interface().(error)
 	}
 	results = make([]interface{}, resultsLen)
 	for i := range results {
@@ -201,6 +208,21 @@ func (f *reflectWrapper) CallWithJSON(ctx context.Context, argsJSON []byte) (res
 		destPtr := reflect.New(argType)
 		argName := f.argNames[i]
 		if arg, ok := args[argName]; ok {
+			if argType == typeOfError {
+				// json.Unmarshal does not work for errors
+				// so unmarshal string and create error from it
+				var errStr string
+				err = json.Unmarshal(arg, &errStr)
+				if err != nil {
+					return nil, NewErrParseArgsJSON(err, f, argsJSON)
+				}
+				var err error
+				if errStr != "" {
+					err = errors.New(errStr)
+				}
+				in[i] = reflect.ValueOf(err)
+				continue
+			}
 			err = json.Unmarshal(arg, destPtr.Interface())
 			if err != nil {
 				return nil, NewErrParseArgsJSON(err, f, argsJSON)
