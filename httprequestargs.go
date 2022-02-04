@@ -10,6 +10,16 @@ import (
 
 type HTTPRequestArgsGetter func(*http.Request) (map[string]string, error)
 
+func HTTPRequestArgs(args map[string]string) HTTPRequestArgsGetter {
+	return func(*http.Request) (map[string]string, error) {
+		return args, nil
+	}
+}
+
+func HTTPRequestArg(name, value string) HTTPRequestArgsGetter {
+	return HTTPRequestArgs(map[string]string{name: value})
+}
+
 func HTTPRequestBodyAsArg(name string) HTTPRequestArgsGetter {
 	return func(request *http.Request) (map[string]string, error) {
 		defer request.Body.Close()
