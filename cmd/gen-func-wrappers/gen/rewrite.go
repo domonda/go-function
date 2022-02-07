@@ -130,11 +130,12 @@ func RewriteAstFile(fset *token.FileSet, filePkg *ast.Package, astFile *ast.File
 		}
 
 		var implReplacements astvisit.NodeReplacements
+		debugID := "Wrapper for " + wrapper.WrappedFunc
 		for i, node := range wrapper.Nodes {
 			if i == 0 {
-				implReplacements.AddReplacement(node, repl.String())
+				implReplacements.AddReplacement(node, repl.String(), debugID)
 			} else {
-				implReplacements.AddRemoval(node)
+				implReplacements.AddRemoval(node, debugID)
 			}
 		}
 		replacements.Add(implReplacements)

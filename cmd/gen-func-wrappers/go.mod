@@ -3,7 +3,7 @@ module github.com/domonda/go-function/cmd/gen-func-wrappers
 go 1.17
 
 require (
-	github.com/ungerik/go-astvisit v0.0.0-20220207114010-4dc31f9028d8
+	github.com/ungerik/go-astvisit v0.0.0-20220207183704-334a95c6784c
 	golang.org/x/tools v0.1.9
 )
 
