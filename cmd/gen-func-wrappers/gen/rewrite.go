@@ -1,26 +1,20 @@
 package gen
 
 import (
-	"bytes"
 	"errors"
 	"fmt"
 	"go/ast"
-	"go/format"
-	"go/parser"
 	"go/token"
 	"io"
 	"io/ioutil"
 	"os"
 	"path/filepath"
-	"sort"
 	"strings"
 
 	"github.com/ungerik/go-astvisit"
-	"golang.org/x/tools/go/ast/astutil"
-	"golang.org/x/tools/imports"
 )
 
-func RewriteDir(path string, verbose bool, printOnly io.Writer, jsonTypeReplacements map[string]string) (err error) {
+func RewriteDir(path string, verbose bool, printOnly io.Writer, jsonTypeReplacements map[string]string, localImportPrefixes []string) (err error) {
 	recursive := strings.HasSuffix(path, "...")
 	if recursive {
 		path = filepath.Clean(strings.TrimSuffix(path, "..."))
@@ -30,7 +24,7 @@ func RewriteDir(path string, verbose bool, printOnly io.Writer, jsonTypeReplacem
 		return err
 	}
 	if !fileInfo.IsDir() {
-		return RewriteFile(path, verbose, printOnly, jsonTypeReplacements)
+		return RewriteFile(path, verbose, printOnly, jsonTypeReplacements, localImportPrefixes)
 	}
 
 	fset := token.NewFileSet()
@@ -40,7 +34,7 @@ func RewriteDir(path string, verbose bool, printOnly io.Writer, jsonTypeReplacem
 	}
 	if err == nil {
 		for fileName, file := range pkg.Files {
-			err = RewriteAstFile(fset, pkg, file, fileName, verbose, printOnly, jsonTypeReplacements)
+			err = RewriteAstFile(fset, pkg, file, fileName, verbose, printOnly, jsonTypeReplacements, localImportPrefixes)
 			if err != nil {
 				return err
 			}
@@ -61,7 +55,7 @@ func RewriteDir(path string, verbose bool, printOnly io.Writer, jsonTypeReplacem
 		if !file.IsDir() || fileName[0] == '.' || fileName == "node_modules" {
 			continue
 		}
-		err = RewriteDir(filepath.Join(path, fileName, "..."), verbose, printOnly, jsonTypeReplacements)
+		err = RewriteDir(filepath.Join(path, fileName, "..."), verbose, printOnly, jsonTypeReplacements, localImportPrefixes)
 		if err != nil {
 			return err
 		}
@@ -69,7 +63,7 @@ func RewriteDir(path string, verbose bool, printOnly io.Writer, jsonTypeReplacem
 	return nil
 }
 
-func RewriteFile(filePath string, verbose bool, printOnly io.Writer, jsonTypeReplacements map[string]string) (err error) {
+func RewriteFile(filePath string, verbose bool, printOnly io.Writer, jsonTypeReplacements map[string]string, localImportPrefixes []string) (err error) {
 	filePath = filepath.Clean(filePath)
 	fileInfo, err := os.Stat(filePath)
 	if err != nil {
@@ -83,10 +77,10 @@ func RewriteFile(filePath string, verbose bool, printOnly io.Writer, jsonTypeRep
 	if err != nil {
 		return err
 	}
-	return RewriteAstFile(fset, pkg, pkg.Files[filePath], filePath, verbose, printOnly, jsonTypeReplacements)
+	return RewriteAstFile(fset, pkg, pkg.Files[filePath], filePath, verbose, printOnly, jsonTypeReplacements, localImportPrefixes)
 }
 
-func RewriteAstFile(fset *token.FileSet, filePkg *ast.Package, astFile *ast.File, filePath string, verbose bool, printTo io.Writer, jsonTypeReplacements map[string]string) (err error) {
+func RewriteAstFile(fset *token.FileSet, filePkg *ast.Package, astFile *ast.File, filePath string, verbose bool, printTo io.Writer, jsonTypeReplacements map[string]string, localImportPrefixes []string) (err error) {
 	filePath = filepath.Clean(filePath)
 
 	// ast.Print(fset, file)
@@ -161,34 +155,7 @@ func RewriteAstFile(fset *token.FileSet, filePkg *ast.Package, astFile *ast.File
 
 	// Parse rewritten again to add missing imports
 	// to the ast.File and pretty print the result
-	astFile, err = parser.ParseFile(fset, filePath+".rewritten.go", rewritten, parser.ParseComments|parser.AllErrors)
-	if err != nil {
-		return err
-	}
-	// Sort import lines to add the missing ones in repeatable order
-	sortedImportLines := make([]string, 0, len(neededImportLines))
-	for l := range neededImportLines {
-		sortedImportLines = append(sortedImportLines, l)
-	}
-	sort.Strings(sortedImportLines)
-	for _, importLine := range sortedImportLines {
-		name, path, err := astvisit.ImportNameAndPathOfImportLine(importLine)
-		if err != nil {
-			return err
-		}
-		astutil.AddNamedImport(fset, astFile, name, path)
-	}
-	buf := bytes.NewBuffer(nil)
-	err = format.Node(buf, fset, astFile)
-	if err != nil {
-		return err
-	}
-	rewritten = buf.Bytes()
-
-	// TODO replace by something more efficient that re-parsing everything
-	// import "golang.org/x/tools/imports"
-	imports.LocalPrefix = "github.com/domonda/"
-	rewritten, err = imports.Process(filePath, rewritten, &imports.Options{Comments: true, FormatOnly: true})
+	rewritten, err = astvisit.FormatFileWithImports(fset, rewritten, neededImportLines, localImportPrefixes...)
 	if err != nil {
 		return err
 	}

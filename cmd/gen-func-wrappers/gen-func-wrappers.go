@@ -71,14 +71,17 @@ func main() {
 		}
 	}
 
+	// TODO replace hard coded prefix with config option and auto-detection
+	localImportPrefixes := []string{"github.com/domonda/"}
+
 	var printOnlyWriter io.Writer
 	if printOnly {
 		printOnlyWriter = os.Stdout
 	}
 	if info.IsDir() {
-		err = gen.RewriteDir(filePath, verbose, printOnlyWriter, jsonTypeReplacements)
+		err = gen.RewriteDir(filePath, verbose, printOnlyWriter, jsonTypeReplacements, localImportPrefixes)
 	} else {
-		err = gen.RewriteFile(filePath, verbose, printOnlyWriter, jsonTypeReplacements)
+		err = gen.RewriteFile(filePath, verbose, printOnlyWriter, jsonTypeReplacements, localImportPrefixes)
 	}
 	if err != nil {
 		fmt.Fprintln(os.Stderr, "gen-func-wrappers error:", err)
