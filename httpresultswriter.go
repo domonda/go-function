@@ -26,16 +26,31 @@ var RespondJSON HTTPResultsWriterFunc = func(results []interface{}, resultErr er
 	if resultErr != nil || request.Context().Err() != nil {
 		return resultErr
 	}
-	var buf []byte
-	for _, result := range results {
-		b, err := encodeJSON(result)
+
+	// no results, just OK
+	if len(results) == 0 {
+		return nil
+	}
+
+	// content-type json is relevant only if there's content
+	writer.Header().Set("Content-Type", "application/json; charset=utf-8")
+
+	// only one result, write it as is
+	if len(results) == 1 {
+		b, err := encodeJSON(results[0])
 		if err != nil {
 			return err
 		}
-		buf = append(buf, b...)
+		_, err = writer.Write(b)
+		return err
 	}
-	writer.Header().Set("Content-Type", "application/json; charset=utf-8")
-	_, err := writer.Write(buf)
+
+	// multiple results, put them in a JSON array
+	b, err := encodeJSON(results)
+	if err != nil {
+		return err
+	}
+	_, err = writer.Write(b)
 	return err
 }
 
