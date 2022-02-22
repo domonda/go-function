@@ -27,9 +27,8 @@ var RespondJSON HTTPResultsWriterFunc = func(results []interface{}, resultErr er
 		return resultErr
 	}
 
-	// no results, just status OK
+	// no results, just OK
 	if len(results) == 0 {
-		writer.WriteHeader(http.StatusOK)
 		return nil
 	}
 
