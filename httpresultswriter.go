@@ -27,13 +27,14 @@ var RespondJSON HTTPResultsWriterFunc = func(results []interface{}, resultErr er
 		return resultErr
 	}
 
-	writer.Header().Set("Content-Type", "application/json; charset=utf-8")
-
 	// no results, just status OK
 	if len(results) == 0 {
 		writer.WriteHeader(http.StatusOK)
 		return nil
 	}
+
+	// content-type json is relevant only if there's content
+	writer.Header().Set("Content-Type", "application/json; charset=utf-8")
 
 	// only one result, write it as is
 	if len(results) == 1 {
