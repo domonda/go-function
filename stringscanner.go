@@ -30,20 +30,25 @@ func DefaultScanString(sourceStr string, destPtr interface{}) (err error) {
 	if destPtr == nil {
 		return errors.New("destination pointer is nil")
 	}
-	v := reflect.ValueOf(destPtr)
-	if v.Kind() != reflect.Ptr {
-		return fmt.Errorf("expected destination pointer type but got: %s", v.Type())
+	destPtrVal := reflect.ValueOf(destPtr)
+	if destPtrVal.Kind() != reflect.Ptr {
+		return fmt.Errorf("expected destination pointer type but got: %s", destPtrVal.Type())
 	}
-	if v.IsNil() {
+	if destPtrVal.IsNil() {
 		return errors.New("destination pointer is nil")
 	}
-	return scanString(sourceStr, v.Elem())
+	return scanString(sourceStr, destPtrVal.Elem())
 }
 
 func scanString(sourceStr string, destVal reflect.Value) (err error) {
-	destPtr := destVal.Addr().Interface()
+	var (
+		destPtr      = destVal.Addr().Interface()
+		sourceStrNil = sourceStr == "" ||
+			strings.EqualFold(sourceStr, "nil") ||
+			strings.EqualFold(sourceStr, "null")
+	)
 
-	if n, ok := destPtr.(interface{ SetNull() }); ok && isNilString(sourceStr) {
+	if n, ok := destPtr.(interface{ SetNull() }); ok && sourceStrNil {
 		n.SetNull()
 		return nil
 	}
@@ -54,7 +59,7 @@ func scanString(sourceStr string, destVal reflect.Value) (err error) {
 		return nil
 
 	case *error:
-		if sourceStr == "" {
+		if sourceStrNil {
 			*dest = nil
 		} else {
 			*dest = errors.New(sourceStr)
@@ -62,7 +67,7 @@ func scanString(sourceStr string, destVal reflect.Value) (err error) {
 		return nil
 
 	case *time.Time:
-		if isNilString(sourceStr) {
+		if sourceStrNil {
 			*dest = time.Time{}
 			return nil
 		}
@@ -76,7 +81,7 @@ func scanString(sourceStr string, destVal reflect.Value) (err error) {
 		return fmt.Errorf("can't parse %q as time.Time using formats %#v", sourceStr, TimeFormats)
 
 	case interface{ Set(time.Time) }:
-		if isNilString(sourceStr) {
+		if sourceStrNil {
 			dest.Set(time.Time{})
 			return nil
 		}
@@ -90,6 +95,10 @@ func scanString(sourceStr string, destVal reflect.Value) (err error) {
 		return fmt.Errorf("can't parse %q as time.Time using formats %#v", sourceStr, TimeFormats)
 
 	case *time.Duration:
+		if sourceStrNil {
+			*dest = 0
+			return nil
+		}
 		duration, err := time.ParseDuration(sourceStr)
 		if err != nil {
 			return fmt.Errorf("can't parse %q as time.Duration because of: %w", sourceStr, err)
@@ -120,7 +129,7 @@ func scanString(sourceStr string, destVal reflect.Value) (err error) {
 		return nil
 
 	case reflect.Ptr:
-		if isNilString(sourceStr) {
+		if sourceStrNil {
 			destVal.Set(reflect.Zero(destVal.Type()))
 			return nil
 		}
@@ -141,7 +150,7 @@ func scanString(sourceStr string, destVal reflect.Value) (err error) {
 		return json.Unmarshal([]byte(sourceStr), destPtr)
 
 	case reflect.Slice:
-		if isNilString(sourceStr) {
+		if sourceStrNil {
 			destVal.Set(reflect.Zero(destVal.Type()))
 			return nil
 		}
@@ -188,8 +197,8 @@ func scanString(sourceStr string, destVal reflect.Value) (err error) {
 		}
 		return nil
 
-	case reflect.Chan, reflect.Func:
-		if isNilString(sourceStr) {
+	case reflect.Map, reflect.Chan, reflect.Func:
+		if sourceStrNil {
 			destVal.Set(reflect.Zero(destVal.Type()))
 			return nil
 		}
@@ -204,14 +213,6 @@ func scanString(sourceStr string, destVal reflect.Value) (err error) {
 	}
 
 	return nil
-}
-
-func isNilString(str string) bool {
-	switch strings.ToLower(str) {
-	case "", "nil", "null":
-		return true
-	}
-	return false
 }
 
 func sliceLiteralFields(sourceStr string) (fields []string, err error) {

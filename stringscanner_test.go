@@ -68,6 +68,7 @@ func Test_sliceLiteralFields(t *testing.T) {
 }
 
 func TestScanString(t *testing.T) {
+	intMap := make(map[int]int)
 	type args struct {
 		sourceStr string
 		destPtr   interface{}
@@ -82,6 +83,21 @@ func TestScanString(t *testing.T) {
 			name:     "int(666)",
 			args:     args{sourceStr: "666", destPtr: new(int)},
 			wantDest: int(666),
+		},
+		{
+			name:     "empty string map[int]int",
+			args:     args{sourceStr: "", destPtr: &intMap},
+			wantDest: map[int]int(nil),
+		},
+		{
+			name:     "nil map[int]int",
+			args:     args{sourceStr: "nil", destPtr: &intMap},
+			wantDest: map[int]int(nil),
+		},
+		{
+			name:     "null map[int]int",
+			args:     args{sourceStr: "null", destPtr: &intMap},
+			wantDest: map[int]int(nil),
 		},
 		// wantErr
 		{
