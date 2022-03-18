@@ -79,7 +79,7 @@ func HTTPHandlerNoWrapper(function func(context.Context) ([]byte, error), result
 
 		result, err := function(request.Context())
 		if resultsWriter != nil {
-			err = resultsWriter.WriteResults([]interface{}{result}, err, writer, request)
+			err = resultsWriter.WriteResults([]any{result}, err, writer, request)
 		}
 		if err == nil {
 			return

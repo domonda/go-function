@@ -13,16 +13,16 @@ import (
 )
 
 type HTTPResultsWriter interface {
-	WriteResults(results []interface{}, resultErr error, writer http.ResponseWriter, request *http.Request) error
+	WriteResults(results []any, resultErr error, writer http.ResponseWriter, request *http.Request) error
 }
 
-type HTTPResultsWriterFunc func(results []interface{}, resultErr error, writer http.ResponseWriter, request *http.Request) error
+type HTTPResultsWriterFunc func(results []any, resultErr error, writer http.ResponseWriter, request *http.Request) error
 
-func (f HTTPResultsWriterFunc) WriteResults(results []interface{}, resultErr error, writer http.ResponseWriter, request *http.Request) error {
+func (f HTTPResultsWriterFunc) WriteResults(results []any, resultErr error, writer http.ResponseWriter, request *http.Request) error {
 	return f(results, resultErr, writer, request)
 }
 
-var RespondJSON HTTPResultsWriterFunc = func(results []interface{}, resultErr error, writer http.ResponseWriter, request *http.Request) error {
+var RespondJSON HTTPResultsWriterFunc = func(results []any, resultErr error, writer http.ResponseWriter, request *http.Request) error {
 	if resultErr != nil || request.Context().Err() != nil {
 		return resultErr
 	}
@@ -56,7 +56,7 @@ var RespondJSON HTTPResultsWriterFunc = func(results []interface{}, resultErr er
 
 // RespondBinary responds with contentType using the binary data from results of type []byte, string, or io.Reader.
 func RespondBinary(contentType string) HTTPResultsWriterFunc {
-	return func(results []interface{}, resultErr error, writer http.ResponseWriter, request *http.Request) (err error) {
+	return func(results []any, resultErr error, writer http.ResponseWriter, request *http.Request) (err error) {
 		if resultErr != nil || request.Context().Err() != nil {
 			return resultErr
 		}
@@ -83,12 +83,12 @@ func RespondBinary(contentType string) HTTPResultsWriterFunc {
 }
 
 func RespondJSONField(fieldName string) HTTPResultsWriterFunc {
-	return func(results []interface{}, resultErr error, writer http.ResponseWriter, request *http.Request) (err error) {
+	return func(results []any, resultErr error, writer http.ResponseWriter, request *http.Request) (err error) {
 		if resultErr != nil || request.Context().Err() != nil {
 			return resultErr
 		}
 		var buf []byte
-		m := make(map[string]interface{})
+		m := make(map[string]any)
 		if len(results) > 0 {
 			m[fieldName] = results[0]
 		}
@@ -102,7 +102,7 @@ func RespondJSONField(fieldName string) HTTPResultsWriterFunc {
 	}
 }
 
-var RespondXML HTTPResultsWriterFunc = func(results []interface{}, resultErr error, writer http.ResponseWriter, request *http.Request) error {
+var RespondXML HTTPResultsWriterFunc = func(results []any, resultErr error, writer http.ResponseWriter, request *http.Request) error {
 	if resultErr != nil || request.Context().Err() != nil {
 		return resultErr
 	}
@@ -119,7 +119,7 @@ var RespondXML HTTPResultsWriterFunc = func(results []interface{}, resultErr err
 	return err
 }
 
-var RespondPlaintext HTTPResultsWriterFunc = func(results []interface{}, resultErr error, writer http.ResponseWriter, request *http.Request) error {
+var RespondPlaintext HTTPResultsWriterFunc = func(results []any, resultErr error, writer http.ResponseWriter, request *http.Request) error {
 	if resultErr != nil || request.Context().Err() != nil {
 		return resultErr
 	}
@@ -136,7 +136,7 @@ var RespondPlaintext HTTPResultsWriterFunc = func(results []interface{}, resultE
 	return err
 }
 
-var RespondHTML HTTPResultsWriterFunc = func(results []interface{}, resultErr error, writer http.ResponseWriter, request *http.Request) error {
+var RespondHTML HTTPResultsWriterFunc = func(results []any, resultErr error, writer http.ResponseWriter, request *http.Request) error {
 	if resultErr != nil || request.Context().Err() != nil {
 		return resultErr
 	}
@@ -153,7 +153,7 @@ var RespondHTML HTTPResultsWriterFunc = func(results []interface{}, resultErr er
 	return err
 }
 
-var RespondDetectContentType HTTPResultsWriterFunc = func(results []interface{}, resultErr error, writer http.ResponseWriter, request *http.Request) error {
+var RespondDetectContentType HTTPResultsWriterFunc = func(results []any, resultErr error, writer http.ResponseWriter, request *http.Request) error {
 	if resultErr != nil || request.Context().Err() != nil {
 		return resultErr
 	}
@@ -171,7 +171,7 @@ var RespondDetectContentType HTTPResultsWriterFunc = func(results []interface{},
 }
 
 func RespondContentType(contentType string) HTTPResultsWriter {
-	return HTTPResultsWriterFunc(func(results []interface{}, resultErr error, writer http.ResponseWriter, request *http.Request) error {
+	return HTTPResultsWriterFunc(func(results []any, resultErr error, writer http.ResponseWriter, request *http.Request) error {
 		if resultErr != nil || request.Context().Err() != nil {
 			return resultErr
 		}
@@ -199,14 +199,14 @@ func DetectContentType(data []byte) string {
 	return kind.MIME.Value
 }
 
-func encodeJSON(response interface{}) ([]byte, error) {
+func encodeJSON(response any) ([]byte, error) {
 	if PrettyPrint {
 		return json.MarshalIndent(response, "", PrettyPrintIndent)
 	}
 	return json.Marshal(response)
 }
 
-func encodeXML(response interface{}) ([]byte, error) {
+func encodeXML(response any) ([]byte, error) {
 	if PrettyPrint {
 		return xml.MarshalIndent(response, "", PrettyPrintIndent)
 	}
@@ -232,7 +232,7 @@ var RespondNothing respondNothing
 
 type respondNothing struct{}
 
-func (respondNothing) WriteResults(results []interface{}, resultErr error, writer http.ResponseWriter, request *http.Request) error {
+func (respondNothing) WriteResults(results []any, resultErr error, writer http.ResponseWriter, request *http.Request) error {
 	return resultErr
 }
 
@@ -240,7 +240,7 @@ func (respondNothing) ServeHTTP(writer http.ResponseWriter, _ *http.Request) {}
 
 type RespondStaticHTML string
 
-func (html RespondStaticHTML) WriteResults(results []interface{}, resultErr error, writer http.ResponseWriter, request *http.Request) error {
+func (html RespondStaticHTML) WriteResults(results []any, resultErr error, writer http.ResponseWriter, request *http.Request) error {
 	if resultErr != nil || request.Context().Err() != nil {
 		return resultErr
 	}
@@ -255,7 +255,7 @@ func (html RespondStaticHTML) ServeHTTP(writer http.ResponseWriter, _ *http.Requ
 
 type RespondStaticXML string
 
-func (xml RespondStaticXML) WriteResults(results []interface{}, resultErr error, writer http.ResponseWriter, request *http.Request) error {
+func (xml RespondStaticXML) WriteResults(results []any, resultErr error, writer http.ResponseWriter, request *http.Request) error {
 	if resultErr != nil || request.Context().Err() != nil {
 		return resultErr
 	}
@@ -270,7 +270,7 @@ func (xml RespondStaticXML) ServeHTTP(writer http.ResponseWriter, _ *http.Reques
 
 type RespondStaticJSON string
 
-func (json RespondStaticJSON) WriteResults(results []interface{}, resultErr error, writer http.ResponseWriter, request *http.Request) error {
+func (json RespondStaticJSON) WriteResults(results []any, resultErr error, writer http.ResponseWriter, request *http.Request) error {
 	if resultErr != nil || request.Context().Err() != nil {
 		return resultErr
 	}
@@ -285,7 +285,7 @@ func (json RespondStaticJSON) ServeHTTP(writer http.ResponseWriter, _ *http.Requ
 
 type RespondStaticPlaintext string
 
-func (text RespondStaticPlaintext) WriteResults(results []interface{}, resultErr error, writer http.ResponseWriter, request *http.Request) error {
+func (text RespondStaticPlaintext) WriteResults(results []any, resultErr error, writer http.ResponseWriter, request *http.Request) error {
 	if resultErr != nil || request.Context().Err() != nil {
 		return resultErr
 	}

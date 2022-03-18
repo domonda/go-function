@@ -22,7 +22,7 @@ type Description interface {
 	ResultTypes() []reflect.Type
 }
 
-func ReflectDescription(name string, f interface{}) (Description, error) {
+func ReflectDescription(name string, f any) (Description, error) {
 	t := reflect.ValueOf(f).Type()
 	if t.Kind() != reflect.Func {
 		return nil, fmt.Errorf("%s passed instead of a function", t)

@@ -63,15 +63,15 @@ func TestReflectWrapper(t *testing.T) {
 	}
 
 	type args struct {
-		function interface{}
+		function any
 		argNames []string
 	}
 	type call struct {
-		args         []interface{}
+		args         []any
 		argsStrings  []string
 		argsNamedStr map[string]string
 		argsJSON     []byte
-		results      []interface{}
+		results      []any
 		wantErr      bool
 	}
 	tests := []struct {
@@ -98,7 +98,7 @@ func TestReflectWrapper(t *testing.T) {
 				argsStrings:  nil,
 				argsNamedStr: nil,
 				argsJSON:     []byte(`{}`),
-				results:      []interface{}{},
+				results:      []any{},
 				wantErr:      false,
 			},
 			desc: f0desc,
@@ -116,11 +116,11 @@ func TestReflectWrapper(t *testing.T) {
 			},
 			wantErr: false,
 			call: call{
-				args:         []interface{}{666},
+				args:         []any{666},
 				argsStrings:  []string{"666"},
 				argsNamedStr: map[string]string{"i": "666"},
 				argsJSON:     []byte(`{"i":666}`),
-				results:      []interface{}{},
+				results:      []any{},
 				wantErr:      false,
 			},
 			desc: f1desc,
@@ -138,11 +138,11 @@ func TestReflectWrapper(t *testing.T) {
 			},
 			wantErr: false,
 			call: call{
-				args:         []interface{}{666},
+				args:         []any{666},
 				argsStrings:  []string{"666"},
 				argsNamedStr: map[string]string{"i": "666"},
 				argsJSON:     []byte(`{"i":666}`),
-				results:      []interface{}{666 * 2},
+				results:      []any{666 * 2},
 				wantErr:      false,
 			},
 			desc: f1rdesc,
@@ -160,11 +160,11 @@ func TestReflectWrapper(t *testing.T) {
 			},
 			wantErr: false,
 			call: call{
-				args:         []interface{}{666, nil},
+				args:         []any{666, nil},
 				argsStrings:  []string{"666", ""},
 				argsNamedStr: map[string]string{"i": "666", "e": ""},
 				argsJSON:     []byte(`{"i":666,"e":null}`),
-				results:      []interface{}{666 * 2},
+				results:      []any{666 * 2},
 				wantErr:      false,
 			},
 			desc: ferrdesc,
@@ -182,11 +182,11 @@ func TestReflectWrapper(t *testing.T) {
 			},
 			wantErr: false,
 			call: call{
-				args:         []interface{}{666, errors.New("ERROR")},
+				args:         []any{666, errors.New("ERROR")},
 				argsStrings:  []string{"666", "ERROR"},
 				argsNamedStr: map[string]string{"i": "666", "e": "ERROR"},
 				argsJSON:     []byte(`{"i":666,"e":"ERROR"}`),
-				results:      []interface{}{666 * 2},
+				results:      []any{666 * 2},
 				wantErr:      true,
 			},
 			desc: ferrdesc,

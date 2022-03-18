@@ -8,13 +8,12 @@ import (
 	"net/http"
 	"reflect"
 
-	"github.com/domonda/go-function"
-	"github.com/domonda/golog/log"
-
 	"github.com/ungerik/go-fs"
 	"github.com/ungerik/go-httpx/httperr"
 
+	"github.com/domonda/go-function"
 	"github.com/domonda/go-function/htmlform"
+	"github.com/domonda/golog/log"
 )
 
 func main() {
@@ -23,7 +22,7 @@ func main() {
 	function.StringScanners = function.StringScanners.
 		WithTypeScanner(
 			reflect.TypeOf((*fs.FileReader)(nil)).Elem(),
-			function.StringScannerFunc(func(sourceStr string, destPtr interface{}) error {
+			function.StringScannerFunc(func(sourceStr string, destPtr any) error {
 				*destPtr.(*fs.FileReader) = fs.File(sourceStr)
 				return nil
 			}),
@@ -135,12 +134,12 @@ func (wrappedExampleT) ResultTypes() []reflect.Type {
 	}
 }
 
-func (f wrappedExampleT) Call(ctx context.Context, args []interface{}) (results []interface{}, err error) {
+func (f wrappedExampleT) Call(ctx context.Context, args []any) (results []any, err error) {
 	err = Example(ctx, args[0].(bool), args[1].(int), args[2].(float64), args[3].(Color), args[4].(fs.FileReader)) // wrapped call
 	return results, err
 }
 
-func (f wrappedExampleT) CallWithStrings(ctx context.Context, strs ...string) (results []interface{}, err error) {
+func (f wrappedExampleT) CallWithStrings(ctx context.Context, strs ...string) (results []any, err error) {
 	var a struct {
 		aBool  bool
 		anInt  int
@@ -182,7 +181,7 @@ func (f wrappedExampleT) CallWithStrings(ctx context.Context, strs ...string) (r
 	return results, err
 }
 
-func (f wrappedExampleT) CallWithNamedStrings(ctx context.Context, strs map[string]string) (results []interface{}, err error) {
+func (f wrappedExampleT) CallWithNamedStrings(ctx context.Context, strs map[string]string) (results []any, err error) {
 	var a struct {
 		aBool  bool
 		anInt  int
@@ -224,7 +223,7 @@ func (f wrappedExampleT) CallWithNamedStrings(ctx context.Context, strs map[stri
 	return results, err
 }
 
-func (f wrappedExampleT) CallWithJSON(ctx context.Context, argsJSON []byte) (results []interface{}, err error) {
+func (f wrappedExampleT) CallWithJSON(ctx context.Context, argsJSON []byte) (results []any, err error) {
 	var a struct {
 		ABool  bool
 		AnInt  int

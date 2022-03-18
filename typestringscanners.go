@@ -18,7 +18,7 @@ func NewTypeStringScanners(defaultScanner StringScanner) *TypeStringScanners {
 	return &TypeStringScanners{Default: defaultScanner}
 }
 
-func (s *TypeStringScanners) ScanString(sourceStr string, destPtr interface{}) error {
+func (s *TypeStringScanners) ScanString(sourceStr string, destPtr any) error {
 	if destPtr == nil {
 		return errors.New("destination pointer is nil")
 	}

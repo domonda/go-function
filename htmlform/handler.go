@@ -18,7 +18,7 @@ var typeOfFileReader = reflect.TypeOf((*fs.FileReader)(nil)).Elem()
 
 type Option struct {
 	Label string
-	Value interface{}
+	Value any
 }
 
 type formField struct {
@@ -35,7 +35,7 @@ type Handler struct {
 	argValidator    map[string]types.ValidatErr
 	argRequired     map[string]bool
 	argOptions      map[string][]Option
-	argDefaultValue map[string]interface{}
+	argDefaultValue map[string]any
 	argInputType    map[string]string
 	form            struct {
 		Title            string
@@ -52,7 +52,7 @@ func NewHandler(wrappedFunc function.Wrapper, title string, successHandler http.
 		argValidator:    make(map[string]types.ValidatErr),
 		argRequired:     make(map[string]bool),
 		argOptions:      make(map[string][]Option),
-		argDefaultValue: make(map[string]interface{}),
+		argDefaultValue: make(map[string]any),
 		argInputType:    make(map[string]string),
 		successHandler:  successHandler,
 	}
@@ -85,7 +85,7 @@ func (handler *Handler) SetArgOptions(arg string, options []Option) {
 	handler.argOptions[arg] = options
 }
 
-func (handler *Handler) SetArgDefaultValue(arg string, value interface{}) {
+func (handler *Handler) SetArgDefaultValue(arg string, value any) {
 	handler.argDefaultValue[arg] = value
 }
 

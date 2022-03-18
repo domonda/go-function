@@ -15,12 +15,12 @@ import (
 // Except when the function only has one argument
 // of type context.Context then "ctx" is assumed
 // as argument name in case no name has been passed.
-func ReflectWrapper(function interface{}, argNames ...string) (Wrapper, error) {
+func ReflectWrapper(function any, argNames ...string) (Wrapper, error) {
 	return newReflectWrapper(function, argNames)
 }
 
 // MustReflectWrapper calls ReflectWrapper and panics any error.
-func MustReflectWrapper(function interface{}, argNames ...string) Wrapper {
+func MustReflectWrapper(function any, argNames ...string) Wrapper {
 	w, err := newReflectWrapper(function, argNames)
 	if err != nil {
 		panic(err)
@@ -29,7 +29,7 @@ func MustReflectWrapper(function interface{}, argNames ...string) Wrapper {
 }
 
 // newReflectWrapper unexported function returns testable struct type
-func newReflectWrapper(function interface{}, argNames []string) (*reflectWrapper, error) {
+func newReflectWrapper(function any, argNames []string) (*reflectWrapper, error) {
 	var (
 		funcVal  = reflect.ValueOf(function)
 		funcType = funcVal.Type()
@@ -118,7 +118,7 @@ func (f *reflectWrapper) ResultTypes() []reflect.Type {
 	return r
 }
 
-func (f *reflectWrapper) call(in []reflect.Value) (results []interface{}, err error) {
+func (f *reflectWrapper) call(in []reflect.Value) (results []any, err error) {
 	// Replace untyped nil values with typed zero values
 	for i := range in {
 		if !in[i].IsValid() {
@@ -131,14 +131,14 @@ func (f *reflectWrapper) call(in []reflect.Value) (results []interface{}, err er
 		resultsLen--
 		err, _ = out[len(out)-1].Interface().(error)
 	}
-	results = make([]interface{}, resultsLen)
+	results = make([]any, resultsLen)
 	for i := range results {
 		results[i] = out[i].Interface()
 	}
 	return results, err
 }
 
-func (f *reflectWrapper) Call(ctx context.Context, args []interface{}) (results []interface{}, err error) {
+func (f *reflectWrapper) Call(ctx context.Context, args []any) (results []any, err error) {
 	in := make([]reflect.Value, f.NumArgs())
 	offs := 0
 	if f.ContextArg() {
@@ -151,7 +151,7 @@ func (f *reflectWrapper) Call(ctx context.Context, args []interface{}) (results 
 	return f.call(in)
 }
 
-func (f *reflectWrapper) CallWithStrings(ctx context.Context, strs ...string) (results []interface{}, err error) {
+func (f *reflectWrapper) CallWithStrings(ctx context.Context, strs ...string) (results []any, err error) {
 	in := make([]reflect.Value, f.NumArgs())
 	offs := 0
 	if f.ContextArg() {
@@ -167,7 +167,7 @@ func (f *reflectWrapper) CallWithStrings(ctx context.Context, strs ...string) (r
 		}
 		str := strs[i-offs]
 		if argType == typeOfEmptyInterface {
-			// Pass string directly for argument of type interface{}
+			// Pass string directly for argument of type any
 			in[i] = reflect.ValueOf(str)
 			continue
 		}
@@ -181,7 +181,7 @@ func (f *reflectWrapper) CallWithStrings(ctx context.Context, strs ...string) (r
 	return f.call(in)
 }
 
-func (f *reflectWrapper) CallWithNamedStrings(ctx context.Context, strs map[string]string) (results []interface{}, err error) {
+func (f *reflectWrapper) CallWithNamedStrings(ctx context.Context, strs map[string]string) (results []any, err error) {
 	in := make([]reflect.Value, f.NumArgs())
 	offs := 0
 	if f.ContextArg() {
@@ -193,7 +193,7 @@ func (f *reflectWrapper) CallWithNamedStrings(ctx context.Context, strs map[stri
 		argName := f.argNames[i]
 		if str, ok := strs[argName]; ok {
 			if argType == typeOfEmptyInterface {
-				// Pass string directly for argument of type interface{}
+				// Pass string directly for argument of type any
 				in[i] = reflect.ValueOf(str)
 				continue
 			}
@@ -208,7 +208,7 @@ func (f *reflectWrapper) CallWithNamedStrings(ctx context.Context, strs map[stri
 	return f.call(in)
 }
 
-func (f *reflectWrapper) CallWithJSON(ctx context.Context, argsJSON []byte) (results []interface{}, err error) {
+func (f *reflectWrapper) CallWithJSON(ctx context.Context, argsJSON []byte) (results []any, err error) {
 	args := make(map[string]json.RawMessage)
 	err = json.Unmarshal(argsJSON, &args)
 	if err != nil {

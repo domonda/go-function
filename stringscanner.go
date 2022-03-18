@@ -12,21 +12,21 @@ import (
 
 // ScanString uses the configured DefaultStringScanner
 // to scan sourceStr
-func ScanString(sourceStr string, destPtr interface{}) error {
+func ScanString(sourceStr string, destPtr any) error {
 	return StringScanners.ScanString(sourceStr, destPtr)
 }
 
 type StringScanner interface {
-	ScanString(sourceStr string, destPtr interface{}) error
+	ScanString(sourceStr string, destPtr any) error
 }
 
-type StringScannerFunc func(sourceStr string, destPtr interface{}) error
+type StringScannerFunc func(sourceStr string, destPtr any) error
 
-func (f StringScannerFunc) ScanString(sourceStr string, destPtr interface{}) error {
+func (f StringScannerFunc) ScanString(sourceStr string, destPtr any) error {
 	return f(sourceStr, destPtr)
 }
 
-func DefaultScanString(sourceStr string, destPtr interface{}) (err error) {
+func DefaultScanString(sourceStr string, destPtr any) (err error) {
 	if destPtr == nil {
 		return errors.New("destination pointer is nil")
 	}
@@ -112,10 +112,10 @@ func scanString(sourceStr string, destVal reflect.Value) (err error) {
 	case json.Unmarshaler:
 		return dest.UnmarshalJSON([]byte(sourceStr))
 
-	case *map[string]interface{}:
+	case *map[string]any:
 		return json.Unmarshal([]byte(sourceStr), destPtr)
 
-	case *[]interface{}:
+	case *[]any:
 		return json.Unmarshal([]byte(sourceStr), destPtr)
 
 	case *[]byte:

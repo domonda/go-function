@@ -9,16 +9,16 @@ import (
 )
 
 type ResultsHandler interface {
-	HandleResults(ctx context.Context, results []interface{}, resultErr error) error
+	HandleResults(ctx context.Context, results []any, resultErr error) error
 }
 
-type ResultsHandlerFunc func(ctx context.Context, results []interface{}, resultErr error) error
+type ResultsHandlerFunc func(ctx context.Context, results []any, resultErr error) error
 
-func (f ResultsHandlerFunc) HandleResults(ctx context.Context, results []interface{}, resultErr error) error {
+func (f ResultsHandlerFunc) HandleResults(ctx context.Context, results []any, resultErr error) error {
 	return f(ctx, results, resultErr)
 }
 
-func makeResultsPrintable(results []interface{}) ([]interface{}, error) {
+func makeResultsPrintable(results []any) ([]any, error) {
 	for i, result := range results {
 		if b, ok := result.([]byte); ok {
 			results[i] = string(b)
@@ -44,7 +44,7 @@ func makeResultsPrintable(results []interface{}) ([]interface{}, error) {
 
 // PrintTo calls fmt.Fprint on writer with the result values as varidic arguments
 func PrintTo(writer io.Writer) ResultsHandlerFunc {
-	return func(ctx context.Context, results []interface{}, resultErr error) error {
+	return func(ctx context.Context, results []any, resultErr error) error {
 		if resultErr != nil {
 			return resultErr
 		}
@@ -59,7 +59,7 @@ func PrintTo(writer io.Writer) ResultsHandlerFunc {
 
 // PrintlnTo calls fmt.Fprintln on writer for every result
 func PrintlnTo(writer io.Writer) ResultsHandlerFunc {
-	return func(ctx context.Context, results []interface{}, resultErr error) error {
+	return func(ctx context.Context, results []any, resultErr error) error {
 		if resultErr != nil {
 			return resultErr
 		}
@@ -78,7 +78,7 @@ func PrintlnTo(writer io.Writer) ResultsHandlerFunc {
 }
 
 // Println calls fmt.Println for every result
-var Println ResultsHandlerFunc = func(ctx context.Context, results []interface{}, resultErr error) error {
+var Println ResultsHandlerFunc = func(ctx context.Context, results []any, resultErr error) error {
 	if resultErr != nil {
 		return resultErr
 	}
@@ -97,7 +97,7 @@ var Println ResultsHandlerFunc = func(ctx context.Context, results []interface{}
 
 // PrintlnWithPrefixTo calls fmt.Fprintln(writer, prefix, result) for every result value
 func PrintlnWithPrefixTo(prefix string, writer io.Writer) ResultsHandlerFunc {
-	return func(ctx context.Context, results []interface{}, resultErr error) error {
+	return func(ctx context.Context, results []any, resultErr error) error {
 		if resultErr != nil {
 			return resultErr
 		}
@@ -117,7 +117,7 @@ func PrintlnWithPrefixTo(prefix string, writer io.Writer) ResultsHandlerFunc {
 
 // PrintlnWithPrefix calls fmt.Println(prefix, result) for every result value
 func PrintlnWithPrefix(prefix string) ResultsHandlerFunc {
-	return func(ctx context.Context, results []interface{}, resultErr error) error {
+	return func(ctx context.Context, results []any, resultErr error) error {
 		if resultErr != nil {
 			return resultErr
 		}
@@ -137,12 +137,12 @@ func PrintlnWithPrefix(prefix string) ResultsHandlerFunc {
 
 // Logger interface
 type Logger interface {
-	Printf(format string, args ...interface{})
+	Printf(format string, args ...any)
 }
 
 // LogTo calls logger.Printf(fmt.Sprintln(results...))
 func LogTo(logger Logger) ResultsHandlerFunc {
-	return func(ctx context.Context, results []interface{}, resultErr error) error {
+	return func(ctx context.Context, results []any, resultErr error) error {
 		if resultErr != nil {
 			return resultErr
 		}
@@ -157,7 +157,7 @@ func LogTo(logger Logger) ResultsHandlerFunc {
 
 // LogWithPrefixTo calls logger.Printf(fmt.Sprintln(results...)) with prefix prepended to the results
 func LogWithPrefixTo(prefix string, logger Logger) ResultsHandlerFunc {
-	return func(ctx context.Context, results []interface{}, resultErr error) error {
+	return func(ctx context.Context, results []any, resultErr error) error {
 		if resultErr != nil {
 			return resultErr
 		}
@@ -165,7 +165,7 @@ func LogWithPrefixTo(prefix string, logger Logger) ResultsHandlerFunc {
 		if err != nil || len(results) == 0 {
 			return err
 		}
-		results = append([]interface{}{prefix}, results...)
+		results = append([]any{prefix}, results...)
 		logger.Printf(fmt.Sprintln(results...))
 		return nil
 	}
@@ -174,7 +174,7 @@ func LogWithPrefixTo(prefix string, logger Logger) ResultsHandlerFunc {
 // PrintlnText prints a fixed string if a command returns without an error
 type PrintlnText string
 
-func (t PrintlnText) HandleResults(ctx context.Context, results []interface{}, resultErr error) error {
+func (t PrintlnText) HandleResults(ctx context.Context, results []any, resultErr error) error {
 	if resultErr != nil {
 		return resultErr
 	}

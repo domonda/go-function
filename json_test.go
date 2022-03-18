@@ -6,7 +6,7 @@ import (
 )
 
 func Test_unmarshalJSONFunctionArgs(t *testing.T) {
-	description := func(f interface{}) Description {
+	description := func(f any) Description {
 		info, err := ReflectDescription("f", f)
 		if err != nil {
 			panic(err)
@@ -20,7 +20,7 @@ func Test_unmarshalJSONFunctionArgs(t *testing.T) {
 	tests := []struct {
 		name     string
 		args     args
-		wantArgs []interface{}
+		wantArgs []any
 		wantErr  bool
 	}{
 		{
@@ -29,7 +29,7 @@ func Test_unmarshalJSONFunctionArgs(t *testing.T) {
 				f:          description(func() {}),
 				jsonObject: []byte(`{"a0": "ignored"}`),
 			},
-			wantArgs: []interface{}{},
+			wantArgs: []any{},
 		},
 		{
 			name: "default 0",
@@ -37,7 +37,7 @@ func Test_unmarshalJSONFunctionArgs(t *testing.T) {
 				f:          description(func(string, int) {}),
 				jsonObject: []byte(`{"a0": "default"}`),
 			},
-			wantArgs: []interface{}{"default", 0},
+			wantArgs: []any{"default", 0},
 		},
 		{
 			name: "hello 666",
@@ -45,15 +45,15 @@ func Test_unmarshalJSONFunctionArgs(t *testing.T) {
 				f:          description(func(string, int) {}),
 				jsonObject: []byte(`{"a0": "hello", "a1": 666, "a2": "ignored"}`),
 			},
-			wantArgs: []interface{}{"hello", 666},
+			wantArgs: []any{"hello", 666},
 		},
 		{
 			name: "ptr",
 			args: args{
-				f:          description(func(*string, *string, interface{}) {}),
+				f:          description(func(*string, *string, any) {}),
 				jsonObject: []byte(`{"a0": "", "a2": null}`),
 			},
-			wantArgs: []interface{}{new(string), (*string)(nil), nil},
+			wantArgs: []any{new(string), (*string)(nil), nil},
 		},
 		// wantErr
 		{

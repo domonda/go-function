@@ -71,12 +71,12 @@ func TestScanString(t *testing.T) {
 	intMap := make(map[int]int)
 	type args struct {
 		sourceStr string
-		destPtr   interface{}
+		destPtr   any
 	}
 	tests := []struct {
 		name     string
 		args     args
-		wantDest interface{}
+		wantDest any
 		wantErr  bool
 	}{
 		{

@@ -82,7 +82,7 @@ func (impl Impl) WriteFunctionWrapper(w io.Writer, funcFile *ast.File, funcDecl 
 			numResultsWithoutErr--
 		}
 		if numResultsWithoutErr > 0 {
-			fmt.Fprintf(w, "\tresults = make([]interface{}, %d)\n", numResultsWithoutErr)
+			fmt.Fprintf(w, "\tresults = make([]any, %d)\n", numResultsWithoutErr)
 		}
 		fmt.Fprintf(w, "\t")
 		for i := 0; i < numResultsWithoutErr; i++ {
@@ -189,9 +189,9 @@ func (impl Impl) WriteFunctionWrapper(w io.Writer, funcFile *ast.File, funcDecl 
 		ctxArgName = "_ "
 	}
 
-	resultsDecl := "(results []interface{}, err error)"
+	resultsDecl := "(results []any, err error)"
 	if numResults == 0 {
-		resultsDecl = "([]interface{}, error)"
+		resultsDecl = "([]any, error)"
 	}
 
 	if impl&ImplCallWrapper != 0 {
@@ -204,7 +204,7 @@ func (impl Impl) WriteFunctionWrapper(w io.Writer, funcFile *ast.File, funcDecl 
 			argsArgName = "_ "
 		}
 
-		fmt.Fprintf(w, "func (f %s) Call(%scontext.Context, %s[]interface{}) %s {\n", implType, ctxArgName, argsArgName, resultsDecl)
+		fmt.Fprintf(w, "func (f %s) Call(%scontext.Context, %s[]any) %s {\n", implType, ctxArgName, argsArgName, resultsDecl)
 		{
 			callParams := make([]string, numArgs)
 			for i, argType := range argTypes {
@@ -217,7 +217,7 @@ func (impl Impl) WriteFunctionWrapper(w io.Writer, funcFile *ast.File, funcDecl 
 				if hasContextArg {
 					argsIndex--
 				}
-				if argType == "interface{}" {
+				if argType == "any" {
 					callParams[i] = fmt.Sprintf("args[%d]", argsIndex) // no type conversion needed
 				} else {
 					callParams[i] = fmt.Sprintf("args[%d].(%s)", argsIndex, argType)
@@ -361,7 +361,7 @@ func (impl Impl) WriteFunctionWrapper(w io.Writer, funcFile *ast.File, funcDecl 
 				argsJSONArgName = "_ "
 			}
 
-			fmt.Fprintf(w, "func (f %s) CallWithJSON(%scontext.Context, %s[]byte) (results []interface{}, err error) {\n", implType, ctxArgName, argsJSONArgName)
+			fmt.Fprintf(w, "func (f %s) CallWithJSON(%scontext.Context, %s[]byte) (results []any, err error) {\n", implType, ctxArgName, argsJSONArgName)
 			{
 				var callParams []string
 				switch {

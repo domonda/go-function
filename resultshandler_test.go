@@ -8,7 +8,7 @@ import (
 
 func TestPrintlnTo(t *testing.T) {
 	type args struct {
-		results   []interface{}
+		results   []any
 		resultErr error
 	}
 	tests := []struct {
@@ -20,7 +20,7 @@ func TestPrintlnTo(t *testing.T) {
 		{
 			name: `string "Hello World!"`,
 			args: args{
-				results:   []interface{}{"Hello World!"},
+				results:   []any{"Hello World!"},
 				resultErr: nil,
 			},
 			wantPrinted: `Hello World!` + "\n",
