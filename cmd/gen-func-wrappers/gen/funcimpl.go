@@ -204,7 +204,7 @@ func (impl Impl) WriteFunctionWrapper(w io.Writer, funcFile *ast.File, funcDecl 
 			argsArgName = "_ "
 		}
 
-		fmt.Fprintf(w, "func (f %s) Call(%scontext.Context, %s[]any) %s {\n", implType, ctxArgName, argsArgName, resultsDecl)
+		fmt.Fprintf(w, "func (%s) Call(%scontext.Context, %s[]any) %s {\n", implType, ctxArgName, argsArgName, resultsDecl)
 		{
 			callParams := make([]string, numArgs)
 			for i, argType := range argTypes {
@@ -239,7 +239,19 @@ func (impl Impl) WriteFunctionWrapper(w io.Writer, funcFile *ast.File, funcDecl 
 			strsArgName = "_ "
 		}
 
-		fmt.Fprintf(w, "func (f %s) CallWithStrings(%scontext.Context, %s...string) %s {\n", implType, ctxArgName, strsArgName, resultsDecl)
+		receiver := ""
+		for i, argName := range argNames {
+			if i == 0 && hasContextArg || argName == "_" {
+				continue
+			}
+			if argTypes[i] != "string" {
+				// If there is any named non string argument
+				// then the method code below needs a receiver
+				receiver = "f "
+				break
+			}
+		}
+		fmt.Fprintf(w, "func (%s%s) CallWithStrings(%scontext.Context, %s...string) %s {\n", receiver, implType, ctxArgName, strsArgName, resultsDecl)
 		{
 			var callParams []string
 			switch {
@@ -302,7 +314,19 @@ func (impl Impl) WriteFunctionWrapper(w io.Writer, funcFile *ast.File, funcDecl 
 			strsArgName = "_ "
 		}
 
-		fmt.Fprintf(w, "func (f %s) CallWithNamedStrings(%scontext.Context, %smap[string]string) %s {\n", implType, ctxArgName, strsArgName, resultsDecl)
+		receiver := ""
+		for i, argName := range argNames {
+			if i == 0 && hasContextArg || argName == "_" {
+				continue
+			}
+			if argTypes[i] != "string" {
+				// If there is any named non string argument
+				// then the method code below needs a receiver
+				receiver = "f "
+				break
+			}
+		}
+		fmt.Fprintf(w, "func (%s%s) CallWithNamedStrings(%scontext.Context, %smap[string]string) %s {\n", receiver, implType, ctxArgName, strsArgName, resultsDecl)
 		{
 			var callParams []string
 			switch {
@@ -361,7 +385,11 @@ func (impl Impl) WriteFunctionWrapper(w io.Writer, funcFile *ast.File, funcDecl 
 				argsJSONArgName = "_ "
 			}
 
-			fmt.Fprintf(w, "func (f %s) CallWithJSON(%scontext.Context, %s[]byte) (results []any, err error) {\n", implType, ctxArgName, argsJSONArgName)
+			receiver := ""
+			if numArgs > 1 || numArgs == 1 && !hasContextArg {
+				receiver = "f "
+			}
+			fmt.Fprintf(w, "func (%s%s) CallWithJSON(%scontext.Context, %s[]byte) (results []any, err error) {\n", receiver, implType, ctxArgName, argsJSONArgName)
 			{
 				var callParams []string
 				switch {
