@@ -440,13 +440,14 @@ func exportedName(name string) string {
 
 var allUpper = []string{
 	"acl",
+	"api",
 	"csv",
-	"xml",
 	"html",
-	"json",
 	"http",
-	"uuid",
 	"jpeg",
-	"tiff",
+	"json",
 	"png",
+	"tiff",
+	"uuid",
+	"xml",
 }

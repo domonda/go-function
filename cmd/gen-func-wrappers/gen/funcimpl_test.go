@@ -4,17 +4,19 @@ import "testing"
 
 func Test_exportedName(t *testing.T) {
 	tests := map[string]string{
-		"id":             "ID",
-		"identification": "Identification",
-		"documentId":     "DocumentId",
-		"xml":            "XML",
-		"xmlParser":      "XMLParser",
-		"json":           "JSON",
-		"jsonParser":     "JSONParser",
-		"http":           "HTTP",
-		"httpRequest":    "HTTPRequest",
 		"acl":            "ACL",
 		"aclFile":        "ACLFile",
+		"api":            "API",
+		"apiKey":         "APIKey",
+		"documentId":     "DocumentId",
+		"http":           "HTTP",
+		"httpRequest":    "HTTPRequest",
+		"id":             "ID",
+		"identification": "Identification",
+		"json":           "JSON",
+		"jsonParser":     "JSONParser",
+		"xml":            "XML",
+		"xmlParser":      "XMLParser",
 	}
 	for name, want := range tests {
 		t.Run(name, func(t *testing.T) {
