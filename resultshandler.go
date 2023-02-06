@@ -1,11 +1,15 @@
 package function
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"fmt"
 	"io"
 	"reflect"
+	"strings"
+	"unicode"
+	"unicode/utf8"
 )
 
 type ResultsHandler interface {
@@ -20,23 +24,38 @@ func (f ResultsHandlerFunc) HandleResults(ctx context.Context, results []any, re
 
 func makeResultsPrintable(results []any) ([]any, error) {
 	for i, result := range results {
-		if b, ok := result.([]byte); ok {
-			results[i] = string(b)
-			continue
-		}
+		switch x := result.(type) {
+		case fmt.GoStringer:
+			results[i] = x.GoString()
 
-		switch derefValue(reflect.ValueOf(result)).Kind() {
-		case reflect.Struct, reflect.Slice, reflect.Array:
-			b, err := json.MarshalIndent(result, "", "  ")
-			if err != nil {
-				return nil, fmt.Errorf("can't print command result as JSON because: %w", err)
+		case fmt.Stringer:
+			results[i] = x.String()
+
+		case []byte:
+			if utf8.Valid(x) && bytes.IndexFunc(x, func(r rune) bool { return !unicode.IsPrint(r) }) == -1 {
+				results[i] = string(x)
+			} else {
+				results[i] = fmt.Sprintf("%#x", x)
 			}
-			results[i] = string(b)
 
-		case reflect.Func, reflect.Chan:
-			// Use Go source representation for functional types
-			// that have no useful printable value
-			results[i] = fmt.Sprintf("%#v", result)
+		default:
+			switch v := derefValue(reflect.ValueOf(result)); v.Kind() {
+			case reflect.Float32, reflect.Float64:
+				// Print with up to 12 decimals precission
+				results[i] = strings.TrimRight(fmt.Sprintf("%.12f", v.Interface()), "0")
+
+			case reflect.Struct, reflect.Map, reflect.Slice, reflect.Array:
+				b, err := json.MarshalIndent(result, "", "  ")
+				if err != nil {
+					return nil, fmt.Errorf("can't print command result as JSON because: %w", err)
+				}
+				results[i] = string(b)
+
+			case reflect.Func, reflect.Chan:
+				// Use Go source representation for functional types
+				// that have no useful printable value
+				results[i] = fmt.Sprintf("%#v", result)
+			}
 		}
 	}
 	return results, nil
