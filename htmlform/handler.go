@@ -196,10 +196,7 @@ func (handler *Handler) post(response http.ResponseWriter, request *http.Request
 	}
 
 	results, err := handler.wrappedFunc.CallWithNamedStrings(request.Context(), argsMap)
-	if httperr.Handle(err, response, request) {
-		return
-	}
 
-	err = handler.resultWriter.WriteResults(results, nil, response, request)
+	err = handler.resultWriter.WriteResults(results, err, response, request)
 	httperr.Handle(err, response, request)
 }
