@@ -42,11 +42,11 @@ type Handler struct {
 		Fields           []formField
 		SubmitButtonText string
 	}
-	template       *template.Template
-	successHandler http.Handler
+	template     *template.Template
+	resultWriter function.HTTPResultsWriter
 }
 
-func NewHandler(wrappedFunc function.Wrapper, title string, successHandler http.Handler) (handler *Handler, err error) {
+func NewHandler(wrappedFunc function.Wrapper, title string, resultWriter function.HTTPResultsWriter) (handler *Handler, err error) {
 	handler = &Handler{
 		wrappedFunc:     wrappedFunc,
 		argValidator:    make(map[string]types.ValidatErr),
@@ -54,7 +54,7 @@ func NewHandler(wrappedFunc function.Wrapper, title string, successHandler http.
 		argOptions:      make(map[string][]Option),
 		argDefaultValue: make(map[string]any),
 		argInputType:    make(map[string]string),
-		successHandler:  successHandler,
+		resultWriter:    resultWriter,
 	}
 	handler.form.Title = title
 	handler.form.SubmitButtonText = "Submit"
@@ -65,7 +65,7 @@ func NewHandler(wrappedFunc function.Wrapper, title string, successHandler http.
 	return handler, nil
 }
 
-func MustNewHandler(fun function.Wrapper, title string, successHandler http.Handler) (handler *Handler) {
+func MustNewHandler(fun function.Wrapper, title string, successHandler function.HTTPResultsWriter) (handler *Handler) {
 	handler, err := NewHandler(fun, title, successHandler)
 	if err != nil {
 		panic(err)
@@ -195,11 +195,11 @@ func (handler *Handler) post(response http.ResponseWriter, request *http.Request
 		argsMap[key] = string(file)
 	}
 
-	_, err = handler.wrappedFunc.CallWithNamedStrings(request.Context(), argsMap)
-	if err != nil {
-		httperr.Handle(err, response, request)
+	results, err := handler.wrappedFunc.CallWithNamedStrings(request.Context(), argsMap)
+	if httperr.Handle(err, response, request) {
 		return
 	}
 
-	handler.successHandler.ServeHTTP(response, request)
+	err = handler.resultWriter.WriteResults(results, nil, response, request)
+	httperr.Handle(err, response, request)
 }

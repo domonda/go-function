@@ -5,7 +5,7 @@ go 1.20
 require (
 	github.com/fatih/color v1.14.1
 	github.com/h2non/filetype v1.1.3
-	github.com/ungerik/go-httpx v0.0.0-20230119150714-6449edca142c
+	github.com/ungerik/go-httpx v0.0.0-20230212172431-5e4cf2e098cc
 )
 
 require (

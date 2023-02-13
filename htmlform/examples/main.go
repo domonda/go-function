@@ -49,9 +49,7 @@ func main() {
 
 	log.Info("Listening on http://localhost:8080").Log()
 	err = http.ListenAndServe(":8080", handler)
-	if err != nil {
-		log.FatalAndPanic(err)
-	}
+	log.FatalAndPanic(err)
 }
 
 type Color int
@@ -134,7 +132,7 @@ func (wrappedExampleT) ResultTypes() []reflect.Type {
 	}
 }
 
-func (f wrappedExampleT) Call(ctx context.Context, args []any) (results []any, err error) {
+func (wrappedExampleT) Call(ctx context.Context, args []any) (results []any, err error) {
 	err = Example(ctx, args[0].(bool), args[1].(int), args[2].(float64), args[3].(Color), args[4].(fs.FileReader)) // wrapped call
 	return results, err
 }

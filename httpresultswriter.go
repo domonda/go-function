@@ -10,6 +10,7 @@ import (
 
 	"github.com/h2non/filetype"
 	"github.com/h2non/filetype/types"
+	"github.com/ungerik/go-httpx/contenttype"
 )
 
 type HTTPResultsWriter interface {
@@ -33,7 +34,7 @@ var RespondJSON HTTPResultsWriterFunc = func(results []any, resultErr error, wri
 	}
 
 	// content-type json is relevant only if there's content
-	writer.Header().Set("Content-Type", "application/json; charset=utf-8")
+	writer.Header().Set("Content-Type", contenttype.JSON)
 
 	// only one result, write it as is
 	if len(results) == 1 {
@@ -96,7 +97,7 @@ func RespondJSONField(fieldName string) HTTPResultsWriterFunc {
 		if err != nil {
 			return err
 		}
-		writer.Header().Set("Content-Type", "application/json; charset=utf-8")
+		writer.Header().Set("Content-Type", contenttype.JSON)
 		_, err = writer.Write(buf)
 		return err
 	}
@@ -114,7 +115,7 @@ var RespondXML HTTPResultsWriterFunc = func(results []any, resultErr error, writ
 		}
 		buf = append(buf, b...)
 	}
-	writer.Header().Set("Content-Type", "application/xml; charset=utf-8")
+	writer.Header().Set("Content-Type", contenttype.XML)
 	_, err := writer.Write(buf)
 	return err
 }
@@ -131,7 +132,7 @@ var RespondPlaintext HTTPResultsWriterFunc = func(results []any, resultErr error
 			fmt.Fprint(&buf, result)
 		}
 	}
-	writer.Header().Add("Content-Type", "text/plain; charset=utf-8")
+	writer.Header().Add("Content-Type", contenttype.PlainText)
 	_, err := writer.Write(buf.Bytes())
 	return err
 }
@@ -148,7 +149,7 @@ var RespondHTML HTTPResultsWriterFunc = func(results []any, resultErr error, wri
 			fmt.Fprint(&buf, result)
 		}
 	}
-	writer.Header().Add("Content-Type", "text/html; charset=utf-8")
+	writer.Header().Add("Content-Type", contenttype.HTML)
 	_, err := writer.Write(buf.Bytes())
 	return err
 }
@@ -249,7 +250,7 @@ func (html RespondStaticHTML) WriteResults(results []any, resultErr error, write
 }
 
 func (html RespondStaticHTML) ServeHTTP(writer http.ResponseWriter, _ *http.Request) {
-	writer.Header().Add("Content-Type", "text/html; charset=utf-8")
+	writer.Header().Add("Content-Type", contenttype.HTML)
 	writer.Write([]byte(html)) //#nosec G104
 }
 
@@ -264,7 +265,7 @@ func (xml RespondStaticXML) WriteResults(results []any, resultErr error, writer 
 }
 
 func (xml RespondStaticXML) ServeHTTP(writer http.ResponseWriter, _ *http.Request) {
-	writer.Header().Set("Content-Type", "application/xml; charset=utf-8")
+	writer.Header().Set("Content-Type", contenttype.XML)
 	writer.Write([]byte(xml)) //#nosec G104
 }
 
@@ -279,7 +280,7 @@ func (json RespondStaticJSON) WriteResults(results []any, resultErr error, write
 }
 
 func (json RespondStaticJSON) ServeHTTP(writer http.ResponseWriter, _ *http.Request) {
-	writer.Header().Set("Content-Type", "application/json; charset=utf-8")
+	writer.Header().Set("Content-Type", contenttype.JSON)
 	writer.Write([]byte(json)) //#nosec G104
 }
 
@@ -294,6 +295,6 @@ func (text RespondStaticPlaintext) WriteResults(results []any, resultErr error, 
 }
 
 func (text RespondStaticPlaintext) ServeHTTP(writer http.ResponseWriter, _ *http.Request) {
-	writer.Header().Add("Content-Type", "text/plain; charset=utf-8")
+	writer.Header().Add("Content-Type", contenttype.PlainText)
 	writer.Write([]byte(text)) //#nosec G104
 }
