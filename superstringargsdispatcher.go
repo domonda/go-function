@@ -184,6 +184,6 @@ func (disp *SuperStringArgsDispatcher) PrintCommandsUsageIntro(appName string, o
 	if len(disp.sub) > 0 {
 		fmt.Fprint(output, "Commands:\n")
 		disp.PrintCommands(appName)
-		fmt.Fprint(output, "Flags:\n")
+		// fmt.Fprint(output, "Flags:\n")
 	}
 }
