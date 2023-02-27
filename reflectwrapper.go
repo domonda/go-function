@@ -166,7 +166,7 @@ func (f *reflectWrapper) CallWithStrings(ctx context.Context, strs ...string) (r
 			continue
 		}
 		str := strs[i-offs]
-		if argType == typeOfEmptyInterface {
+		if argType == typeOfAny {
 			// Pass string directly for argument of type any
 			in[i] = reflect.ValueOf(str)
 			continue
@@ -192,7 +192,7 @@ func (f *reflectWrapper) CallWithNamedStrings(ctx context.Context, strs map[stri
 		argType := f.funcType.In(i)
 		argName := f.argNames[i]
 		if str, ok := strs[argName]; ok {
-			if argType == typeOfEmptyInterface {
+			if argType == typeOfAny {
 				// Pass string directly for argument of type any
 				in[i] = reflect.ValueOf(str)
 				continue
@@ -248,4 +248,12 @@ func (f *reflectWrapper) CallWithJSON(ctx context.Context, argsJSON []byte) (res
 		in[i] = destPtr.Elem()
 	}
 	return f.call(in)
+}
+
+///////////////////////////////////////////////////////////////////////////////
+// Reflection helpers
+
+// ReflectType returns the reflect.Type of the generic type T
+func ReflectType[T any]() reflect.Type {
+	return reflect.TypeOf((*T)(nil)).Elem()
 }

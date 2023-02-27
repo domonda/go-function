@@ -446,10 +446,7 @@ func (impl Impl) WriteFunctionWrapper(w io.Writer, funcFile *ast.File, funcDecl 
 
 func reflectTypeOfTypeName(typeName string) string {
 	typeName = strings.Replace(typeName, "...", "[]", 1)
-	if strings.HasPrefix(typeName, "*") || strings.HasPrefix(typeName, "[]") || strings.HasPrefix(typeName, "map[") {
-		return fmt.Sprintf("reflect.TypeOf((%s)(nil))", typeName)
-	}
-	return fmt.Sprintf("reflect.TypeOf((*%s)(nil)).Elem()", typeName)
+	return fmt.Sprintf("function.ReflectType[%s]()", typeName)
 }
 
 func exportedName(name string) string {
