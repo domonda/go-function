@@ -11,9 +11,27 @@ import (
 )
 
 // ScanString uses the configured DefaultStringScanner
-// to scan sourceStr
+// to scan sourceStr to destPtr.
 func ScanString(sourceStr string, destPtr any) error {
 	return StringScanners.ScanString(sourceStr, destPtr)
+}
+
+// ScanStrings uses the configured DefaultStringScanner
+// to scan sourceStrings to destPtrs.
+// If the number of sourceStrings and destPtrs is not identical
+// then only the lower number of either will be scanned.
+func ScanStrings(sourceStrings []string, destPtrs ...any) error {
+	l := len(sourceStrings)
+	if ll := len(destPtrs); ll < l {
+		l = ll
+	}
+	for i := 0; i < l; i++ {
+		err := ScanString(sourceStrings[i], destPtrs[i])
+		if err != nil {
+			return err
+		}
+	}
+	return nil
 }
 
 type StringScanner interface {
