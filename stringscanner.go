@@ -148,7 +148,7 @@ func scanString(sourceStr string, destVal reflect.Value) (err error) {
 
 	case reflect.Ptr:
 		if sourceStrNil {
-			destVal.Set(reflect.Zero(destVal.Type()))
+			destVal.SetZero()
 			return nil
 		}
 		ptr := destVal
@@ -169,7 +169,7 @@ func scanString(sourceStr string, destVal reflect.Value) (err error) {
 
 	case reflect.Slice:
 		if sourceStrNil {
-			destVal.Set(reflect.Zero(destVal.Type()))
+			destVal.SetZero()
 			return nil
 		}
 		var sourceStrings []string
@@ -217,7 +217,7 @@ func scanString(sourceStr string, destVal reflect.Value) (err error) {
 
 	case reflect.Map, reflect.Chan, reflect.Func:
 		if sourceStrNil {
-			destVal.Set(reflect.Zero(destVal.Type()))
+			destVal.SetZero()
 			return nil
 		}
 		return fmt.Errorf("%w: %s", ErrTypeNotSupported, destVal.Type())
