@@ -2,6 +2,7 @@ package cli
 
 import (
 	"os"
+	"path/filepath"
 	"sort"
 	"strings"
 
@@ -9,7 +10,8 @@ import (
 )
 
 func CompleteStringArgsDispatcher(disp *StringArgsDispatcher) {
-	complete.Complete(os.Args[0], completer{disp})
+	commandName := filepath.Base(os.Args[0])
+	complete.Complete(commandName, completer{disp})
 }
 
 type completer struct {
@@ -33,7 +35,8 @@ func (c completer) Predict(prefix string) (commands []string) {
 }
 
 func CompleteSuperStringArgsDispatcher(disp *SuperStringArgsDispatcher) {
-	complete.Complete(os.Args[0], superCompleter{disp})
+	commandName := filepath.Base(os.Args[0])
+	complete.Complete(commandName, superCompleter{disp})
 }
 
 type superCompleter struct {
