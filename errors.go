@@ -6,7 +6,6 @@ import (
 )
 
 var (
-	ErrCommandNotFound  = errors.New("command not found")
 	ErrTypeNotSupported = errors.New("type not supported")
 )
 

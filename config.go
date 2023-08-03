@@ -3,12 +3,6 @@ package function
 import (
 	"context"
 	"time"
-
-	"github.com/fatih/color"
-)
-
-const (
-	DefaultCommand = ""
 )
 
 var (
@@ -19,14 +13,6 @@ var (
 
 var (
 	StringScanners *TypeStringScanners = NewTypeStringScanners(StringScannerFunc(DefaultScanString))
-
-	// CommandUsageColor is the color in which the
-	// command usage will be printed on the screen.
-	CommandUsageColor = color.New(color.FgHiCyan)
-
-	// CommandDescriptionColor is the color in which the
-	// command usage description will be printed on the screen.
-	CommandDescriptionColor = color.New(color.FgCyan)
 
 	ArgNameTag        = "arg"
 	ArgDescriptionTag = "desc"

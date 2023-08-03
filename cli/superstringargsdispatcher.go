@@ -1,17 +1,13 @@
-package function
+package cli
 
 import (
 	"context"
 	"fmt"
 	"io"
 	"sort"
+
+	"github.com/domonda/go-function"
 )
-
-type SuperCommandNotFound string
-
-func (s SuperCommandNotFound) Error() string {
-	return fmt.Sprintf("Super command '%s' not found", string(s))
-}
 
 type SuperStringArgsDispatcher struct {
 	sub     map[string]*StringArgsDispatcher
@@ -47,7 +43,7 @@ func (disp *SuperStringArgsDispatcher) MustAddSuperCommand(superCommand string) 
 	return subDisp
 }
 
-func (disp *SuperStringArgsDispatcher) AddDefaultCommand(description string, commandFunc Wrapper, resultsHandlers ...ResultsHandler) error {
+func (disp *SuperStringArgsDispatcher) AddDefaultCommand(description string, commandFunc function.Wrapper, resultsHandlers ...function.ResultsHandler) error {
 	subDisp, err := disp.AddSuperCommand(DefaultCommand)
 	if err != nil {
 		return err
@@ -55,7 +51,7 @@ func (disp *SuperStringArgsDispatcher) AddDefaultCommand(description string, com
 	return subDisp.AddDefaultCommand(description, commandFunc, resultsHandlers...)
 }
 
-func (disp *SuperStringArgsDispatcher) MustAddDefaultCommand(description string, commandFunc Wrapper, resultsHandlers ...ResultsHandler) {
+func (disp *SuperStringArgsDispatcher) MustAddDefaultCommand(description string, commandFunc function.Wrapper, resultsHandlers ...function.ResultsHandler) {
 	err := disp.AddDefaultCommand(description, commandFunc, resultsHandlers...)
 	if err != nil {
 		panic(fmt.Errorf("MustAddDefaultCommand(%s): %w", description, err))
@@ -80,7 +76,7 @@ func (disp *SuperStringArgsDispatcher) HasSubCommnd(superCommand, command string
 func (disp *SuperStringArgsDispatcher) Dispatch(ctx context.Context, superCommand, command string, args ...string) error {
 	sub, ok := disp.sub[superCommand]
 	if !ok {
-		return SuperCommandNotFound(superCommand)
+		return ErrSuperCommandNotFound(superCommand)
 	}
 	return sub.Dispatch(ctx, command, args...)
 }
@@ -160,9 +156,9 @@ func (disp *SuperStringArgsDispatcher) PrintCommands(appName string) {
 			command += " " + cmd.command
 		}
 
-		CommandUsageColor.Printf("  %s %s %s\n", appName, command, functionArgsString(cmd.commandFunc))
+		UsageColor.Printf("  %s %s %s\n", appName, command, functionArgsString(cmd.commandFunc))
 		if cmd.description != "" {
-			CommandDescriptionColor.Printf("      %s\n", cmd.description)
+			DescriptionColor.Printf("      %s\n", cmd.description)
 		}
 		hasAnyArgDesc := false
 		for _, desc := range cmd.commandFunc.ArgDescriptions() {
@@ -173,10 +169,10 @@ func (disp *SuperStringArgsDispatcher) PrintCommands(appName string) {
 		}
 		if hasAnyArgDesc {
 			for i, desc := range cmd.commandFunc.ArgDescriptions() {
-				CommandDescriptionColor.Printf("          <%s:%s> %s\n", cmd.commandFunc.ArgNames()[i], derefType(cmd.commandFunc.ArgTypes()[i]), desc)
+				DescriptionColor.Printf("          <%s:%s> %s\n", cmd.commandFunc.ArgNames()[i], derefType(cmd.commandFunc.ArgTypes()[i]), desc)
 			}
 		}
-		CommandDescriptionColor.Println()
+		DescriptionColor.Println()
 	}
 }
 

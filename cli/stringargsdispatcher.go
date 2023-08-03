@@ -1,4 +1,4 @@
-package function
+package cli
 
 import (
 	"context"
@@ -8,14 +8,16 @@ import (
 	"sort"
 	"strings"
 	"unicode"
+
+	"github.com/domonda/go-function"
 )
 
 type stringArgsCommand struct {
 	command         string
 	description     string
-	commandFunc     Wrapper
-	stringArgsFunc  StringArgsFunc
-	resultsHandlers []ResultsHandler
+	commandFunc     function.Wrapper
+	stringArgsFunc  function.StringArgsFunc
+	resultsHandlers []function.ResultsHandler
 }
 
 func checkCommandChars(command string) error {
@@ -53,7 +55,7 @@ func NewStringArgsDispatcher(loggers ...StringArgsCommandLogger) *StringArgsDisp
 	}
 }
 
-func (disp *StringArgsDispatcher) AddCommand(command, description string, commandFunc Wrapper, resultsHandlers ...ResultsHandler) error {
+func (disp *StringArgsDispatcher) AddCommand(command, description string, commandFunc function.Wrapper, resultsHandlers ...function.ResultsHandler) error {
 	if _, exists := disp.comm[command]; exists {
 		return fmt.Errorf("Command '%s' already added", command)
 	}
@@ -64,31 +66,31 @@ func (disp *StringArgsDispatcher) AddCommand(command, description string, comman
 		command:         command,
 		description:     description,
 		commandFunc:     commandFunc,
-		stringArgsFunc:  NewStringArgsFunc(commandFunc, resultsHandlers...),
+		stringArgsFunc:  function.NewStringArgsFunc(commandFunc, resultsHandlers...),
 		resultsHandlers: resultsHandlers,
 	}
 	return nil
 }
 
-func (disp *StringArgsDispatcher) MustAddCommand(command, description string, commandFunc Wrapper, resultsHandlers ...ResultsHandler) {
+func (disp *StringArgsDispatcher) MustAddCommand(command, description string, commandFunc function.Wrapper, resultsHandlers ...function.ResultsHandler) {
 	err := disp.AddCommand(command, description, commandFunc, resultsHandlers...)
 	if err != nil {
 		panic(err)
 	}
 }
 
-func (disp *StringArgsDispatcher) AddDefaultCommand(description string, commandFunc Wrapper, resultsHandlers ...ResultsHandler) error {
+func (disp *StringArgsDispatcher) AddDefaultCommand(description string, commandFunc function.Wrapper, resultsHandlers ...function.ResultsHandler) error {
 	disp.comm[DefaultCommand] = &stringArgsCommand{
 		command:         DefaultCommand,
 		description:     description,
 		commandFunc:     commandFunc,
-		stringArgsFunc:  NewStringArgsFunc(commandFunc, resultsHandlers...),
+		stringArgsFunc:  function.NewStringArgsFunc(commandFunc, resultsHandlers...),
 		resultsHandlers: resultsHandlers,
 	}
 	return nil
 }
 
-func (disp *StringArgsDispatcher) MustAddDefaultCommand(description string, commandFunc Wrapper, resultsHandlers ...ResultsHandler) {
+func (disp *StringArgsDispatcher) MustAddDefaultCommand(description string, commandFunc function.Wrapper, resultsHandlers ...function.ResultsHandler) {
 	err := disp.AddDefaultCommand(description, commandFunc, resultsHandlers...)
 	if err != nil {
 		panic(err)
@@ -108,7 +110,7 @@ func (disp *StringArgsDispatcher) HasDefaultCommnd() bool {
 func (disp *StringArgsDispatcher) Dispatch(ctx context.Context, command string, args ...string) error {
 	cmd, found := disp.comm[command]
 	if !found {
-		return fmt.Errorf("%w: %s", ErrCommandNotFound, command)
+		return ErrCommandNotFound(command)
 	}
 	for _, logger := range disp.loggers {
 		logger.LogStringArgsCommand(command, args)
@@ -119,7 +121,7 @@ func (disp *StringArgsDispatcher) Dispatch(ctx context.Context, command string, 
 func (disp *StringArgsDispatcher) MustDispatch(ctx context.Context, command string, args ...string) {
 	err := disp.Dispatch(ctx, command, args...)
 	if err != nil {
-		panic(fmt.Errorf("Command '%s' returned: %w", command, err))
+		panic(fmt.Errorf("command '%s' returned: %w", command, err))
 	}
 }
 
@@ -130,7 +132,7 @@ func (disp *StringArgsDispatcher) DispatchDefaultCommand() error {
 func (disp *StringArgsDispatcher) MustDispatchDefaultCommand() {
 	err := disp.DispatchDefaultCommand()
 	if err != nil {
-		panic(fmt.Errorf("Default command: %w", err))
+		panic(fmt.Errorf("default command: %w", err))
 	}
 }
 
@@ -161,9 +163,9 @@ func (disp *StringArgsDispatcher) PrintCommands(appName string) {
 	})
 
 	for _, cmd := range list {
-		CommandUsageColor.Printf("  %s %s %s\n", appName, cmd.command, functionArgsString(cmd.commandFunc))
+		UsageColor.Printf("  %s %s %s\n", appName, cmd.command, functionArgsString(cmd.commandFunc))
 		if cmd.description != "" {
-			CommandDescriptionColor.Printf("      %s\n", cmd.description)
+			DescriptionColor.Printf("      %s\n", cmd.description)
 		}
 		hasAnyArgDesc := false
 		for _, desc := range cmd.commandFunc.ArgDescriptions() {
@@ -174,14 +176,14 @@ func (disp *StringArgsDispatcher) PrintCommands(appName string) {
 		}
 		if hasAnyArgDesc {
 			for i, desc := range cmd.commandFunc.ArgDescriptions() {
-				CommandDescriptionColor.Printf("          <%s:%s> %s\n", cmd.commandFunc.ArgNames()[i], derefType(cmd.commandFunc.ArgTypes()[i]), desc)
+				DescriptionColor.Printf("          <%s:%s> %s\n", cmd.commandFunc.ArgNames()[i], derefType(cmd.commandFunc.ArgTypes()[i]), desc)
 			}
 		}
-		CommandDescriptionColor.Println()
+		DescriptionColor.Println()
 	}
 }
 
-func functionArgsString(f Wrapper) string {
+func functionArgsString(f function.Wrapper) string {
 	b := strings.Builder{}
 	argNames := f.ArgNames()
 	argTypes := f.ArgTypes()
