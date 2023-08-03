@@ -1,3 +1,4 @@
+github.com/davecgh/go-spew v1.1.1 h1:vj9j/u1bqnvCEfJOwUhtlOARqs3+rkHYY13jYWTU97c=
 github.com/domonda/go-function v0.0.0-20230303140353-cc4483373263 h1:9dIyV1ygIKOJwTD7WQ54guukekmF1iKGfehJbgt9pAc=
 github.com/domonda/go-function v0.0.0-20230303140353-cc4483373263/go.mod h1:70GdkfAD1G5yUFuKP33Wzp5KV7rKjPpduJHa3y/v3Zc=
 github.com/fatih/color v1.15.0 h1:kOqh6YHBtK8aywxGerMG2Eq3H6Qgoqeo13Bk2Mv/nBs=
@@ -9,8 +10,15 @@ github.com/mattn/go-colorable v0.1.13/go.mod h1:7S9/ev0klgBDR4GtXTXX8a3vIGJpMovk
 github.com/mattn/go-isatty v0.0.16/go.mod h1:kYGgaQfpe5nmfYZH+SKPsOc2e4SrIfOl2e/yFXSvRLM=
 github.com/mattn/go-isatty v0.0.17 h1:BTarxUcIeDqL27Mc+vyvdWYSL28zpIhv3RoTdsLMPng=
 github.com/mattn/go-isatty v0.0.17/go.mod h1:kYGgaQfpe5nmfYZH+SKPsOc2e4SrIfOl2e/yFXSvRLM=
+github.com/pmezard/go-difflib v1.0.0 h1:4DBwDE0NGyQoBHbLQYPwSUPoCMWR5BEzIk/f1lZbAQM=
+github.com/posener/complete/v2 v2.1.0 h1:IpAWxMyiJ6zDSoq+QmEBF0thpOramC0kYuEFBTcQeTI=
+github.com/posener/complete/v2 v2.1.0/go.mod h1:AkzsSVGx4ysH/4OhZf57dr4yszGXgFmXsP/VNwlaW7U=
+github.com/posener/script v1.2.0 h1:DrZz0qFT8lCLkYNi1PleLDANFnKxJ2VmlNPJbAkVLsE=
+github.com/posener/script v1.2.0/go.mod h1:s4sVvRXtdc/1aK6otTSeW2BVXndO8MsoOVUwK74zcg4=
+github.com/stretchr/testify v1.8.4 h1:CcVxjf3Q8PM0mHUKJCdn+eZZtm5yQwehR5yeSVQQcUk=
 github.com/ungerik/go-httpx v0.0.0-20230212172431-5e4cf2e098cc h1:ztzHafiJ1Yu6RxE+jS/h6DlFKUS/kl2DEBAURM/G3dU=
 github.com/ungerik/go-httpx v0.0.0-20230212172431-5e4cf2e098cc/go.mod h1:lmKZrbxy5ypCbOkFANz0TQWE4dw9EN0S2WKdAexBbZM=
 golang.org/x/sys v0.0.0-20220811171246-fbc7d0a398ab/go.mod h1:oPkhp1MJrh7nUepCBck5+mAzfO9JrbApNNgaTdGDITg=
 golang.org/x/sys v0.6.0 h1:MVltZSvRTcU2ljQOhs94SXPftV6DCNnZViHeQps87pQ=
 golang.org/x/sys v0.6.0/go.mod h1:oPkhp1MJrh7nUepCBck5+mAzfO9JrbApNNgaTdGDITg=
+gopkg.in/yaml.v3 v3.0.1 h1:fxVm/GzAzEWqLHuvctI91KS9hhNmmWOoWu0XTYJS7CA=

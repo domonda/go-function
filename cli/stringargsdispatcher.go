@@ -10,6 +10,7 @@ import (
 	"unicode"
 
 	"github.com/domonda/go-function"
+	"golang.org/x/exp/maps"
 )
 
 type stringArgsCommand struct {
@@ -107,6 +108,12 @@ func (disp *StringArgsDispatcher) HasDefaultCommnd() bool {
 	return found
 }
 
+func (disp *StringArgsDispatcher) Commands() []string {
+	commands := maps.Keys(disp.comm)
+	sort.Strings(commands)
+	return commands
+}
+
 func (disp *StringArgsDispatcher) Dispatch(ctx context.Context, command string, args ...string) error {
 	cmd, found := disp.comm[command]
 	if !found {
@@ -183,6 +190,14 @@ func (disp *StringArgsDispatcher) PrintCommands(appName string) {
 	}
 }
 
+func (disp *StringArgsDispatcher) PrintCommandsUsageIntro(appName string, output io.Writer) {
+	if len(disp.comm) > 0 {
+		fmt.Fprint(output, "Commands:\n")
+		disp.PrintCommands(appName)
+		fmt.Fprint(output, "Flags:\n")
+	}
+}
+
 func functionArgsString(f function.Wrapper) string {
 	b := strings.Builder{}
 	argNames := f.ArgNames()
@@ -194,14 +209,6 @@ func functionArgsString(f function.Wrapper) string {
 		fmt.Fprintf(&b, "<%s:%s>", argNames[i], derefType(argTypes[i]))
 	}
 	return b.String()
-}
-
-func (disp *StringArgsDispatcher) PrintCommandsUsageIntro(appName string, output io.Writer) {
-	if len(disp.comm) > 0 {
-		fmt.Fprint(output, "Commands:\n")
-		disp.PrintCommands(appName)
-		fmt.Fprint(output, "Flags:\n")
-	}
 }
 
 func derefType(t reflect.Type) reflect.Type {

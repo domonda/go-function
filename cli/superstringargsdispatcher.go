@@ -7,6 +7,7 @@ import (
 	"sort"
 
 	"github.com/domonda/go-function"
+	"golang.org/x/exp/maps"
 )
 
 type SuperStringArgsDispatcher struct {
@@ -65,12 +66,26 @@ func (disp *SuperStringArgsDispatcher) HasCommnd(superCommand string) bool {
 	return sub.HasDefaultCommnd()
 }
 
+func (disp *SuperStringArgsDispatcher) Commands() []string {
+	commands := maps.Keys(disp.sub)
+	sort.Strings(commands)
+	return commands
+}
+
 func (disp *SuperStringArgsDispatcher) HasSubCommnd(superCommand, command string) bool {
 	sub, ok := disp.sub[superCommand]
 	if !ok {
 		return false
 	}
 	return sub.HasCommnd(command)
+}
+
+func (disp *SuperStringArgsDispatcher) SubCommands(superCommand string) []string {
+	sub, ok := disp.sub[superCommand]
+	if !ok {
+		return nil
+	}
+	return sub.Commands()
 }
 
 func (disp *SuperStringArgsDispatcher) Dispatch(ctx context.Context, superCommand, command string, args ...string) error {
