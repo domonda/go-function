@@ -1,15 +1,15 @@
 module github.com/domonda/go-function/htmlform
 
-go 1.20
+go 1.21
 
-require github.com/domonda/go-function v0.0.0-20230803215826-aebf73306445
+require github.com/domonda/go-function v0.0.0-20230803220748-844f0c53d9dc
 
 replace github.com/domonda/go-function => ../
 
 require (
-	github.com/domonda/go-types v0.0.0-20230720132541-a82ccd70e539
-	github.com/domonda/golog v0.0.0-20230801205258-13d3a7cbc58f
-	github.com/ungerik/go-fs v0.0.0-20230626092810-5635ec23b780
+	github.com/domonda/go-types v0.0.0-20230810134814-bd15ee23faf5
+	github.com/domonda/golog v0.0.0-20230810134614-42a3dac1f72e
+	github.com/ungerik/go-fs v0.0.0-20230810132455-f7ff27f6fa2b
 	github.com/ungerik/go-httpx v0.0.0-20230622152103-7bb636597356
 )
 
@@ -23,6 +23,5 @@ require (
 	github.com/mattn/go-runewidth v0.0.15 // indirect
 	github.com/muesli/termenv v0.15.2 // indirect
 	github.com/rivo/uniseg v0.4.4 // indirect
-	golang.org/x/exp v0.0.0-20230801115018-d63ba01acd4b // indirect
-	golang.org/x/sys v0.10.0 // indirect
+	golang.org/x/sys v0.11.0 // indirect
 )

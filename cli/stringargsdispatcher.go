@@ -9,8 +9,9 @@ import (
 	"strings"
 	"unicode"
 
-	"github.com/domonda/go-function"
 	"golang.org/x/exp/maps"
+
+	"github.com/domonda/go-function"
 )
 
 type stringArgsCommand struct {
