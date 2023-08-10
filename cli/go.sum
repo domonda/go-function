@@ -4,6 +4,8 @@ github.com/domonda/go-function v0.0.0-20230303140353-cc4483373263 h1:9dIyV1ygIKO
 github.com/domonda/go-function v0.0.0-20230303140353-cc4483373263/go.mod h1:70GdkfAD1G5yUFuKP33Wzp5KV7rKjPpduJHa3y/v3Zc=
 github.com/domonda/go-function v0.0.0-20230803220748-844f0c53d9dc h1:0KqGlPZ57owj3xRDENPo+mQRaJcg0kYT+7qozSWjzac=
 github.com/domonda/go-function v0.0.0-20230803220748-844f0c53d9dc/go.mod h1:TpV8Mpqm7rtc7PjDd1Iz6kLE59DNl4nfE4m1bQYO+Ss=
+github.com/domonda/go-function v0.0.0-20230810142503-112bf0e1774a h1:S8VoR2pZOQTGtVlqz7podqhKaxl3RftEmDYCPtoxPQg=
+github.com/domonda/go-function v0.0.0-20230810142503-112bf0e1774a/go.mod h1:bVkOqRKuO2v4+jfYt0tMSnFZwnijCAFzJ52yMLKW9lo=
 github.com/fatih/color v1.15.0 h1:kOqh6YHBtK8aywxGerMG2Eq3H6Qgoqeo13Bk2Mv/nBs=
 github.com/fatih/color v1.15.0/go.mod h1:0h5ZqXfHYED7Bhv2ZJamyIOUej9KtShiJESRwBDUSsw=
 github.com/h2non/filetype v1.1.3 h1:FKkx9QbD7HR/zjK1Ia5XiBsq9zdLi5Kf3zGyFTAFkGg=

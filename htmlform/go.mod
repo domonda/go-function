@@ -2,7 +2,7 @@ module github.com/domonda/go-function/htmlform
 
 go 1.21
 
-require github.com/domonda/go-function v0.0.0-20230803220748-844f0c53d9dc
+require github.com/domonda/go-function v0.0.0-20230810142503-112bf0e1774a
 
 replace github.com/domonda/go-function => ../
 

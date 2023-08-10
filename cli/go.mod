@@ -3,7 +3,7 @@ module github.com/domonda/go-function/cli
 go 1.21
 
 require (
-	github.com/domonda/go-function v0.0.0-20230803220748-844f0c53d9dc
+	github.com/domonda/go-function v0.0.0-20230810142503-112bf0e1774a
 	github.com/fatih/color v1.15.0
 	github.com/posener/complete/v2 v2.1.0
 	golang.org/x/exp v0.0.0-20230810033253-352e893a4cad
