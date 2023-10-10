@@ -6,7 +6,6 @@ import (
 	"go/ast"
 	"go/token"
 	"io"
-	"io/ioutil"
 	"os"
 	"path/filepath"
 	"strings"
@@ -46,7 +45,7 @@ func RewriteDir(path string, verbose bool, printOnly io.Writer, jsonTypeReplacem
 		return nil
 	}
 
-	files, err := ioutil.ReadDir(path)
+	files, err := os.ReadDir(path)
 	if err != nil {
 		return err
 	}
@@ -171,7 +170,7 @@ func RewriteAstFile(fset *token.FileSet, filePkg *ast.Package, astFile *ast.File
 	if verbose {
 		fmt.Println("rewriting", filePath)
 	}
-	return ioutil.WriteFile(filePath, rewritten, 0600)
+	return os.WriteFile(filePath, rewritten, 0600)
 }
 
 type wrapper struct {
@@ -323,11 +322,14 @@ func findFunctionWrappers(fset *token.FileSet, file *ast.File) []*wrapper {
 // and what interface is implemented
 //
 // Example:
-//   // documentCanUserRead wraps document.CanUserRead as function.Wrapper (generated code)
-//   var documentCanUserRead documentCanUserReadT
+//
+//	// documentCanUserRead wraps document.CanUserRead as function.Wrapper (generated code)
+//	var documentCanUserRead documentCanUserReadT
+//
 // or:
-//   // documentCanUserReadT wraps document.CanUserRead as function.Wrapper (generated code)
-//   type documentCanUserReadT struct{}
+//
+//	// documentCanUserReadT wraps document.CanUserRead as function.Wrapper (generated code)
+//	type documentCanUserReadT struct{}
 func parseImplementsComment(implementor, comment string) (wrappedFunc string, impl Impl, err error) {
 	comment = strings.TrimSuffix(strings.TrimSpace(comment), " (generated code)")
 	prefix := implementor + " wraps "

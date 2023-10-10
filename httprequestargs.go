@@ -3,7 +3,7 @@ package function
 import (
 	"encoding/json"
 	"fmt"
-	"io/ioutil"
+	"io"
 	"net/http"
 	"strings"
 )
@@ -23,7 +23,7 @@ func HTTPRequestArg(name, value string) HTTPRequestArgsGetter {
 func HTTPRequestBodyAsArg(name string) HTTPRequestArgsGetter {
 	return func(request *http.Request) (map[string]string, error) {
 		defer request.Body.Close()
-		body, err := ioutil.ReadAll(request.Body)
+		body, err := io.ReadAll(request.Body)
 		if err != nil {
 			return nil, err
 		}
@@ -57,7 +57,7 @@ func HTTPRequestQueryArgs(request *http.Request) (map[string]string, error) {
 
 func HTTPRequestBodyJSONFieldsAsArgs(request *http.Request) (map[string]string, error) {
 	defer request.Body.Close()
-	body, err := ioutil.ReadAll(request.Body)
+	body, err := io.ReadAll(request.Body)
 	if err != nil {
 		return nil, err
 	}
