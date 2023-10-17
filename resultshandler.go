@@ -203,7 +203,7 @@ func (t PrintlnText) HandleResults(ctx context.Context, results []any, resultErr
 
 // derefValue dereferences a reflect.Value until a non pointer type or nil is found
 func derefValue(v reflect.Value) reflect.Value {
-	for v.Kind() == reflect.Ptr && !v.IsNil() {
+	for v.Kind() == reflect.Pointer && !v.IsNil() {
 		v = v.Elem()
 	}
 	return v

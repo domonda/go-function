@@ -213,7 +213,7 @@ func functionArgsString(f function.Wrapper) string {
 }
 
 func derefType(t reflect.Type) reflect.Type {
-	for t.Kind() == reflect.Ptr {
+	if t.Kind() == reflect.Pointer {
 		t = t.Elem()
 	}
 	return t

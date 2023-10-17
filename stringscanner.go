@@ -49,7 +49,7 @@ func DefaultScanString(sourceStr string, destPtr any) (err error) {
 		return errors.New("destination pointer is nil")
 	}
 	destPtrVal := reflect.ValueOf(destPtr)
-	if destPtrVal.Kind() != reflect.Ptr {
+	if destPtrVal.Kind() != reflect.Pointer {
 		return fmt.Errorf("expected destination pointer type but got: %s", destPtrVal.Type())
 	}
 	if destPtrVal.IsNil() {
@@ -146,7 +146,7 @@ func scanString(sourceStr string, destVal reflect.Value) (err error) {
 		destVal.SetString(sourceStr)
 		return nil
 
-	case reflect.Ptr:
+	case reflect.Pointer:
 		if sourceStrNil {
 			destVal.SetZero()
 			return nil
