@@ -128,7 +128,16 @@ func scanString(sourceStr string, destVal reflect.Value) (err error) {
 		return dest.UnmarshalText([]byte(sourceStr))
 
 	case json.Unmarshaler:
-		return dest.UnmarshalJSON([]byte(sourceStr))
+		source := []byte(sourceStr)
+		if !json.Valid(source) {
+			// sourceStr is not already valid JSON
+			// then escape it as JSON string
+			source, err = json.Marshal(sourceStr)
+			if err != nil {
+				return fmt.Errorf("can't marshal %q as JSON string: %w", sourceStr, err)
+			}
+		}
+		return dest.UnmarshalJSON(source)
 
 	case *map[string]any:
 		return json.Unmarshal([]byte(sourceStr), destPtr)
