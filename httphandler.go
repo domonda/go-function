@@ -14,7 +14,7 @@ func HTTPHandler(getArgs HTTPRequestArgsGetter, function CallWithNamedStringsWra
 				if p := recover(); p != nil {
 					err := httperr.AsError(p)
 					if len(errHandlers) == 0 {
-						httperr.Handle(err, writer, request)
+						HandleErrorHTTP(err, writer, request)
 					} else {
 						for _, errHandler := range errHandlers {
 							errHandler.HandleError(err, writer, request)
@@ -49,7 +49,7 @@ func HTTPHandler(getArgs HTTPRequestArgsGetter, function CallWithNamedStringsWra
 		}
 
 		if len(errHandlers) == 0 {
-			httperr.Handle(err, writer, request)
+			HandleErrorHTTP(err, writer, request)
 		} else {
 			for _, errHandler := range errHandlers {
 				errHandler.HandleError(err, writer, request)
@@ -67,7 +67,7 @@ func HTTPHandlerNoWrapper(function func(context.Context) ([]byte, error), result
 				if p := recover(); p != nil {
 					err := httperr.AsError(p)
 					if len(errHandlers) == 0 {
-						httperr.Handle(err, writer, request)
+						HandleErrorHTTP(err, writer, request)
 					} else {
 						for _, errHandler := range errHandlers {
 							errHandler.HandleError(err, writer, request)
@@ -86,7 +86,7 @@ func HTTPHandlerNoWrapper(function func(context.Context) ([]byte, error), result
 		}
 
 		if len(errHandlers) == 0 {
-			httperr.Handle(err, writer, request)
+			HandleErrorHTTP(err, writer, request)
 		} else {
 			for _, errHandler := range errHandlers {
 				errHandler.HandleError(err, writer, request)

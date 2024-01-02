@@ -100,7 +100,7 @@ func (handler *Handler) SetSubmitButtonText(text string) {
 func (handler *Handler) ServeHTTP(response http.ResponseWriter, request *http.Request) {
 	defer func() {
 		if r := recover(); r != nil {
-			httperr.Handle(httperr.AsError(r), response, request)
+			function.HandleErrorHTTP(httperr.AsError(r), response, request)
 		}
 	}()
 
@@ -198,5 +198,5 @@ func (handler *Handler) post(response http.ResponseWriter, request *http.Request
 	results, err := handler.wrappedFunc.CallWithNamedStrings(request.Context(), argsMap)
 
 	err = handler.resultWriter.WriteResults(results, err, response, request)
-	httperr.Handle(err, response, request)
+	function.HandleErrorHTTP(err, response, request)
 }

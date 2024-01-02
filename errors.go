@@ -3,10 +3,18 @@ package function
 import (
 	"errors"
 	"fmt"
+	"net/http"
+
+	"github.com/ungerik/go-httpx/httperr"
 )
 
 var (
 	ErrTypeNotSupported = errors.New("type not supported")
+
+	// HandleErrorHTTP will handle an error by writing it to an http.ResponseWriter
+	HandleErrorHTTP = func(err error, writer http.ResponseWriter, request *http.Request) {
+		_ = httperr.DefaultHandler.HandleError(err, writer, request)
+	}
 )
 
 type ErrParseArgString struct {
