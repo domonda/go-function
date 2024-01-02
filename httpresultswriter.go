@@ -14,16 +14,16 @@ import (
 )
 
 type HTTPResultsWriter interface {
-	WriteResults(results []any, resultErr error, writer http.ResponseWriter, request *http.Request) error
+	WriteResults(results []any, resultErr error, response http.ResponseWriter, request *http.Request) error
 }
 
-type HTTPResultsWriterFunc func(results []any, resultErr error, writer http.ResponseWriter, request *http.Request) error
+type HTTPResultsWriterFunc func(results []any, resultErr error, response http.ResponseWriter, request *http.Request) error
 
-func (f HTTPResultsWriterFunc) WriteResults(results []any, resultErr error, writer http.ResponseWriter, request *http.Request) error {
-	return f(results, resultErr, writer, request)
+func (f HTTPResultsWriterFunc) WriteResults(results []any, resultErr error, response http.ResponseWriter, request *http.Request) error {
+	return f(results, resultErr, response, request)
 }
 
-var RespondJSON HTTPResultsWriterFunc = func(results []any, resultErr error, writer http.ResponseWriter, request *http.Request) error {
+var RespondJSON HTTPResultsWriterFunc = func(results []any, resultErr error, response http.ResponseWriter, request *http.Request) error {
 	if resultErr != nil || request.Context().Err() != nil {
 		return resultErr
 	}
@@ -34,7 +34,7 @@ var RespondJSON HTTPResultsWriterFunc = func(results []any, resultErr error, wri
 	}
 
 	// content-type json is relevant only if there's content
-	writer.Header().Set("Content-Type", contenttype.JSON)
+	response.Header().Set("Content-Type", contenttype.JSON)
 
 	// only one result, write it as is
 	if len(results) == 1 {
@@ -42,7 +42,7 @@ var RespondJSON HTTPResultsWriterFunc = func(results []any, resultErr error, wri
 		if err != nil {
 			return err
 		}
-		_, err = writer.Write(b)
+		_, err = response.Write(b)
 		return err
 	}
 
@@ -51,13 +51,13 @@ var RespondJSON HTTPResultsWriterFunc = func(results []any, resultErr error, wri
 	if err != nil {
 		return err
 	}
-	_, err = writer.Write(b)
+	_, err = response.Write(b)
 	return err
 }
 
 // RespondBinary responds with contentType using the binary data from results of type []byte, string, or io.Reader.
 func RespondBinary(contentType string) HTTPResultsWriterFunc {
-	return func(results []any, resultErr error, writer http.ResponseWriter, request *http.Request) (err error) {
+	return func(results []any, resultErr error, response http.ResponseWriter, request *http.Request) (err error) {
 		if resultErr != nil || request.Context().Err() != nil {
 			return resultErr
 		}
@@ -77,14 +77,14 @@ func RespondBinary(contentType string) HTTPResultsWriterFunc {
 				return err
 			}
 		}
-		writer.Header().Set("Content-Type", contentType)
-		_, err = writer.Write(buf.Bytes())
+		response.Header().Set("Content-Type", contentType)
+		_, err = response.Write(buf.Bytes())
 		return err
 	}
 }
 
 func RespondJSONField(fieldName string) HTTPResultsWriterFunc {
-	return func(results []any, resultErr error, writer http.ResponseWriter, request *http.Request) (err error) {
+	return func(results []any, resultErr error, response http.ResponseWriter, request *http.Request) (err error) {
 		if resultErr != nil || request.Context().Err() != nil {
 			return resultErr
 		}
@@ -97,13 +97,13 @@ func RespondJSONField(fieldName string) HTTPResultsWriterFunc {
 		if err != nil {
 			return err
 		}
-		writer.Header().Set("Content-Type", contenttype.JSON)
-		_, err = writer.Write(buf)
+		response.Header().Set("Content-Type", contenttype.JSON)
+		_, err = response.Write(buf)
 		return err
 	}
 }
 
-var RespondXML HTTPResultsWriterFunc = func(results []any, resultErr error, writer http.ResponseWriter, request *http.Request) error {
+var RespondXML HTTPResultsWriterFunc = func(results []any, resultErr error, response http.ResponseWriter, request *http.Request) error {
 	if resultErr != nil || request.Context().Err() != nil {
 		return resultErr
 	}
@@ -115,12 +115,12 @@ var RespondXML HTTPResultsWriterFunc = func(results []any, resultErr error, writ
 		}
 		buf = append(buf, b...)
 	}
-	writer.Header().Set("Content-Type", contenttype.XML)
-	_, err := writer.Write(buf)
+	response.Header().Set("Content-Type", contenttype.XML)
+	_, err := response.Write(buf)
 	return err
 }
 
-var RespondPlaintext HTTPResultsWriterFunc = func(results []any, resultErr error, writer http.ResponseWriter, request *http.Request) error {
+var RespondPlaintext HTTPResultsWriterFunc = func(results []any, resultErr error, response http.ResponseWriter, request *http.Request) error {
 	if resultErr != nil || request.Context().Err() != nil {
 		return resultErr
 	}
@@ -132,12 +132,12 @@ var RespondPlaintext HTTPResultsWriterFunc = func(results []any, resultErr error
 			fmt.Fprint(&buf, result)
 		}
 	}
-	writer.Header().Add("Content-Type", contenttype.PlainText)
-	_, err := writer.Write(buf.Bytes())
+	response.Header().Add("Content-Type", contenttype.PlainText)
+	_, err := response.Write(buf.Bytes())
 	return err
 }
 
-var RespondHTML HTTPResultsWriterFunc = func(results []any, resultErr error, writer http.ResponseWriter, request *http.Request) error {
+var RespondHTML HTTPResultsWriterFunc = func(results []any, resultErr error, response http.ResponseWriter, request *http.Request) error {
 	if resultErr != nil || request.Context().Err() != nil {
 		return resultErr
 	}
@@ -149,12 +149,12 @@ var RespondHTML HTTPResultsWriterFunc = func(results []any, resultErr error, wri
 			fmt.Fprint(&buf, result)
 		}
 	}
-	writer.Header().Add("Content-Type", contenttype.HTML)
-	_, err := writer.Write(buf.Bytes())
+	response.Header().Add("Content-Type", contenttype.HTML)
+	_, err := response.Write(buf.Bytes())
 	return err
 }
 
-var RespondDetectContentType HTTPResultsWriterFunc = func(results []any, resultErr error, writer http.ResponseWriter, request *http.Request) error {
+var RespondDetectContentType HTTPResultsWriterFunc = func(results []any, resultErr error, response http.ResponseWriter, request *http.Request) error {
 	if resultErr != nil || request.Context().Err() != nil {
 		return resultErr
 	}
@@ -166,13 +166,13 @@ var RespondDetectContentType HTTPResultsWriterFunc = func(results []any, resultE
 		return fmt.Errorf("RespondDetectContentType needs []byte result, got %T", results[0])
 	}
 
-	writer.Header().Add("Content-Type", DetectContentType(data))
-	_, err := writer.Write(data)
+	response.Header().Add("Content-Type", DetectContentType(data))
+	_, err := response.Write(data)
 	return err
 }
 
 func RespondContentType(contentType string) HTTPResultsWriter {
-	return HTTPResultsWriterFunc(func(results []any, resultErr error, writer http.ResponseWriter, request *http.Request) error {
+	return HTTPResultsWriterFunc(func(results []any, resultErr error, response http.ResponseWriter, request *http.Request) error {
 		if resultErr != nil || request.Context().Err() != nil {
 			return resultErr
 		}
@@ -184,8 +184,8 @@ func RespondContentType(contentType string) HTTPResultsWriter {
 			return fmt.Errorf("RespondContentType(%s)  needs []byte result, got %T", contentType, results[0])
 		}
 
-		writer.Header().Add("Content-Type", contentType)
-		_, err := writer.Write(data)
+		response.Header().Add("Content-Type", contentType)
+		_, err := response.Write(data)
 		return err
 	})
 }
@@ -221,19 +221,23 @@ var (
 	_ HTTPResultsWriter = RespondStaticXML("")
 	_ HTTPResultsWriter = RespondStaticJSON("")
 	_ HTTPResultsWriter = RespondStaticPlaintext("")
+	_ HTTPResultsWriter = RespondRedirect("")
+	_ HTTPResultsWriter = RespondRedirectFunc(nil)
 
 	_ http.Handler = RespondNothing
 	_ http.Handler = RespondStaticHTML("")
 	_ http.Handler = RespondStaticXML("")
 	_ http.Handler = RespondStaticJSON("")
 	_ http.Handler = RespondStaticPlaintext("")
+	_ http.Handler = RespondRedirect("")
+	_ http.Handler = RespondRedirectFunc(nil)
 )
 
 var RespondNothing respondNothing
 
 type respondNothing struct{}
 
-func (respondNothing) WriteResults(results []any, resultErr error, writer http.ResponseWriter, request *http.Request) error {
+func (respondNothing) WriteResults(results []any, resultErr error, response http.ResponseWriter, request *http.Request) error {
 	return resultErr
 }
 
@@ -241,60 +245,103 @@ func (respondNothing) ServeHTTP(writer http.ResponseWriter, _ *http.Request) {}
 
 type RespondStaticHTML string
 
-func (html RespondStaticHTML) WriteResults(results []any, resultErr error, writer http.ResponseWriter, request *http.Request) error {
+func (html RespondStaticHTML) WriteResults(results []any, resultErr error, response http.ResponseWriter, request *http.Request) error {
 	if resultErr != nil || request.Context().Err() != nil {
 		return resultErr
 	}
-	html.ServeHTTP(writer, request)
+	html.ServeHTTP(response, request)
 	return nil
 }
 
-func (html RespondStaticHTML) ServeHTTP(writer http.ResponseWriter, _ *http.Request) {
-	writer.Header().Add("Content-Type", contenttype.HTML)
-	writer.Write([]byte(html)) //#nosec G104
+func (html RespondStaticHTML) ServeHTTP(response http.ResponseWriter, _ *http.Request) {
+	response.Header().Add("Content-Type", contenttype.HTML)
+	response.Write([]byte(html)) //#nosec G104
 }
 
 type RespondStaticXML string
 
-func (xml RespondStaticXML) WriteResults(results []any, resultErr error, writer http.ResponseWriter, request *http.Request) error {
+func (xml RespondStaticXML) WriteResults(results []any, resultErr error, response http.ResponseWriter, request *http.Request) error {
 	if resultErr != nil || request.Context().Err() != nil {
 		return resultErr
 	}
-	xml.ServeHTTP(writer, request)
+	xml.ServeHTTP(response, request)
 	return nil
 }
 
-func (xml RespondStaticXML) ServeHTTP(writer http.ResponseWriter, _ *http.Request) {
-	writer.Header().Set("Content-Type", contenttype.XML)
-	writer.Write([]byte(xml)) //#nosec G104
+func (xml RespondStaticXML) ServeHTTP(response http.ResponseWriter, _ *http.Request) {
+	response.Header().Set("Content-Type", contenttype.XML)
+	response.Write([]byte(xml)) //#nosec G104
 }
 
 type RespondStaticJSON string
 
-func (json RespondStaticJSON) WriteResults(results []any, resultErr error, writer http.ResponseWriter, request *http.Request) error {
+func (json RespondStaticJSON) WriteResults(results []any, resultErr error, response http.ResponseWriter, request *http.Request) error {
 	if resultErr != nil || request.Context().Err() != nil {
 		return resultErr
 	}
-	json.ServeHTTP(writer, request)
+	json.ServeHTTP(response, request)
 	return nil
 }
 
-func (json RespondStaticJSON) ServeHTTP(writer http.ResponseWriter, _ *http.Request) {
-	writer.Header().Set("Content-Type", contenttype.JSON)
-	writer.Write([]byte(json)) //#nosec G104
+func (json RespondStaticJSON) ServeHTTP(response http.ResponseWriter, _ *http.Request) {
+	response.Header().Set("Content-Type", contenttype.JSON)
+	response.Write([]byte(json)) //#nosec G104
 }
 
 type RespondStaticPlaintext string
 
-func (text RespondStaticPlaintext) WriteResults(results []any, resultErr error, writer http.ResponseWriter, request *http.Request) error {
+func (text RespondStaticPlaintext) WriteResults(results []any, resultErr error, response http.ResponseWriter, request *http.Request) error {
 	if resultErr != nil || request.Context().Err() != nil {
 		return resultErr
 	}
-	text.ServeHTTP(writer, request)
+	text.ServeHTTP(response, request)
 	return nil
 }
 
-func (text RespondStaticPlaintext) ServeHTTP(writer http.ResponseWriter, _ *http.Request) {
-	writer.Header().Add("Content-Type", contenttype.PlainText)
-	writer.Write([]byte(text)) //#nosec G104
+func (text RespondStaticPlaintext) ServeHTTP(response http.ResponseWriter, _ *http.Request) {
+	response.Header().Add("Content-Type", contenttype.PlainText)
+	response.Write([]byte(text)) //#nosec G104
+}
+
+// RespondRedirect implements HTTPResultsWriter and http.Handler
+// with for a redirect URL string.
+// The redirect will be done with HTTP status code 302: Found.
+type RespondRedirect string
+
+func (re RespondRedirect) WriteResults(results []any, resultErr error, response http.ResponseWriter, request *http.Request) error {
+	if resultErr != nil || request.Context().Err() != nil {
+		return resultErr
+	}
+	re.ServeHTTP(response, request)
+	return nil
+}
+
+func (re RespondRedirect) ServeHTTP(response http.ResponseWriter, request *http.Request) {
+	http.Redirect(response, request, string(re), http.StatusFound)
+}
+
+// RespondRedirectFunc implements HTTPResultsWriter and http.Handler
+// with a function that returns the redirect URL.
+// The redirect will be done with HTTP status code 302: Found.
+type RespondRedirectFunc func(request *http.Request) (url string, err error)
+
+func (f RespondRedirectFunc) WriteResults(results []any, resultErr error, response http.ResponseWriter, request *http.Request) error {
+	if resultErr != nil || request.Context().Err() != nil {
+		return resultErr
+	}
+	url, err := f(request)
+	if err != nil {
+		return err
+	}
+	http.Redirect(response, request, url, http.StatusFound)
+	return nil
+}
+
+func (f RespondRedirectFunc) ServeHTTP(response http.ResponseWriter, request *http.Request) {
+	url, err := f(request)
+	if err != nil {
+		HandleErrorHTTP(err, response, request)
+		return
+	}
+	http.Redirect(response, request, url, http.StatusFound)
 }
