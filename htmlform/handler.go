@@ -198,5 +198,7 @@ func (handler *Handler) post(response http.ResponseWriter, request *http.Request
 	results, err := handler.wrappedFunc.CallWithNamedStrings(request.Context(), argsMap)
 
 	err = handler.resultWriter.WriteResults(results, err, response, request)
-	function.HandleErrorHTTP(err, response, request)
+	if err != nil {
+		function.HandleErrorHTTP(err, response, request)
+	}
 }
