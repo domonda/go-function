@@ -13,7 +13,9 @@ var (
 
 	// HandleErrorHTTP will handle an error by writing it to an http.ResponseWriter
 	HandleErrorHTTP = func(err error, writer http.ResponseWriter, request *http.Request) {
-		_ = httperr.DefaultHandler.HandleError(err, writer, request)
+		if err != nil {
+			httperr.DefaultHandler.HandleError(err, writer, request)
+		}
 	}
 )
 
