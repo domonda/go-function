@@ -2,10 +2,11 @@ module github.com/domonda/go-function/htmlform
 
 go 1.22
 
-replace github.com/domonda/go-function => ../
+replace github.com/domonda/go-function => ..
+
+require github.com/domonda/go-function v0.0.0-00010101000000-000000000000 // replaced
 
 require (
-	github.com/domonda/go-function v0.0.0-20240110155908-2638bdc2078d
 	github.com/domonda/go-types v0.0.0-20240301143218-7f4371e713b4
 	github.com/domonda/golog v0.0.0-20240301143815-6e76504f48e8
 	github.com/ungerik/go-fs v0.0.0-20240118121925-91844f9bdba8
