@@ -47,9 +47,25 @@ func MergeHTTPRequestArgs(getters ...HTTPRequestArgsGetter) HTTPRequestArgsGette
 	}
 }
 
+// HTTPRequestQueryArgs returns the query params of the request as string map.
+// If a query param has multiple values, they are joined with ";".
 func HTTPRequestQueryArgs(request *http.Request) (map[string]string, error) {
 	args := make(map[string]string)
 	for name, values := range request.URL.Query() {
+		args[name] = strings.Join(values, ";")
+	}
+	return args, nil
+}
+
+// HTTPRequestMultipartFormArgs returns the multipart form values of the request as string map.
+// If a form field has multiple values, they are joined with ";".
+func HTTPRequestMultipartFormArgs(request *http.Request) (map[string]string, error) {
+	err := request.ParseMultipartForm(1 << 20)
+	if err != nil {
+		return nil, err
+	}
+	args := make(map[string]string)
+	for name, values := range request.MultipartForm.Value {
 		args[name] = strings.Join(values, ";")
 	}
 	return args, nil

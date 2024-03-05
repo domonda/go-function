@@ -114,7 +114,7 @@ func (handler *Handler) ServeHTTP(response http.ResponseWriter, request *http.Re
 	}
 }
 
-func (handler *Handler) get(response http.ResponseWriter, request *http.Request) {
+func (handler *Handler) get(response http.ResponseWriter, _ *http.Request) {
 	handler.form.Fields = nil
 	for i, argName := range handler.wrappedFunc.ArgNames() {
 		if i == 0 && handler.wrappedFunc.ContextArg() {
@@ -191,7 +191,11 @@ func (handler *Handler) post(response http.ResponseWriter, request *http.Request
 		argsMap[key] = vals[0]
 	}
 	for key := range formfs.Form.File {
-		file, _ := formfs.FormFile(key)
+		file, err := formfs.FormFile(key)
+		if err != nil {
+			// Should never happen
+			panic(fmt.Errorf("can't get form file %s because %w", key, err))
+		}
 		argsMap[key] = string(file)
 	}
 
