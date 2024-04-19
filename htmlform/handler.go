@@ -126,7 +126,7 @@ func (handler *Handler) get(response http.ResponseWriter, _ *http.Request) {
 			Name:     argName,
 			Label:    argDescription,
 			Type:     "text",
-			Required: true,
+			Required: requiredBasedOnType(argType),
 		}
 		if field.Label == "" {
 			field.Label = argName
@@ -205,4 +205,17 @@ func (handler *Handler) post(response http.ResponseWriter, request *http.Request
 	if err != nil {
 		function.HandleErrorHTTP(err, response, request)
 	}
+}
+
+func requiredBasedOnType(t reflect.Type) bool {
+	if t == reflect.TypeFor[string]() {
+		return false
+	}
+	if t.Kind() == reflect.Ptr {
+		return false
+	}
+	if t.Implements(reflect.TypeFor[interface{ IsNull() bool }]()) {
+		return false
+	}
+	return true
 }
