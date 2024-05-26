@@ -4,7 +4,7 @@ go 1.22
 
 require (
 	github.com/ungerik/go-astvisit v0.0.0-20231019122241-2d1ef5bbb4cf
-	golang.org/x/tools v0.20.0
+	golang.org/x/tools v0.21.0
 )
 
 require (

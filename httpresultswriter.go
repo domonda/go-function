@@ -33,25 +33,20 @@ var RespondJSON HTTPResultsWriterFunc = func(results []any, resultErr error, res
 		return nil
 	}
 
-	// content-type json is relevant only if there's content
-	response.Header().Set("Content-Type", contenttype.JSON)
-
-	// only one result, write it as is
+	var r any
 	if len(results) == 1 {
-		b, err := encodeJSON(results[0])
-		if err != nil {
-			return err
-		}
-		_, err = response.Write(b)
-		return err
+		// only one result, write it as is
+		r = results[0]
+	} else {
+		// multiple results, put them in a JSON array
+		r = results
 	}
-
-	// multiple results, put them in a JSON array
-	b, err := encodeJSON(results)
+	j, err := encodeJSON(r)
 	if err != nil {
 		return err
 	}
-	_, err = response.Write(b)
+	response.Header().Set("Content-Type", contenttype.JSON)
+	_, err = response.Write(j)
 	return err
 }
 
@@ -88,17 +83,16 @@ func RespondJSONField(fieldName string) HTTPResultsWriterFunc {
 		if resultErr != nil || request.Context().Err() != nil {
 			return resultErr
 		}
-		var buf []byte
 		m := make(map[string]any)
 		if len(results) > 0 {
 			m[fieldName] = results[0]
 		}
-		buf, err = encodeJSON(m)
+		j, err := encodeJSON(m)
 		if err != nil {
 			return err
 		}
 		response.Header().Set("Content-Type", contenttype.JSON)
-		_, err = response.Write(buf)
+		_, err = response.Write(j)
 		return err
 	}
 }
@@ -108,7 +102,10 @@ var RespondXML HTTPResultsWriterFunc = func(results []any, resultErr error, resp
 		return resultErr
 	}
 	var buf []byte
-	for _, result := range results {
+	for i, result := range results {
+		if i > 0 {
+			buf = append(buf, '\n')
+		}
 		b, err := encodeXML(result)
 		if err != nil {
 			return err
