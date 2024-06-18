@@ -219,80 +219,87 @@ var PrintStructSliceAsTable ResultsHandlerFunc = func(ctx context.Context, resul
 	if len(results) == 0 {
 		return nil
 	}
-	// Check if all results are slices of the same type
-	resultType := reflect.TypeOf(results[0])
-	if resultType.Kind() != reflect.Slice {
-		return fmt.Errorf("expected slice, got %T", results[0])
-	}
-	if resultType.Elem().Kind() != reflect.Struct && resultType.Elem().Kind() != reflect.Ptr {
-		return fmt.Errorf("expected slice of structs or struct pointers, got %T", results[0])
-	}
-	isPtr := resultType.Elem().Kind() == reflect.Ptr
-	structType := resultType.Elem()
-	if isPtr {
-		structType = structType.Elem()
-	}
-	var header []string
-	for col := 0; col < structType.NumField(); col++ {
-		header = append(header, structType.Field(col).Name)
-	}
-	rows := [][]string{header}
-
-	sliceVal := reflect.ValueOf(results[0])
-	for row := 0; row < sliceVal.Len(); row++ {
-		structVal := sliceVal.Index(row)
+	for i, result := range results {
+		// Check if all results are slices of the same type
+		resultType := reflect.TypeOf(result)
+		if resultType.Kind() != reflect.Slice && resultType.Kind() != reflect.Array {
+			return fmt.Errorf("expected slice or array, got %T for result %d", result, i)
+		}
+		if resultType.Elem().Kind() != reflect.Struct && resultType.Elem().Kind() != reflect.Ptr {
+			return fmt.Errorf("expected slice/array of structs or struct pointers, got %T for result %d", result, i)
+		}
+		isPtr := resultType.Elem().Kind() == reflect.Ptr
+		structType := resultType.Elem()
 		if isPtr {
-			if structVal.IsNil() {
-				continue
-			}
-			structVal = structVal.Elem()
+			structType = structType.Elem()
 		}
-		fieldStrings := make([]string, structType.NumField())
+		var header []string
 		for col := 0; col < structType.NumField(); col++ {
-			fieldStrings[col] = fmt.Sprint(structVal.Field(col).Interface())
+			header = append(header, structType.Field(col).Name)
 		}
-		rows = append(rows, fieldStrings)
-	}
+		rows := [][]string{header}
 
-	colWidths := make([]int, structType.NumField())
-	for row := range rows {
-		for col := 0; col < structType.NumField() && col < len(rows[row]); col++ {
-			numRunes := utf8.RuneCountInString(rows[row][col])
-			colWidths[col] = max(colWidths[col], numRunes)
+		sliceVal := reflect.ValueOf(result)
+		for row := 0; row < sliceVal.Len(); row++ {
+			structVal := sliceVal.Index(row)
+			if isPtr {
+				if structVal.IsNil() {
+					continue
+				}
+				structVal = structVal.Elem()
+			}
+			fieldStrings := make([]string, structType.NumField())
+			for col := 0; col < structType.NumField(); col++ {
+				fieldStrings[col] = fmt.Sprint(structVal.Field(col).Interface())
+			}
+			rows = append(rows, fieldStrings)
 		}
-	}
-	w := os.Stdout
-	var err error
-	for _, rowStrs := range rows {
-		for col, colWidth := range colWidths {
-			switch {
-			case col == 0:
-				_, err = w.Write([]byte("| "))
-			case col < len(colWidths):
-				_, err = w.Write([]byte(" | "))
+
+		colWidths := make([]int, structType.NumField())
+		for row := range rows {
+			for col := 0; col < structType.NumField() && col < len(rows[row]); col++ {
+				numRunes := utf8.RuneCountInString(rows[row][col])
+				colWidths[col] = max(colWidths[col], numRunes)
 			}
-			if err != nil {
-				return err
-			}
-			str := ""
-			if col < len(rowStrs) {
-				str = rowStrs[col]
-			}
-			_, err = io.WriteString(w, str)
-			if err != nil {
-				return err
-			}
-			strLen := utf8.RuneCountInString(str)
-			for i := strLen; i < colWidth; i++ {
-				_, err = w.Write([]byte{' '})
+		}
+
+		// Write table to os.Stdout
+		if i > 0 {
+			fmt.Println() // Add line between tables
+		}
+		w := os.Stdout
+		var err error
+		for _, rowStrs := range rows {
+			for col, colWidth := range colWidths {
+				switch {
+				case col == 0:
+					_, err = w.Write([]byte("| "))
+				case col < len(colWidths):
+					_, err = w.Write([]byte(" | "))
+				}
 				if err != nil {
 					return err
 				}
+				str := ""
+				if col < len(rowStrs) {
+					str = rowStrs[col]
+				}
+				_, err = io.WriteString(w, str)
+				if err != nil {
+					return err
+				}
+				strLen := utf8.RuneCountInString(str)
+				for i := strLen; i < colWidth; i++ {
+					_, err = w.Write([]byte{' '})
+					if err != nil {
+						return err
+					}
+				}
 			}
-		}
-		_, err = w.Write([]byte(" |\n"))
-		if err != nil {
-			return err
+			_, err = w.Write([]byte(" |\n"))
+			if err != nil {
+				return err
+			}
 		}
 	}
 	return nil
