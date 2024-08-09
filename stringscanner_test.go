@@ -68,6 +68,7 @@ func Test_sliceLiteralFields(t *testing.T) {
 }
 
 func TestScanString(t *testing.T) {
+	var boolPtr *bool
 	intMap := make(map[int]int)
 	type args struct {
 		sourceStr string
@@ -99,7 +100,18 @@ func TestScanString(t *testing.T) {
 			args:     args{sourceStr: "null", destPtr: &intMap},
 			wantDest: map[int]int(nil),
 		},
-		// wantErr
+		{
+			name:     "nil bool",
+			args:     args{sourceStr: "false", destPtr: &boolPtr},
+			wantDest: new(bool), // ptr to false
+		},
+		{
+			name:     "non bool string scanned as false",
+			args:     args{sourceStr: "NON BOOL STRING", destPtr: &boolPtr},
+			wantDest: new(bool), // ptr to false
+		},
+
+		// // wantErr
 		{
 			name:    "nil destPtr",
 			args:    args{sourceStr: "nil", destPtr: nil},
@@ -118,6 +130,49 @@ func TestScanString(t *testing.T) {
 			gotDest := reflect.ValueOf(tt.args.destPtr).Elem().Interface()
 			if !reflect.DeepEqual(gotDest, tt.wantDest) {
 				t.Errorf("ScanString() set %#v, want %#v", gotDest, tt.wantDest)
+			}
+		})
+	}
+}
+
+func TestStringScannerFunc_ScanString(t *testing.T) {
+	type args struct {
+		sourceStr string
+		destPtr   any
+	}
+	tests := []struct {
+		name    string
+		f       StringScannerFunc
+		args    args
+		wantErr bool
+	}{
+		// TODO: Add test cases.
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if err := tt.f.ScanString(tt.args.sourceStr, tt.args.destPtr); (err != nil) != tt.wantErr {
+				t.Errorf("StringScannerFunc.ScanString() error = %v, wantErr %v", err, tt.wantErr)
+			}
+		})
+	}
+}
+
+func Test_scanString(t *testing.T) {
+	type args struct {
+		sourceStr string
+		destVal   reflect.Value
+	}
+	tests := []struct {
+		name    string
+		args    args
+		wantErr bool
+	}{
+		// TODO: Add test cases.
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if err := scanString(tt.args.sourceStr, tt.args.destVal); (err != nil) != tt.wantErr {
+				t.Errorf("scanString() error = %v, wantErr %v", err, tt.wantErr)
 			}
 		})
 	}
