@@ -4,9 +4,9 @@ import (
 	"context"
 	"fmt"
 	"io"
+	"maps"
+	"slices"
 	"sort"
-
-	"golang.org/x/exp/maps"
 
 	"github.com/domonda/go-function"
 )
@@ -68,9 +68,7 @@ func (disp *SuperStringArgsDispatcher) HasCommnd(superCommand string) bool {
 }
 
 func (disp *SuperStringArgsDispatcher) Commands() []string {
-	commands := maps.Keys(disp.sub)
-	sort.Strings(commands)
-	return commands
+	return slices.Sorted(maps.Keys(disp.sub))
 }
 
 func (disp *SuperStringArgsDispatcher) HasSubCommnd(superCommand, command string) bool {

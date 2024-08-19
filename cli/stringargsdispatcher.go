@@ -4,12 +4,12 @@ import (
 	"context"
 	"fmt"
 	"io"
+	"maps"
 	"reflect"
+	"slices"
 	"sort"
 	"strings"
 	"unicode"
-
-	"golang.org/x/exp/maps"
 
 	"github.com/domonda/go-function"
 )
@@ -110,9 +110,7 @@ func (disp *StringArgsDispatcher) HasDefaultCommnd() bool {
 }
 
 func (disp *StringArgsDispatcher) Commands() []string {
-	commands := maps.Keys(disp.comm)
-	sort.Strings(commands)
-	return commands
+	return slices.Sorted(maps.Keys(disp.comm))
 }
 
 func (disp *StringArgsDispatcher) Dispatch(ctx context.Context, command string, args ...string) error {
