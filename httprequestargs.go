@@ -47,6 +47,18 @@ func MergeHTTPRequestArgs(getters ...HTTPRequestArgsGetter) HTTPRequestArgsGette
 	}
 }
 
+func HTTPRequestQueryArg(name string) HTTPRequestArgsGetter {
+	return func(request *http.Request) (map[string]string, error) {
+		return map[string]string{name: request.URL.Query().Get(name)}, nil
+	}
+}
+
+func HTTPRequestQueryAsArg(queryKey, name string) HTTPRequestArgsGetter {
+	return func(request *http.Request) (map[string]string, error) {
+		return map[string]string{name: request.URL.Query().Get(queryKey)}, nil
+	}
+}
+
 // HTTPRequestQueryArgs returns the query params of the request as string map.
 // If a query param has multiple values, they are joined with ";".
 func HTTPRequestQueryArgs(request *http.Request) (map[string]string, error) {
