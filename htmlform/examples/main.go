@@ -69,8 +69,7 @@ const (
 //   - color:  Select a color
 //   - file:   Upload file
 func Example(ctx context.Context, aBool bool, anInt int, aFloat float64, color Color, file fs.FileReader /*, aDate date.Date, aTime time.Time*/) error {
-	log.Info("Example").
-		Ctx(ctx).
+	log.InfoCtx(ctx, "Example").
 		Bool("aBool", aBool).
 		Int("anInt", anInt).
 		Float("aFloat", aFloat).
