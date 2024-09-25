@@ -7,9 +7,9 @@ replace github.com/domonda/go-function => ..
 require github.com/domonda/go-function v0.0.0-00010101000000-000000000000 // replaced
 
 require (
-	github.com/domonda/go-types v0.0.0-20240807125919-3d418e4a028b
-	github.com/domonda/golog v0.0.0-20240805081224-f870d6f12732
-	github.com/ungerik/go-fs v0.0.0-20240702143946-3ecb6733945d
+	github.com/domonda/go-types v0.0.0-20240925100910-0aa0f7734ec7
+	github.com/domonda/golog v0.0.0-20240925095322-d871601de861
+	github.com/ungerik/go-fs v0.0.0-20240919125757-1b6f933a416d
 	github.com/ungerik/go-httpx v0.0.0-20240110134719-544aadceddba
 )
 
@@ -23,5 +23,5 @@ require (
 	github.com/mattn/go-runewidth v0.0.16 // indirect
 	github.com/muesli/termenv v0.15.2 // indirect
 	github.com/rivo/uniseg v0.4.7 // indirect
-	golang.org/x/sys v0.24.0 // indirect
+	golang.org/x/sys v0.25.0 // indirect
 )
