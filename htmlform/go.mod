@@ -8,7 +8,7 @@ require github.com/domonda/go-function v0.0.0-00010101000000-000000000000 // rep
 
 require (
 	github.com/domonda/go-types v0.0.0-20240925100910-0aa0f7734ec7
-	github.com/domonda/golog v0.0.0-20240925095322-d871601de861
+	github.com/domonda/golog v0.0.0-20240925101313-c38b0dfc75bd
 	github.com/ungerik/go-fs v0.0.0-20240919125757-1b6f933a416d
 	github.com/ungerik/go-httpx v0.0.0-20240110134719-544aadceddba
 )
