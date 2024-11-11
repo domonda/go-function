@@ -23,7 +23,57 @@ func (f ResultsHandlerFunc) HandleResults(ctx context.Context, results []any, re
 	return f(ctx, results, resultErr)
 }
 
-func makeResultsPrintable(results []any) ([]any, error) {
+// writePaddedTextTable prints a string table to an io.Writer
+// padding the table with spaces and using the passed
+// columnDelimiter between columns.
+func writePaddedTextTable(w io.Writer, rows [][]string, columnDelimiter string) error {
+	// Collect column widths
+	var colRuneCount []int
+	for row := range rows {
+		for col, str := range rows[row] {
+			count := utf8.RuneCountInString(str)
+			if col >= len(colRuneCount) {
+				colRuneCount = append(colRuneCount, count)
+			} else if count > colRuneCount[col] {
+				colRuneCount[col] = count
+			}
+		}
+	}
+	// Print with padded cell widths and columnDelimiter
+	line := make([]byte, 0, 1024)
+	for row := range rows {
+		// Append cells of row to line
+		for col, str := range rows[row] {
+			if col > 0 {
+				line = append(line, columnDelimiter...)
+			}
+			line = append(line, str...)
+			if pad := colRuneCount[col] - utf8.RuneCountInString(str); pad > 0 {
+				line = append(line, bytes.Repeat([]byte{' '}, pad)...)
+			}
+		}
+		// In case not all rows have the same number of cells
+		// pad line with empty cells
+		for col := len(rows[row]); col < len(colRuneCount); col++ {
+			if col > 0 {
+				line = append(line, columnDelimiter...)
+			}
+			line = append(line, bytes.Repeat([]byte{' '}, colRuneCount[col])...)
+		}
+		line = append(line, '\n')
+		_, err := w.Write(line)
+		if err != nil {
+			return err
+		}
+		line = line[:0]
+	}
+	return nil
+}
+
+// makeResultsPrintable converts the elements of the results slice
+// to strings with a readable representation.
+// It modifies the results slice in place.
+func makeResultsPrintable(results []any) error {
 	for i, result := range results {
 		switch x := result.(type) {
 		case fmt.GoStringer:
@@ -32,12 +82,23 @@ func makeResultsPrintable(results []any) ([]any, error) {
 		case fmt.Stringer:
 			results[i] = x.String()
 
+		case []string:
+			results[i] = strings.Join(x, "\n")
+
 		case []byte:
 			if utf8.Valid(x) && bytes.IndexFunc(x, func(r rune) bool { return !unicode.IsPrint(r) }) == -1 {
 				results[i] = string(x)
 			} else {
 				results[i] = fmt.Sprintf("%#x", x)
 			}
+
+		case [][]string:
+			var b strings.Builder
+			err := writePaddedTextTable(&b, x, "|")
+			if err != nil {
+				return fmt.Errorf("can't print command result padded text table because: %w", err)
+			}
+			results[i] = b.String()
 
 		default:
 			switch v := derefValue(reflect.ValueOf(result)); v.Kind() {
@@ -48,7 +109,7 @@ func makeResultsPrintable(results []any) ([]any, error) {
 			case reflect.Struct, reflect.Map, reflect.Slice, reflect.Array:
 				b, err := json.MarshalIndent(result, "", "  ")
 				if err != nil {
-					return nil, fmt.Errorf("can't print command result as JSON because: %w", err)
+					return fmt.Errorf("can't print command result as JSON because: %w", err)
 				}
 				results[i] = string(b)
 
@@ -59,7 +120,7 @@ func makeResultsPrintable(results []any) ([]any, error) {
 			}
 		}
 	}
-	return results, nil
+	return nil
 }
 
 // PrintTo calls fmt.Fprint on writer with the result values as varidic arguments
@@ -68,11 +129,11 @@ func PrintTo(writer io.Writer) ResultsHandlerFunc {
 		if resultErr != nil {
 			return resultErr
 		}
-		r, err := makeResultsPrintable(results)
-		if err != nil || len(r) == 0 {
+		err := makeResultsPrintable(results)
+		if err != nil {
 			return err
 		}
-		_, err = fmt.Fprint(writer, r...)
+		_, err = fmt.Fprint(writer, results...)
 		return err
 	}
 }
@@ -83,8 +144,8 @@ func PrintlnTo(writer io.Writer) ResultsHandlerFunc {
 		if resultErr != nil {
 			return resultErr
 		}
-		results, err := makeResultsPrintable(results)
-		if err != nil || len(results) == 0 {
+		err := makeResultsPrintable(results)
+		if err != nil {
 			return err
 		}
 		for _, r := range results {
@@ -102,8 +163,8 @@ var Println ResultsHandlerFunc = func(ctx context.Context, results []any, result
 	if resultErr != nil {
 		return resultErr
 	}
-	results, err := makeResultsPrintable(results)
-	if err != nil || len(results) == 0 {
+	err := makeResultsPrintable(results)
+	if err != nil {
 		return err
 	}
 	for _, r := range results {
@@ -121,8 +182,8 @@ func PrintlnWithPrefixTo(prefix string, writer io.Writer) ResultsHandlerFunc {
 		if resultErr != nil {
 			return resultErr
 		}
-		results, err := makeResultsPrintable(results)
-		if err != nil || len(results) == 0 {
+		err := makeResultsPrintable(results)
+		if err != nil {
 			return err
 		}
 		for _, result := range results {
@@ -141,8 +202,8 @@ func PrintlnWithPrefix(prefix string) ResultsHandlerFunc {
 		if resultErr != nil {
 			return resultErr
 		}
-		results, err := makeResultsPrintable(results)
-		if err != nil || len(results) == 0 {
+		err := makeResultsPrintable(results)
+		if err != nil {
 			return err
 		}
 		for _, result := range results {
@@ -166,8 +227,8 @@ func LogTo(logger Logger) ResultsHandlerFunc {
 		if resultErr != nil {
 			return resultErr
 		}
-		results, err := makeResultsPrintable(results)
-		if err != nil || len(results) == 0 {
+		err := makeResultsPrintable(results)
+		if err != nil {
 			return err
 		}
 		logger.Printf(fmt.Sprintln(results...))
@@ -181,8 +242,8 @@ func LogWithPrefixTo(prefix string, logger Logger) ResultsHandlerFunc {
 		if resultErr != nil {
 			return resultErr
 		}
-		results, err := makeResultsPrintable(results)
-		if err != nil || len(results) == 0 {
+		err := makeResultsPrintable(results)
+		if err != nil {
 			return err
 		}
 		results = append([]any{prefix}, results...)
