@@ -20,8 +20,13 @@ func parsePackage(pkgDir, excludeFilename string, onlyFuncs ...string) (pkg *ast
 	if err != nil {
 		return nil, nil, err
 	}
+	delete(pkgs, "main") // ignore main package
 	if len(pkgs) != 1 {
-		return nil, nil, fmt.Errorf("%d packages found in %s", len(pkgs), pkgDir)
+		var pkgNames []string
+		for _, pkg := range pkgs {
+			pkgNames = append(pkgNames, pkg.Name)
+		}
+		return nil, nil, fmt.Errorf("%d packages found in %s: %s", len(pkgs), pkgDir, strings.Join(pkgNames, ", "))
 	}
 	for _, p := range pkgs {
 		pkg = p
