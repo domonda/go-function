@@ -12,7 +12,7 @@ var (
 )
 
 var (
-	StringScanners *TypeStringScanners = NewTypeStringScanners(StringScannerFunc(DefaultScanString))
+	StringScanners = NewTypeStringScanners(StringScannerFunc(DefaultScanString))
 
 	ArgNameTag        = "arg"
 	ArgDescriptionTag = "desc"
