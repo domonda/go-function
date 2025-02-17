@@ -70,6 +70,10 @@ func Test_sliceLiteralFields(t *testing.T) {
 func TestScanString(t *testing.T) {
 	var boolPtr *bool
 	intMap := make(map[int]int)
+	type TestStruct struct {
+		Int int
+		Str string
+	}
 	type args struct {
 		sourceStr string
 		destPtr   any
@@ -109,6 +113,21 @@ func TestScanString(t *testing.T) {
 			name:     "non bool string scanned as false",
 			args:     args{sourceStr: "NON BOOL STRING", destPtr: &boolPtr},
 			wantDest: new(bool), // ptr to false
+		},
+		{
+			name:     "struct",
+			args:     args{sourceStr: `{"Int": 1, "Str": "test"}`, destPtr: &TestStruct{}},
+			wantDest: TestStruct{Int: 1, Str: "test"},
+		},
+		{
+			name:     "struct slice",
+			args:     args{sourceStr: `[{"Int": 1, "Str": "test"}, {"Int": 2, "Str": "test2"}]`, destPtr: &[]*TestStruct{}},
+			wantDest: []*TestStruct{{Int: 1, Str: "test"}, {Int: 2, Str: "test2"}},
+		},
+		{
+			name:     "struct slice, non trimmed string",
+			args:     args{sourceStr: ` [{"Int": 1,"Str":"test"},{"Int": 2,    "Str": "test2"}]` + "\n", destPtr: &[]*TestStruct{}},
+			wantDest: []*TestStruct{{Int: 1, Str: "test"}, {Int: 2, Str: "test2"}},
 		},
 
 		// // wantErr

@@ -60,13 +60,14 @@ func DefaultScanString(sourceStr string, destPtr any) (err error) {
 
 func scanString(sourceStr string, destVal reflect.Value) (err error) {
 	var (
-		destPtr      = destVal.Addr().Interface()
-		sourceStrNil = sourceStr == "" ||
-			strings.EqualFold(sourceStr, "nil") ||
-			strings.EqualFold(sourceStr, "null")
+		destPtr    = destVal.Addr().Interface()
+		trimmedSrc = strings.TrimSpace(sourceStr)
+		nilSrc     = trimmedSrc == "" ||
+			strings.EqualFold(trimmedSrc, "nil") ||
+			strings.EqualFold(trimmedSrc, "null")
 	)
 
-	if n, ok := destPtr.(interface{ SetNull() }); ok && sourceStrNil {
+	if n, ok := destPtr.(interface{ SetNull() }); ok && nilSrc {
 		n.SetNull()
 		return nil
 	}
@@ -77,49 +78,49 @@ func scanString(sourceStr string, destVal reflect.Value) (err error) {
 		return nil
 
 	case *error:
-		if sourceStrNil {
+		if nilSrc {
 			*dest = nil
 		} else {
-			*dest = errors.New(sourceStr)
+			*dest = errors.New(trimmedSrc)
 		}
 		return nil
 
 	case *time.Time:
-		if sourceStrNil {
+		if nilSrc {
 			*dest = time.Time{}
 			return nil
 		}
 		for _, format := range TimeFormats {
-			t, err := time.ParseInLocation(format, sourceStr, time.Local)
+			t, err := time.ParseInLocation(format, trimmedSrc, time.Local)
 			if err == nil {
 				*dest = t
 				return nil
 			}
 		}
-		return fmt.Errorf("can't parse %q as time.Time using formats %#v", sourceStr, TimeFormats)
+		return fmt.Errorf("can't parse %q as time.Time using formats %#v", trimmedSrc, TimeFormats)
 
 	case interface{ Set(time.Time) }:
-		if sourceStrNil {
+		if nilSrc {
 			dest.Set(time.Time{})
 			return nil
 		}
 		for _, format := range TimeFormats {
-			t, err := time.ParseInLocation(format, sourceStr, time.Local)
+			t, err := time.ParseInLocation(format, trimmedSrc, time.Local)
 			if err == nil {
 				dest.Set(t)
 				return nil
 			}
 		}
-		return fmt.Errorf("can't parse %q as time.Time using formats %#v", sourceStr, TimeFormats)
+		return fmt.Errorf("can't parse %q as time.Time using formats %#v", trimmedSrc, TimeFormats)
 
 	case *time.Duration:
-		if sourceStrNil {
+		if nilSrc {
 			*dest = 0
 			return nil
 		}
-		duration, err := time.ParseDuration(sourceStr)
+		duration, err := time.ParseDuration(trimmedSrc)
 		if err != nil {
-			return fmt.Errorf("can't parse %q as time.Duration because of: %w", sourceStr, err)
+			return fmt.Errorf("can't parse %q as time.Duration because of: %w", trimmedSrc, err)
 		}
 		*dest = duration
 		return nil
@@ -128,7 +129,7 @@ func scanString(sourceStr string, destVal reflect.Value) (err error) {
 		return dest.UnmarshalText([]byte(sourceStr))
 
 	case json.Unmarshaler:
-		source := []byte(sourceStr)
+		source := []byte(trimmedSrc)
 		if !json.Valid(source) {
 			// sourceStr is not already valid JSON
 			// then escape it as JSON string
@@ -140,10 +141,10 @@ func scanString(sourceStr string, destVal reflect.Value) (err error) {
 		return dest.UnmarshalJSON(source)
 
 	case *map[string]any:
-		return json.Unmarshal([]byte(sourceStr), destPtr)
+		return json.Unmarshal([]byte(trimmedSrc), destPtr)
 
 	case *[]any:
-		return json.Unmarshal([]byte(sourceStr), destPtr)
+		return json.Unmarshal([]byte(trimmedSrc), destPtr)
 
 	case *[]byte:
 		*dest = []byte(sourceStr)
@@ -156,7 +157,7 @@ func scanString(sourceStr string, destVal reflect.Value) (err error) {
 		return nil
 
 	case reflect.Pointer:
-		if sourceStrNil {
+		if nilSrc {
 			destVal.SetZero()
 			return nil
 		}
@@ -174,22 +175,22 @@ func scanString(sourceStr string, destVal reflect.Value) (err error) {
 	case reflect.Struct:
 		// JSON might not be the best format for command line arguments,
 		// but it could have also come from a HTTP request body or other sources
-		return json.Unmarshal([]byte(sourceStr), destPtr)
+		return json.Unmarshal([]byte(trimmedSrc), destPtr)
 
 	case reflect.Slice:
-		if sourceStrNil {
+		if nilSrc {
 			destVal.SetZero()
 			return nil
 		}
 		var sourceStrings []string
-		if strings.HasPrefix(sourceStr, "[") && strings.HasSuffix(sourceStr, "]") {
-			sourceStrings, err = sliceLiteralFields(sourceStr)
+		if strings.HasPrefix(trimmedSrc, "[") && strings.HasSuffix(trimmedSrc, "]") {
+			sourceStrings, err = sliceLiteralFields(trimmedSrc)
 			if err != nil {
 				return err
 			}
 		} else {
 			// Treat non-slice literals as single element slice
-			sourceStrings = []string{sourceStr}
+			sourceStrings = []string{trimmedSrc}
 		}
 		sliceLen := len(sourceStrings)
 		destVal.Set(reflect.MakeSlice(destVal.Type(), sliceLen, sliceLen))
@@ -203,14 +204,14 @@ func scanString(sourceStr string, destVal reflect.Value) (err error) {
 
 	case reflect.Array:
 		var sourceStrings []string
-		if strings.HasPrefix(sourceStr, "[") && strings.HasSuffix(sourceStr, "]") {
-			sourceStrings, err = sliceLiteralFields(sourceStr)
+		if strings.HasPrefix(trimmedSrc, "[") && strings.HasSuffix(trimmedSrc, "]") {
+			sourceStrings, err = sliceLiteralFields(trimmedSrc)
 			if err != nil {
 				return err
 			}
 		} else {
 			// Treat non-slice literals as single element slice
-			sourceStrings = []string{sourceStr}
+			sourceStrings = []string{trimmedSrc}
 		}
 		arrayLen := destVal.Len()
 		if len(sourceStrings) != arrayLen {
@@ -225,7 +226,7 @@ func scanString(sourceStr string, destVal reflect.Value) (err error) {
 		return nil
 
 	case reflect.Map, reflect.Chan, reflect.Func:
-		if sourceStrNil {
+		if nilSrc {
 			destVal.SetZero()
 			return nil
 		}

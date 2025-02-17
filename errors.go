@@ -32,7 +32,7 @@ func NewErrParseArgString(err error, f fmt.Stringer, arg string) ErrParseArgStri
 }
 
 func (e ErrParseArgString) Error() string {
-	return fmt.Sprintf("string conversion error for argument %s of function %s: %s", e.Arg, e.Func, e.Err)
+	return fmt.Sprintf("string conversion error for argument %q of function %s: %s", e.Arg, e.Func, e.Err)
 }
 
 func (e ErrParseArgString) Unwrap() error {
@@ -50,7 +50,7 @@ func NewErrParseArgJSON(err error, f fmt.Stringer, arg string) ErrParseArgJSON {
 }
 
 func (e ErrParseArgJSON) Error() string {
-	return fmt.Sprintf("error unmarshalling JSON for argument %s of function %s: %s", e.Arg, e.Func, e.Err)
+	return fmt.Sprintf("error unmarshalling JSON for argument %q of function %s: %s", e.Arg, e.Func, e.Err)
 }
 
 func (e ErrParseArgJSON) Unwrap() error {
