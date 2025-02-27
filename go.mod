@@ -1,6 +1,6 @@
 module github.com/domonda/go-function
 
-go 1.23
+go 1.24
 
 require (
 	github.com/h2non/filetype v1.1.3
