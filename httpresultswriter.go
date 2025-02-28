@@ -64,8 +64,14 @@ var RespondJSON HTTPResultsWriterFunc = func(results []any, resultErr error, res
 
 // RespondJSONObject writes the results of a function call as a JSON object to the response.
 // The resultKeys are the keys of the JSON object, naming the function results in order.
-// An error is returned if the number of results does not match the number of resultKeys.
-// Errors from the function are handled by also marshalling them as JSON.
+//
+// If the last result is an error and the resultKeys don't have a key for it
+// then the error is returned unhandled if not nil.
+// If there is a result key for the error then the error
+// is marshalled as JSON string and not returned.
+//
+// An error is returned if the number of results does not match the number of resultKeys
+// or number of resultKeys minus one if the last result is an error.
 func RespondJSONObject(resultKeys ...string) HTTPResultsWriterFunc {
 	if len(slices.Compact(resultKeys)) != len(resultKeys) {
 		panic(fmt.Sprintf("RespondJSONObject resultKeys contains duplicates: %#v", resultKeys))
@@ -75,12 +81,19 @@ func RespondJSONObject(resultKeys ...string) HTTPResultsWriterFunc {
 		if request.Context().Err() != nil {
 			return resultErr
 		}
-		if len(resultKeys) != len(results) {
+		errorHasKey := len(resultKeys) == len(results)+1
+		if !errorHasKey && resultErr != nil {
+			return resultErr
+		}
+		if len(resultKeys) != len(results) && !errorHasKey {
 			return fmt.Errorf("RespondJSONObject expects %d results for %v, got %d", len(resultKeys), resultKeys, len(results))
 		}
 		r := make(map[string]any)
 		for i, result := range results {
 			r[resultKeys[i]] = result
+		}
+		if errorHasKey {
+			r[resultKeys[len(resultKeys)-1]] = resultErr.Error()
 		}
 		j, err := encodeJSON(r)
 		if err != nil {
