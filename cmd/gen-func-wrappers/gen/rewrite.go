@@ -189,7 +189,7 @@ func (impl *wrapper) WrappedFuncPkgAndFuncName() (pkgName, funcName string) {
 	return impl.WrappedFunc[:dot], impl.WrappedFunc[dot+1:]
 }
 
-func findFunctionWrappers(fset *token.FileSet, file *ast.File) []*wrapper {
+func findFunctionWrappers(_ *token.FileSet, file *ast.File) []*wrapper {
 	ordered := make([]*wrapper, 0)
 	named := make(map[string]*wrapper)
 	typed := make(map[string]*wrapper)

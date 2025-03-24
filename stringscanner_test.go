@@ -86,8 +86,13 @@ func TestScanString(t *testing.T) {
 	}{
 		{
 			name:     "int(666)",
-			args:     args{sourceStr: "666", destPtr: new(int)},
+			args:     args{sourceStr: " \t666\n", destPtr: new(int)},
 			wantDest: int(666),
+		},
+		{
+			name:     "empty string as int",
+			args:     args{sourceStr: "", destPtr: new(int)},
+			wantDest: int(0),
 		},
 		{
 			name:     "empty string map[int]int",
@@ -96,7 +101,7 @@ func TestScanString(t *testing.T) {
 		},
 		{
 			name:     "nil map[int]int",
-			args:     args{sourceStr: "nil", destPtr: &intMap},
+			args:     args{sourceStr: " nil ", destPtr: &intMap},
 			wantDest: map[int]int(nil),
 		},
 		{
@@ -110,9 +115,9 @@ func TestScanString(t *testing.T) {
 			wantDest: new(bool), // ptr to false
 		},
 		{
-			name:     "non bool string scanned as false",
-			args:     args{sourceStr: "NON BOOL STRING", destPtr: &boolPtr},
-			wantDest: new(bool), // ptr to false
+			name:     "empty string scanned as false",
+			args:     args{sourceStr: "    ", destPtr: new(bool)},
+			wantDest: false,
 		},
 		{
 			name:     "struct",

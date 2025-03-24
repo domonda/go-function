@@ -291,7 +291,7 @@ func (impl Impl) WriteFunctionWrapper(w io.Writer, funcFile *ast.File, funcDecl 
 						fmt.Fprintf(w, "\t\terr := function.ScanString(strs[%d], &%s)\n", strsIndex, callParams[i])
 						fmt.Fprintf(w, "\t\tif err != nil {\n")
 						{
-							fmt.Fprintf(w, "\t\t\treturn nil, function.NewErrParseArgString(err, f, %q)\n", argName)
+							fmt.Fprintf(w, "\t\t\treturn nil, function.NewErrParseArgString(err, f, %q, strs[%d])\n", argName, strsIndex)
 						}
 						fmt.Fprintf(w, "\t\t}\n")
 					}
@@ -362,7 +362,7 @@ func (impl Impl) WriteFunctionWrapper(w io.Writer, funcFile *ast.File, funcDecl 
 						fmt.Fprintf(w, "\t\terr := function.ScanString(str, &%s)\n", callParams[i])
 						fmt.Fprintf(w, "\t\tif err != nil {\n")
 						{
-							fmt.Fprintf(w, "\t\t\treturn nil, function.NewErrParseArgString(err, f, %q)\n", argName)
+							fmt.Fprintf(w, "\t\t\treturn nil, function.NewErrParseArgString(err, f, %q, str)\n", argName)
 						}
 						fmt.Fprintf(w, "\t\t}\n")
 					}

@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"reflect"
+	"strconv"
 	"strings"
 	"time"
 )
@@ -152,10 +153,6 @@ func scanString(sourceStr string, destVal reflect.Value) (err error) {
 	}
 
 	switch destVal.Kind() {
-	case reflect.String:
-		destVal.SetString(sourceStr)
-		return nil
-
 	case reflect.Pointer:
 		if nilSrc {
 			destVal.SetZero()
@@ -170,6 +167,58 @@ func scanString(sourceStr string, destVal reflect.Value) (err error) {
 			return err
 		}
 		destVal.Set(ptr)
+		return nil
+
+	case reflect.String:
+		destVal.SetString(sourceStr) // Don't trim whitespace
+		return nil
+
+	case reflect.Bool:
+		if nilSrc {
+			destVal.SetBool(false)
+			return nil
+		}
+		b, err := strconv.ParseBool(trimmedSrc)
+		if err != nil {
+			return fmt.Errorf("can't parse %q as bool because of: %w", trimmedSrc, err)
+		}
+		destVal.SetBool(b)
+		return nil
+
+	case reflect.Int, reflect.Int8, reflect.Int16, reflect.Int32, reflect.Int64:
+		if nilSrc {
+			destVal.SetInt(0)
+			return nil
+		}
+		i, err := strconv.ParseInt(trimmedSrc, 10, destVal.Type().Bits())
+		if err != nil {
+			return fmt.Errorf("can't parse %q as int because of: %w", trimmedSrc, err)
+		}
+		destVal.SetInt(i)
+		return nil
+
+	case reflect.Uint, reflect.Uint8, reflect.Uint16, reflect.Uint32, reflect.Uint64:
+		if nilSrc {
+			destVal.SetUint(0)
+			return nil
+		}
+		u, err := strconv.ParseUint(trimmedSrc, 10, destVal.Type().Bits())
+		if err != nil {
+			return fmt.Errorf("can't parse %q as uint because of: %w", trimmedSrc, err)
+		}
+		destVal.SetUint(u)
+		return nil
+
+	case reflect.Float32, reflect.Float64:
+		if nilSrc {
+			destVal.SetFloat(0)
+			return nil
+		}
+		f, err := strconv.ParseFloat(trimmedSrc, destVal.Type().Bits())
+		if err != nil {
+			return fmt.Errorf("can't parse %q as float because of: %w", trimmedSrc, err)
+		}
+		destVal.SetFloat(f)
 		return nil
 
 	case reflect.Struct:

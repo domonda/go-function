@@ -22,17 +22,18 @@ var (
 )
 
 type ErrParseArgString struct {
-	Err  error
-	Func fmt.Stringer
-	Arg  string
+	Err      error
+	Func     fmt.Stringer
+	ArgName  string
+	ArgValue string
 }
 
-func NewErrParseArgString(err error, f fmt.Stringer, arg string) ErrParseArgString {
-	return ErrParseArgString{Err: err, Func: f, Arg: arg}
+func NewErrParseArgString(err error, f fmt.Stringer, argName, argValue string) ErrParseArgString {
+	return ErrParseArgString{Err: err, Func: f, ArgName: argName, ArgValue: argValue}
 }
 
 func (e ErrParseArgString) Error() string {
-	return fmt.Sprintf("string conversion error for argument %q of function %s: %s", e.Arg, e.Func, e.Err)
+	return fmt.Sprintf("can't parse argument '%s' string value '%s' as argument for function %s, error: %s", e.ArgName, e.ArgValue, e.Func, e.Err)
 }
 
 func (e ErrParseArgString) Unwrap() error {

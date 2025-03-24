@@ -174,7 +174,7 @@ func (f *reflectWrapper) CallWithStrings(ctx context.Context, strs ...string) (r
 		destPtr := reflect.New(argType)
 		err = ScanString(str, destPtr.Interface())
 		if err != nil {
-			return nil, NewErrParseArgString(err, f, f.argNames[i])
+			return nil, NewErrParseArgString(err, f, f.argNames[i], str)
 		}
 		in[i] = destPtr.Elem()
 	}
@@ -200,7 +200,7 @@ func (f *reflectWrapper) CallWithNamedStrings(ctx context.Context, strs map[stri
 			destPtr := reflect.New(argType)
 			err = ScanString(str, destPtr.Interface())
 			if err != nil {
-				return nil, NewErrParseArgString(err, f, f.argNames[i])
+				return nil, NewErrParseArgString(err, f, f.argNames[i], str)
 			}
 			in[i] = destPtr.Elem()
 		}
