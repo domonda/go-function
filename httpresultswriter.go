@@ -231,6 +231,12 @@ func RespondContentType(contentType string) HTTPResultsWriter {
 // DetectContentType tries to detect the MIME content-type of data,
 // or returns "application/octet-stream" if none could be identified.
 func DetectContentType(data []byte) string {
+	jsonData := map[string]any{}
+	jsonErr := json.Unmarshal(data, &jsonData)
+	if jsonErr == nil {
+		return "application/json"
+	}
+
 	kind, _ := filetype.Match(data)
 	if kind == types.Unknown {
 		return http.DetectContentType(data)
