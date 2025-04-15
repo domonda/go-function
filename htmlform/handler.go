@@ -14,7 +14,7 @@ import (
 	"github.com/ungerik/go-httpx/httperr"
 )
 
-var typeOfFileReader = function.ReflectType[fs.FileReader]()
+var typeOfFileReader = reflect.TypeFor[fs.FileReader]()
 
 type Option struct {
 	Label string

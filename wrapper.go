@@ -96,45 +96,84 @@ func (f CallWithJSONWrapperFunc) CallWithJSON(ctx context.Context, argsJSON []by
 	return f(ctx, argsJSON)
 }
 
-// NoArgNoResultWrapper returns a Wrapper for a function call
+// PlainFuncWrapper returns a Wrapper for a function call
 // without arguments and without results.
-func NoArgNoResultWrapper(name string, call func()) Wrapper {
-	return noArgNoResultWrapper{name, call}
+func PlainFuncWrapper(name string, call func()) Wrapper {
+	return plainFuncWrapper{name, call}
 }
 
-type noArgNoResultWrapper struct {
+type plainFuncWrapper struct {
 	name string
 	call func()
 }
 
-func (f noArgNoResultWrapper) String() string { return f.name }
-func (f noArgNoResultWrapper) Name() string   { return f.name }
+func (f plainFuncWrapper) String() string { return f.name }
+func (f plainFuncWrapper) Name() string   { return f.name }
 
-func (noArgNoResultWrapper) NumArgs() int                { return 0 }
-func (noArgNoResultWrapper) ContextArg() bool            { return false }
-func (noArgNoResultWrapper) NumResults() int             { return 0 }
-func (noArgNoResultWrapper) ErrorResult() bool           { return false }
-func (noArgNoResultWrapper) ArgNames() []string          { return nil }
-func (noArgNoResultWrapper) ArgDescriptions() []string   { return nil }
-func (noArgNoResultWrapper) ArgTypes() []reflect.Type    { return nil }
-func (noArgNoResultWrapper) ResultTypes() []reflect.Type { return nil }
+func (plainFuncWrapper) NumArgs() int                { return 0 }
+func (plainFuncWrapper) ContextArg() bool            { return false }
+func (plainFuncWrapper) NumResults() int             { return 0 }
+func (plainFuncWrapper) ErrorResult() bool           { return false }
+func (plainFuncWrapper) ArgNames() []string          { return nil }
+func (plainFuncWrapper) ArgDescriptions() []string   { return nil }
+func (plainFuncWrapper) ArgTypes() []reflect.Type    { return nil }
+func (plainFuncWrapper) ResultTypes() []reflect.Type { return nil }
 
-func (f noArgNoResultWrapper) Call(context.Context, []any) ([]any, error) {
+func (f plainFuncWrapper) Call(context.Context, []any) ([]any, error) {
 	f.call()
 	return nil, nil
 }
 
-func (f noArgNoResultWrapper) CallWithStrings(context.Context, ...string) ([]any, error) {
+func (f plainFuncWrapper) CallWithStrings(context.Context, ...string) ([]any, error) {
 	f.call()
 	return nil, nil
 }
 
-func (f noArgNoResultWrapper) CallWithNamedStrings(context.Context, map[string]string) ([]any, error) {
+func (f plainFuncWrapper) CallWithNamedStrings(context.Context, map[string]string) ([]any, error) {
 	f.call()
 	return nil, nil
 }
 
-func (f noArgNoResultWrapper) CallWithJSON(context.Context, []byte) (results []any, err error) {
+func (f plainFuncWrapper) CallWithJSON(context.Context, []byte) (results []any, err error) {
 	f.call()
 	return nil, nil
+}
+
+// PlainErrorFuncWrapper returns a Wrapper for a function call
+// without arguments and with one error result.
+func PlainErrorFuncWrapper(name string, call func() error) Wrapper {
+	return plainErrorFuncWrapper{name, call}
+}
+
+type plainErrorFuncWrapper struct {
+	name string
+	call func() error
+}
+
+func (f plainErrorFuncWrapper) String() string { return f.name }
+func (f plainErrorFuncWrapper) Name() string   { return f.name }
+
+func (plainErrorFuncWrapper) NumArgs() int                { return 0 }
+func (plainErrorFuncWrapper) ContextArg() bool            { return false }
+func (plainErrorFuncWrapper) NumResults() int             { return 1 }
+func (plainErrorFuncWrapper) ErrorResult() bool           { return true }
+func (plainErrorFuncWrapper) ArgNames() []string          { return nil }
+func (plainErrorFuncWrapper) ArgDescriptions() []string   { return nil }
+func (plainErrorFuncWrapper) ArgTypes() []reflect.Type    { return nil }
+func (plainErrorFuncWrapper) ResultTypes() []reflect.Type { return []reflect.Type{typeOfError} }
+
+func (f plainErrorFuncWrapper) Call(context.Context, []any) ([]any, error) {
+	return nil, f.call()
+}
+
+func (f plainErrorFuncWrapper) CallWithStrings(context.Context, ...string) ([]any, error) {
+	return nil, f.call()
+}
+
+func (f plainErrorFuncWrapper) CallWithNamedStrings(context.Context, map[string]string) ([]any, error) {
+	return nil, f.call()
+}
+
+func (f plainErrorFuncWrapper) CallWithJSON(context.Context, []byte) (results []any, err error) {
+	return nil, f.call()
 }

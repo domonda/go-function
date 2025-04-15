@@ -249,11 +249,3 @@ func (f *reflectWrapper) CallWithJSON(ctx context.Context, argsJSON []byte) (res
 	}
 	return f.call(in)
 }
-
-///////////////////////////////////////////////////////////////////////////////
-// Reflection helpers
-
-// ReflectType returns the reflect.Type of the generic type T
-func ReflectType[T any]() reflect.Type {
-	return reflect.TypeOf((*T)(nil)).Elem()
-}

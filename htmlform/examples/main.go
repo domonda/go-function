@@ -21,7 +21,7 @@ func main() {
 
 	function.StringScanners = function.StringScanners.
 		WithTypeScanner(
-			function.ReflectType[fs.FileReader](),
+			reflect.TypeFor[fs.FileReader](),
 			function.StringScannerFunc(func(sourceStr string, destPtr any) error {
 				*destPtr.(*fs.FileReader) = fs.File(sourceStr)
 				return nil
@@ -116,18 +116,18 @@ func (wrappedExampleT) ArgDescriptions() []string {
 
 func (wrappedExampleT) ArgTypes() []reflect.Type {
 	return []reflect.Type{
-		function.ReflectType[context.Context](),
-		function.ReflectType[bool](),
-		function.ReflectType[int](),
-		function.ReflectType[float64](),
-		function.ReflectType[Color](),
-		function.ReflectType[fs.FileReader](),
+		reflect.TypeFor[context.Context](),
+		reflect.TypeFor[bool](),
+		reflect.TypeFor[int](),
+		reflect.TypeFor[float64](),
+		reflect.TypeFor[Color](),
+		reflect.TypeFor[fs.FileReader](),
 	}
 }
 
 func (wrappedExampleT) ResultTypes() []reflect.Type {
 	return []reflect.Type{
-		function.ReflectType[error](),
+		reflect.TypeFor[error](),
 	}
 }
 

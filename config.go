@@ -2,6 +2,7 @@ package function
 
 import (
 	"context"
+	"reflect"
 	"time"
 )
 
@@ -32,7 +33,7 @@ var (
 )
 
 var (
-	typeOfError   = ReflectType[error]()
-	typeOfContext = ReflectType[context.Context]()
-	typeOfAny     = ReflectType[any]()
+	typeOfError   = reflect.TypeFor[error]()
+	typeOfContext = reflect.TypeFor[context.Context]()
+	typeOfAny     = reflect.TypeFor[any]()
 )
