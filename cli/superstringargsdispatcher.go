@@ -59,6 +59,22 @@ func (disp *SuperStringArgsDispatcher) MustAddDefaultCommand(description string,
 		panic(fmt.Errorf("MustAddDefaultCommand(%s): %w", description, err))
 	}
 }
+
+func (disp *SuperStringArgsDispatcher) AddCommand(command, description string, commandFunc function.Wrapper, resultsHandlers ...function.ResultsHandler) error {
+	subDisp, err := disp.AddSuperCommand(command)
+	if err != nil {
+		return err
+	}
+	return subDisp.AddDefaultCommand(description, commandFunc, resultsHandlers...)
+}
+
+func (disp *SuperStringArgsDispatcher) MustAddCommand(command, description string, commandFunc function.Wrapper, resultsHandlers ...function.ResultsHandler) {
+	err := disp.AddCommand(command, description, commandFunc, resultsHandlers...)
+	if err != nil {
+		panic(err)
+	}
+}
+
 func (disp *SuperStringArgsDispatcher) HasCommnd(superCommand string) bool {
 	sub, ok := disp.sub[superCommand]
 	if !ok {
@@ -71,7 +87,7 @@ func (disp *SuperStringArgsDispatcher) Commands() []string {
 	return slices.Sorted(maps.Keys(disp.sub))
 }
 
-func (disp *SuperStringArgsDispatcher) HasSubCommnd(superCommand, command string) bool {
+func (disp *SuperStringArgsDispatcher) HasSubCommand(superCommand, command string) bool {
 	sub, ok := disp.sub[superCommand]
 	if !ok {
 		return false
