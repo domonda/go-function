@@ -4,7 +4,7 @@ go 1.24
 
 replace github.com/domonda/go-function => ../
 
-require github.com/domonda/go-function v0.2.0 // replaced
+require github.com/domonda/go-function v0.0.0-00010101000000-000000000000 // replaced
 
 require (
 	github.com/fatih/color v1.18.0
