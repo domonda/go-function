@@ -4,33 +4,46 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"maps"
 	"net/http"
+	"os"
 	"strings"
 )
 
+// HTTPRequestArgsGetter is a function that returns a map of argument names and values
+// for a given HTTP request.
 type HTTPRequestArgsGetter func(*http.Request) (map[string]string, error)
 
-func HTTPRequestArgs(args map[string]string) HTTPRequestArgsGetter {
+// ConstHTTPRequestArgs returns a HTTPRequestArgsGetter
+// that returns a constant map of argument names and values.
+func ConstHTTPRequestArgs(args map[string]string) HTTPRequestArgsGetter {
 	return func(*http.Request) (map[string]string, error) {
 		return args, nil
 	}
 }
 
-func HTTPRequestArg(name, value string) HTTPRequestArgsGetter {
-	return HTTPRequestArgs(map[string]string{name: value})
+// ConstHTTPRequestArg returns a HTTPRequestArgsGetter
+// that returns a constant value for an argument name.
+func ConstHTTPRequestArg(name, value string) HTTPRequestArgsGetter {
+	return ConstHTTPRequestArgs(map[string]string{name: value})
 }
 
-func HTTPRequestBodyAsArg(name string) HTTPRequestArgsGetter {
+// HTTPRequestBodyAsArg returns a HTTPRequestArgsGetter
+// that returns the body of the request as the value of the argument argName.
+func HTTPRequestBodyAsArg(argName string) HTTPRequestArgsGetter {
 	return func(request *http.Request) (map[string]string, error) {
 		defer request.Body.Close()
 		body, err := io.ReadAll(request.Body)
 		if err != nil {
 			return nil, err
 		}
-		return map[string]string{name: string(body)}, nil
+		return map[string]string{argName: string(body)}, nil
 	}
 }
 
+// MergeHTTPRequestArgs returns a HTTPRequestArgsGetter
+// that merges the arguments of the given getters.
+// Later getters overwrite earlier ones.
 func MergeHTTPRequestArgs(getters ...HTTPRequestArgsGetter) HTTPRequestArgsGetter {
 	return func(request *http.Request) (map[string]string, error) {
 		args := make(map[string]string)
@@ -39,23 +52,42 @@ func MergeHTTPRequestArgs(getters ...HTTPRequestArgsGetter) HTTPRequestArgsGette
 			if err != nil {
 				return nil, err
 			}
-			for name, value := range a {
-				args[name] = value
-			}
+			maps.Copy(args, a)
 		}
 		return args, nil
 	}
 }
 
-func HTTPRequestQueryArg(name string) HTTPRequestArgsGetter {
+// HTTPRequestQueryArg returns a HTTPRequestArgsGetter
+// that returns the value of the query param queryKeyArgName
+// as the value of the argument queryKeyArgName.
+func HTTPRequestQueryArg(queryKeyArgName string) HTTPRequestArgsGetter {
 	return func(request *http.Request) (map[string]string, error) {
-		return map[string]string{name: request.URL.Query().Get(name)}, nil
+		return map[string]string{queryKeyArgName: request.URL.Query().Get(queryKeyArgName)}, nil
 	}
 }
 
-func HTTPRequestQueryAsArg(queryKey, name string) HTTPRequestArgsGetter {
+// HTTPRequestQueryAsArg returns a HTTPRequestArgsGetter
+// that returns the value of the query param queryKey
+// as the value of the argument argName.
+func HTTPRequestQueryAsArg(queryKey, argName string) HTTPRequestArgsGetter {
 	return func(request *http.Request) (map[string]string, error) {
-		return map[string]string{name: request.URL.Query().Get(queryKey)}, nil
+		return map[string]string{argName: request.URL.Query().Get(queryKey)}, nil
+	}
+}
+
+// HTTPRequestArgFromEnvVar returns a HTTPRequestArgsGetter
+// that returns the value of the environment variable envVar
+// as the value of the argument argName.
+//
+// An error is returned if the environment variable is not set.
+func HTTPRequestArgFromEnvVar(envVar, argName string) HTTPRequestArgsGetter {
+	return func(request *http.Request) (map[string]string, error) {
+		value, ok := os.LookupEnv(envVar)
+		if !ok {
+			return nil, fmt.Errorf("environment variable %s is not set", envVar)
+		}
+		return map[string]string{argName: value}, nil
 	}
 }
 
@@ -83,6 +115,10 @@ func HTTPRequestMultipartFormArgs(request *http.Request) (map[string]string, err
 	return args, nil
 }
 
+// HTTPRequestBodyJSONFieldsAsArgs returns a HTTPRequestArgsGetter
+// that parses the body of the request as JSON object
+// with the object field names as argument names
+// and the field values as argument values.
 func HTTPRequestBodyJSONFieldsAsArgs(request *http.Request) (map[string]string, error) {
 	defer request.Body.Close()
 	body, err := io.ReadAll(request.Body)
@@ -113,5 +149,4 @@ func namedStringsFromJSON(jsonObject []byte) (map[string]string, error) {
 		args[name] = string(rawJSON)
 	}
 	return args, nil
-
 }
