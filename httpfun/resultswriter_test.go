@@ -1,4 +1,4 @@
-package function_test
+package httpfun_test
 
 import (
 	"os"
@@ -6,7 +6,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/domonda/go-function"
+	"github.com/domonda/go-function/httpfun"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -29,7 +29,7 @@ func TestDetectContentType(t *testing.T) {
 			require.NoError(t, err)
 
 			// when
-			contentType := function.DetectContentType(content)
+			contentType := httpfun.DetectContentType(content)
 
 			// then
 			t.Logf("Actual content type: '%s'", contentType)

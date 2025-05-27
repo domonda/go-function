@@ -1,18 +1,21 @@
-package function
+package httpfun
 
 import (
 	"context"
 	"net/http"
 
 	"github.com/ungerik/go-httpx/httperr"
+
+	"github.com/domonda/go-function"
 )
 
-func HTTPHandler(getArgs HTTPRequestArgsGetter, function CallWithNamedStringsWrapper, resultsWriter HTTPResultsWriter, errHandlers ...httperr.Handler) http.HandlerFunc {
+// Handler returns an http.Handler for a function with a CallWithNamedStringsWrapper
+func Handler(getArgs RequestArgsFunc, function function.CallWithNamedStringsWrapper, resultsWriter ResultsWriter, errHandlers ...httperr.Handler) http.HandlerFunc {
 	return func(response http.ResponseWriter, request *http.Request) {
-		if CatchHTTPHandlerPanics {
+		if CatchHandlerPanics {
 			defer func() {
 				if p := recover(); p != nil {
-					handleErrorHTTP(httperr.AsError(p), errHandlers, response, request)
+					handleError(httperr.AsError(p), errHandlers, response, request)
 				}
 			}()
 		}
@@ -43,19 +46,19 @@ func HTTPHandler(getArgs HTTPRequestArgsGetter, function CallWithNamedStringsWra
 			// was written to, but better to err on the side
 			// of always writing the error even if it collides
 			// with some buffered response content.
-			handleErrorHTTP(err, errHandlers, response, request)
+			handleError(err, errHandlers, response, request)
 		}
 	}
 }
 
-// HTTPHandlerNoWrapper returns an http.Handler for a function without a wrapper
+// HandlerNoWrapper returns an http.Handler for a function without a wrapper
 // of type func(context.Context) ([]byte, error) that returns response bytes.
-func HTTPHandlerNoWrapper(function func(context.Context) ([]byte, error), resultsWriter HTTPResultsWriter, errHandlers ...httperr.Handler) http.HandlerFunc {
+func HandlerNoWrapper(function func(context.Context) ([]byte, error), resultsWriter ResultsWriter, errHandlers ...httperr.Handler) http.HandlerFunc {
 	return func(response http.ResponseWriter, request *http.Request) {
-		if CatchHTTPHandlerPanics {
+		if CatchHandlerPanics {
 			defer func() {
 				if p := recover(); p != nil {
-					handleErrorHTTP(httperr.AsError(p), errHandlers, response, request)
+					handleError(httperr.AsError(p), errHandlers, response, request)
 				}
 			}()
 		}
@@ -70,17 +73,17 @@ func HTTPHandlerNoWrapper(function func(context.Context) ([]byte, error), result
 			// was written to, but better to err on the side
 			// of always writing the error even if it collides
 			// with some buffered response content.
-			handleErrorHTTP(err, errHandlers, response, request)
+			handleError(err, errHandlers, response, request)
 		}
 	}
 }
 
-func handleErrorHTTP(err error, errHandlers []httperr.Handler, response http.ResponseWriter, request *http.Request) {
+func handleError(err error, errHandlers []httperr.Handler, response http.ResponseWriter, request *http.Request) {
 	if err == nil {
 		return
 	}
 	if len(errHandlers) == 0 {
-		HandleErrorHTTP(err, response, request)
+		HandleError(err, response, request)
 		return
 	}
 	for _, errHandler := range errHandlers {

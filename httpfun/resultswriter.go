@@ -1,4 +1,4 @@
-package function
+package httpfun
 
 import (
 	"bytes"
@@ -14,17 +14,17 @@ import (
 	"github.com/ungerik/go-httpx/contenttype"
 )
 
-// HTTPResultsWriter implementations write the results of a function call to an HTTP response.
-type HTTPResultsWriter interface {
+// ResultsWriter implementations write the results of a function call to an HTTP response.
+type ResultsWriter interface {
 	// WriteResults writes the results and optionally the resultErr to the response.
 	// If the method does not handle the resultErr then it should return it
 	// so it can be handled by the next writer in the chain.
 	WriteResults(results []any, resultErr error, response http.ResponseWriter, request *http.Request) error
 }
 
-type HTTPResultsWriterFunc func(results []any, resultErr error, response http.ResponseWriter, request *http.Request) error
+type ResultsWriterFunc func(results []any, resultErr error, response http.ResponseWriter, request *http.Request) error
 
-func (f HTTPResultsWriterFunc) WriteResults(results []any, resultErr error, response http.ResponseWriter, request *http.Request) error {
+func (f ResultsWriterFunc) WriteResults(results []any, resultErr error, response http.ResponseWriter, request *http.Request) error {
 	return f(results, resultErr, response, request)
 }
 
@@ -34,7 +34,7 @@ func (f HTTPResultsWriterFunc) WriteResults(results []any, resultErr error, resp
 // If the function returns an resultErr then it is returned by this method,
 // so it can be handled by the next writer in the chain.
 // Any resultErr is not handled and will be returned by this method.
-var RespondJSON HTTPResultsWriterFunc = func(results []any, resultErr error, response http.ResponseWriter, request *http.Request) error {
+var RespondJSON ResultsWriterFunc = func(results []any, resultErr error, response http.ResponseWriter, request *http.Request) error {
 	// Don't handle resultErr or context cancellation
 	if resultErr != nil || request.Context().Err() != nil {
 		return resultErr
@@ -72,7 +72,7 @@ var RespondJSON HTTPResultsWriterFunc = func(results []any, resultErr error, res
 //
 // An error is returned if the number of results does not match the number of resultKeys
 // or number of resultKeys minus one if the last result is an error.
-func RespondJSONObject(resultKeys ...string) HTTPResultsWriterFunc {
+func RespondJSONObject(resultKeys ...string) ResultsWriterFunc {
 	if len(slices.Compact(resultKeys)) != len(resultKeys) {
 		panic(fmt.Sprintf("RespondJSONObject resultKeys contains duplicates: %#v", resultKeys))
 	}
@@ -107,7 +107,7 @@ func RespondJSONObject(resultKeys ...string) HTTPResultsWriterFunc {
 
 // RespondBinary responds with contentType using the binary data from results of type []byte, string, or io.Reader.
 // Any resultErr is not handled and will be returned by this method.
-func RespondBinary(contentType string) HTTPResultsWriterFunc {
+func RespondBinary(contentType string) ResultsWriterFunc {
 	return func(results []any, resultErr error, response http.ResponseWriter, request *http.Request) (err error) {
 		// Don't handle resultErr or context cancellation
 		if resultErr != nil || request.Context().Err() != nil {
@@ -135,7 +135,7 @@ func RespondBinary(contentType string) HTTPResultsWriterFunc {
 	}
 }
 
-var RespondXML HTTPResultsWriterFunc = func(results []any, resultErr error, response http.ResponseWriter, request *http.Request) error {
+var RespondXML ResultsWriterFunc = func(results []any, resultErr error, response http.ResponseWriter, request *http.Request) error {
 	// Don't handle resultErr or context cancellation
 	if resultErr != nil || request.Context().Err() != nil {
 		return resultErr
@@ -160,7 +160,7 @@ var RespondXML HTTPResultsWriterFunc = func(results []any, resultErr error, resp
 // using fmt.Fprint to format the results.
 // Spaces are added between results when neither is a string.
 // Any resultErr is not handled and will be returned by this method.
-var RespondPlaintext HTTPResultsWriterFunc = func(results []any, resultErr error, response http.ResponseWriter, request *http.Request) error {
+var RespondPlaintext ResultsWriterFunc = func(results []any, resultErr error, response http.ResponseWriter, request *http.Request) error {
 	// Don't handle resultErr or context cancellation
 	if resultErr != nil || request.Context().Err() != nil {
 		return resultErr
@@ -172,7 +172,7 @@ var RespondPlaintext HTTPResultsWriterFunc = func(results []any, resultErr error
 	return err
 }
 
-var RespondHTML HTTPResultsWriterFunc = func(results []any, resultErr error, response http.ResponseWriter, request *http.Request) error {
+var RespondHTML ResultsWriterFunc = func(results []any, resultErr error, response http.ResponseWriter, request *http.Request) error {
 	// Don't handle resultErr or context cancellation
 	if resultErr != nil || request.Context().Err() != nil {
 		return resultErr
@@ -190,7 +190,7 @@ var RespondHTML HTTPResultsWriterFunc = func(results []any, resultErr error, res
 	return err
 }
 
-var RespondDetectContentType HTTPResultsWriterFunc = func(results []any, resultErr error, response http.ResponseWriter, request *http.Request) error {
+var RespondDetectContentType ResultsWriterFunc = func(results []any, resultErr error, response http.ResponseWriter, request *http.Request) error {
 	// Don't handle resultErr or context cancellation
 	if resultErr != nil || request.Context().Err() != nil {
 		return resultErr
@@ -208,8 +208,8 @@ var RespondDetectContentType HTTPResultsWriterFunc = func(results []any, resultE
 	return err
 }
 
-func RespondContentType(contentType string) HTTPResultsWriter {
-	return HTTPResultsWriterFunc(func(results []any, resultErr error, response http.ResponseWriter, request *http.Request) error {
+func RespondContentType(contentType string) ResultsWriter {
+	return ResultsWriterFunc(func(results []any, resultErr error, response http.ResponseWriter, request *http.Request) error {
 		// Don't handle resultErr or context cancellation
 		if resultErr != nil || request.Context().Err() != nil {
 			return resultErr
@@ -260,13 +260,13 @@ func encodeXML(response any) ([]byte, error) {
 
 // Static content HTTPResultsWriter also implement http.Handler
 var (
-	_ HTTPResultsWriter = RespondNothing
-	_ HTTPResultsWriter = RespondStaticHTML("")
-	_ HTTPResultsWriter = RespondStaticXML("")
-	_ HTTPResultsWriter = RespondStaticJSON("")
-	_ HTTPResultsWriter = RespondStaticPlaintext("")
-	_ HTTPResultsWriter = RespondRedirect("")
-	_ HTTPResultsWriter = RespondRedirectFunc(nil)
+	_ ResultsWriter = RespondNothing
+	_ ResultsWriter = RespondStaticHTML("")
+	_ ResultsWriter = RespondStaticXML("")
+	_ ResultsWriter = RespondStaticJSON("")
+	_ ResultsWriter = RespondStaticPlaintext("")
+	_ ResultsWriter = RespondRedirect("")
+	_ ResultsWriter = RespondRedirectFunc(nil)
 
 	_ http.Handler = RespondNothing
 	_ http.Handler = RespondStaticHTML("")
@@ -390,7 +390,7 @@ func (f RespondRedirectFunc) WriteResults(results []any, resultErr error, respon
 func (f RespondRedirectFunc) ServeHTTP(response http.ResponseWriter, request *http.Request) {
 	url, err := f(request)
 	if err != nil {
-		HandleErrorHTTP(err, response, request)
+		HandleError(err, response, request)
 		return
 	}
 	http.Redirect(response, request, url, http.StatusFound)

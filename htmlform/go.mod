@@ -1,6 +1,6 @@
 module github.com/domonda/go-function/htmlform
 
-go 1.24
+go 1.23
 
 replace github.com/domonda/go-function => ..
 

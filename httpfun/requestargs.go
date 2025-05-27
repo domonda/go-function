@@ -1,4 +1,4 @@
-package function
+package httpfun
 
 import (
 	"encoding/json"
@@ -10,27 +10,28 @@ import (
 	"strings"
 )
 
-// HTTPRequestArgsGetter is a function that returns a map of argument names and values
+// RequestArgsFunc is a function type that
+// returns a map of argument names and values
 // for a given HTTP request.
-type HTTPRequestArgsGetter func(*http.Request) (map[string]string, error)
+type RequestArgsFunc func(*http.Request) (map[string]string, error)
 
-// ConstHTTPRequestArgs returns a HTTPRequestArgsGetter
+// ConstRequestArgs returns a RequestArgsFunc
 // that returns a constant map of argument names and values.
-func ConstHTTPRequestArgs(args map[string]string) HTTPRequestArgsGetter {
+func ConstRequestArgs(args map[string]string) RequestArgsFunc {
 	return func(*http.Request) (map[string]string, error) {
 		return args, nil
 	}
 }
 
-// ConstHTTPRequestArg returns a HTTPRequestArgsGetter
+// ConstRequestArg returns a RequestArgsFunc
 // that returns a constant value for an argument name.
-func ConstHTTPRequestArg(name, value string) HTTPRequestArgsGetter {
-	return ConstHTTPRequestArgs(map[string]string{name: value})
+func ConstRequestArg(name, value string) RequestArgsFunc {
+	return ConstRequestArgs(map[string]string{name: value})
 }
 
-// HTTPRequestBodyAsArg returns a HTTPRequestArgsGetter
+// RequestBodyAsArg returns a RequestArgsFunc
 // that returns the body of the request as the value of the argument argName.
-func HTTPRequestBodyAsArg(argName string) HTTPRequestArgsGetter {
+func RequestBodyAsArg(argName string) RequestArgsFunc {
 	return func(request *http.Request) (map[string]string, error) {
 		defer request.Body.Close()
 		body, err := io.ReadAll(request.Body)
@@ -41,10 +42,10 @@ func HTTPRequestBodyAsArg(argName string) HTTPRequestArgsGetter {
 	}
 }
 
-// MergeHTTPRequestArgs returns a HTTPRequestArgsGetter
+// MergeRequestArgs returns a RequestArgsFunc
 // that merges the arguments of the given getters.
 // Later getters overwrite earlier ones.
-func MergeHTTPRequestArgs(getters ...HTTPRequestArgsGetter) HTTPRequestArgsGetter {
+func MergeRequestArgs(getters ...RequestArgsFunc) RequestArgsFunc {
 	return func(request *http.Request) (map[string]string, error) {
 		args := make(map[string]string)
 		for _, getArgs := range getters {
@@ -58,30 +59,61 @@ func MergeHTTPRequestArgs(getters ...HTTPRequestArgsGetter) HTTPRequestArgsGette
 	}
 }
 
-// HTTPRequestQueryArg returns a HTTPRequestArgsGetter
+// RequestQueryArg returns a RequestArgsFunc
 // that returns the value of the query param queryKeyArgName
 // as the value of the argument queryKeyArgName.
-func HTTPRequestQueryArg(queryKeyArgName string) HTTPRequestArgsGetter {
+func RequestQueryArg(queryKeyArgName string) RequestArgsFunc {
 	return func(request *http.Request) (map[string]string, error) {
 		return map[string]string{queryKeyArgName: request.URL.Query().Get(queryKeyArgName)}, nil
 	}
 }
 
-// HTTPRequestQueryAsArg returns a HTTPRequestArgsGetter
+// RequestQueryAsArg returns a RequestArgsFunc
 // that returns the value of the query param queryKey
 // as the value of the argument argName.
-func HTTPRequestQueryAsArg(queryKey, argName string) HTTPRequestArgsGetter {
+func RequestQueryAsArg(queryKey, argName string) RequestArgsFunc {
 	return func(request *http.Request) (map[string]string, error) {
 		return map[string]string{argName: request.URL.Query().Get(queryKey)}, nil
 	}
 }
 
-// HTTPRequestArgFromEnvVar returns a HTTPRequestArgsGetter
+// RequestHeaderArg returns a RequestArgsFunc
+// that returns the value of the header headerKeyArgName
+// as the value of the argument headerKeyArgName.
+func RequestHeaderArg(headerKeyArgName string) RequestArgsFunc {
+	return func(request *http.Request) (map[string]string, error) {
+		return map[string]string{headerKeyArgName: request.Header.Get(headerKeyArgName)}, nil
+	}
+}
+
+// RequestHeaderAsArg returns a RequestArgsFunc
+// that returns the value of the header headerKey
+// as the value of the argument argName.
+func RequestHeaderAsArg(headerKey, argName string) RequestArgsFunc {
+	return func(request *http.Request) (map[string]string, error) {
+		return map[string]string{argName: request.Header.Get(headerKey)}, nil
+	}
+}
+
+// RequestHeadersAsArgs returns a RequestArgsFunc
+// that returns the values of the request headers as argument values.
+// The keys of headerToArg are the header keys and the values are the argument names.
+func RequestHeadersAsArgs(headerToArg map[string]string) RequestArgsFunc {
+	return func(request *http.Request) (map[string]string, error) {
+		args := make(map[string]string)
+		for headerKey, argName := range headerToArg {
+			args[argName] = request.Header.Get(headerKey)
+		}
+		return args, nil
+	}
+}
+
+// RequestArgFromEnvVar returns a RequestArgsFunc
 // that returns the value of the environment variable envVar
 // as the value of the argument argName.
 //
 // An error is returned if the environment variable is not set.
-func HTTPRequestArgFromEnvVar(envVar, argName string) HTTPRequestArgsGetter {
+func RequestArgFromEnvVar(envVar, argName string) RequestArgsFunc {
 	return func(request *http.Request) (map[string]string, error) {
 		value, ok := os.LookupEnv(envVar)
 		if !ok {
@@ -91,9 +123,9 @@ func HTTPRequestArgFromEnvVar(envVar, argName string) HTTPRequestArgsGetter {
 	}
 }
 
-// HTTPRequestQueryArgs returns the query params of the request as string map.
+// RequestQueryArgs returns the query params of the request as string map.
 // If a query param has multiple values, they are joined with ";".
-func HTTPRequestQueryArgs(request *http.Request) (map[string]string, error) {
+func RequestQueryArgs(request *http.Request) (map[string]string, error) {
 	args := make(map[string]string)
 	for name, values := range request.URL.Query() {
 		args[name] = strings.Join(values, ";")
@@ -101,9 +133,9 @@ func HTTPRequestQueryArgs(request *http.Request) (map[string]string, error) {
 	return args, nil
 }
 
-// HTTPRequestMultipartFormArgs returns the multipart form values of the request as string map.
+// RequestMultipartFormArgs returns the multipart form values of the request as string map.
 // If a form field has multiple values, they are joined with ";".
-func HTTPRequestMultipartFormArgs(request *http.Request) (map[string]string, error) {
+func RequestMultipartFormArgs(request *http.Request) (map[string]string, error) {
 	err := request.ParseMultipartForm(1 << 20)
 	if err != nil {
 		return nil, err
@@ -115,11 +147,11 @@ func HTTPRequestMultipartFormArgs(request *http.Request) (map[string]string, err
 	return args, nil
 }
 
-// HTTPRequestBodyJSONFieldsAsArgs returns a HTTPRequestArgsGetter
+// RequestBodyJSONFieldsAsArgs returns a RequestArgsFunc
 // that parses the body of the request as JSON object
 // with the object field names as argument names
 // and the field values as argument values.
-func HTTPRequestBodyJSONFieldsAsArgs(request *http.Request) (map[string]string, error) {
+func RequestBodyJSONFieldsAsArgs(request *http.Request) (map[string]string, error) {
 	defer request.Body.Close()
 	body, err := io.ReadAll(request.Body)
 	if err != nil {

@@ -13,6 +13,7 @@ import (
 
 	"github.com/domonda/go-function"
 	"github.com/domonda/go-function/htmlform"
+	"github.com/domonda/go-function/httpfun"
 	"github.com/domonda/golog/log"
 )
 
@@ -28,7 +29,7 @@ func main() {
 			}),
 		)
 
-	handler, err := htmlform.NewHandler(wrappedExample, "Example Form", function.RespondStaticHTML("<h1>Success!</h1>"))
+	handler, err := htmlform.NewHandler(wrappedExample, "Example Form", httpfun.RespondStaticHTML("<h1>Success!</h1>"))
 	if err != nil {
 		log.FatalAndPanic(err)
 	}

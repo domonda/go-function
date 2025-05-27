@@ -3,22 +3,11 @@ package function
 import (
 	"errors"
 	"fmt"
-	"net/http"
-
-	"github.com/ungerik/go-httpx/httperr"
 )
 
 var (
 	// ErrTypeNotSupported indicates that a type is not supported
 	ErrTypeNotSupported = errors.New("type not supported")
-
-	// HandleErrorHTTP will handle a non nil error by writing it to the response.
-	// The default is to use github.com/ungerik/go-httpx/httperr.DefaultHandler.
-	HandleErrorHTTP = func(err error, response http.ResponseWriter, request *http.Request) {
-		if err != nil {
-			httperr.DefaultHandler.HandleError(err, response, request)
-		}
-	}
 )
 
 type ErrParseArgString struct {

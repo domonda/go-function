@@ -6,12 +6,13 @@ import (
 	"net/http"
 	"reflect"
 
-	"github.com/domonda/go-function"
-	"github.com/domonda/go-types"
-
 	"github.com/ungerik/go-fs"
 	"github.com/ungerik/go-fs/multipartfs"
 	"github.com/ungerik/go-httpx/httperr"
+
+	"github.com/domonda/go-function"
+	"github.com/domonda/go-function/httpfun"
+	"github.com/domonda/go-types"
 )
 
 var typeOfFileReader = reflect.TypeFor[fs.FileReader]()
@@ -43,10 +44,10 @@ type Handler struct {
 		SubmitButtonText string
 	}
 	template     *template.Template
-	resultWriter function.HTTPResultsWriter
+	resultWriter httpfun.ResultsWriter
 }
 
-func NewHandler(wrappedFunc function.Wrapper, title string, resultWriter function.HTTPResultsWriter) (handler *Handler, err error) {
+func NewHandler(wrappedFunc function.Wrapper, title string, resultWriter httpfun.ResultsWriter) (handler *Handler, err error) {
 	handler = &Handler{
 		wrappedFunc:     wrappedFunc,
 		argValidator:    make(map[string]types.ValidatErr),
@@ -65,7 +66,7 @@ func NewHandler(wrappedFunc function.Wrapper, title string, resultWriter functio
 	return handler, nil
 }
 
-func MustNewHandler(fun function.Wrapper, title string, successHandler function.HTTPResultsWriter) (handler *Handler) {
+func MustNewHandler(fun function.Wrapper, title string, successHandler httpfun.ResultsWriter) (handler *Handler) {
 	handler, err := NewHandler(fun, title, successHandler)
 	if err != nil {
 		panic(err)
@@ -100,7 +101,7 @@ func (handler *Handler) SetSubmitButtonText(text string) {
 func (handler *Handler) ServeHTTP(response http.ResponseWriter, request *http.Request) {
 	defer func() {
 		if r := recover(); r != nil {
-			function.HandleErrorHTTP(httperr.AsError(r), response, request)
+			httpfun.HandleError(httperr.AsError(r), response, request)
 		}
 	}()
 
@@ -203,7 +204,7 @@ func (handler *Handler) post(response http.ResponseWriter, request *http.Request
 
 	err = handler.resultWriter.WriteResults(results, err, response, request)
 	if err != nil {
-		function.HandleErrorHTTP(err, response, request)
+		httpfun.HandleError(err, response, request)
 	}
 }
 

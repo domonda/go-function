@@ -7,16 +7,7 @@ import (
 )
 
 var (
-	CatchHTTPHandlerPanics = true
-	PrettyPrint            = true
-	PrettyPrintIndent      = "  "
-)
-
-var (
 	StringScanners = NewTypeStringScanners(StringScannerFunc(DefaultScanString))
-
-	ArgNameTag        = "arg"
-	ArgDescriptionTag = "desc"
 
 	// TimeFormats used in that order to try parse time strings.
 	// If a time format has not time zone part,

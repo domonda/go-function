@@ -1,6 +1,6 @@
 module github.com/domonda/go-function/cmd/gen-func-wrappers
 
-go 1.24
+go 1.23
 
 require (
 	github.com/ungerik/go-astvisit v0.0.0-20250122155250-e994358a002f
