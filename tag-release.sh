@@ -21,10 +21,11 @@ fi
 echo "Tagging $VERSION with message: '$MESSAGE'"
 
 for PREFIX in "${MODULE_PATHS[@]}"; do
+    echo "  tag ${PREFIX}${VERSION}"
     git tag -a "${PREFIX}${VERSION}" -m "$MESSAGE"
 done
 
-echo "Tags to be pushed:"
+echo "Tags to be pushed"
 git push --tags --dry-run
 
 echo "Do you want to push tags to origin? (y/n)"
