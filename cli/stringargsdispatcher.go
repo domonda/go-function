@@ -3,11 +3,9 @@ package cli
 import (
 	"context"
 	"fmt"
-	"io"
 	"maps"
 	"reflect"
 	"slices"
-	"sort"
 	"strings"
 	"unicode"
 
@@ -46,14 +44,16 @@ func (f StringArgsCommandLoggerFunc) LogStringArgsCommand(command string, args [
 }
 
 type StringArgsDispatcher struct {
-	comm    map[string]*stringArgsCommand
-	loggers []StringArgsCommandLogger
+	baseCommand string
+	comm        map[string]*stringArgsCommand
+	loggers     []StringArgsCommandLogger
 }
 
-func NewStringArgsDispatcher(loggers ...StringArgsCommandLogger) *StringArgsDispatcher {
+func NewStringArgsDispatcher(baseCommand string, loggers ...StringArgsCommandLogger) *StringArgsDispatcher {
 	return &StringArgsDispatcher{
-		comm:    make(map[string]*stringArgsCommand),
-		loggers: loggers,
+		baseCommand: baseCommand,
+		comm:        make(map[string]*stringArgsCommand),
+		loggers:     loggers,
 	}
 }
 
@@ -159,17 +159,13 @@ func (disp *StringArgsDispatcher) MustDispatchCombinedCommandAndArgs(ctx context
 	return command
 }
 
-func (disp *StringArgsDispatcher) PrintCommands(appName string) {
-	list := make([]*stringArgsCommand, 0, len(disp.comm))
-	for _, cmd := range disp.comm {
-		list = append(list, cmd)
-	}
-	sort.Slice(list, func(i, j int) bool {
-		return list[i].command < list[j].command
+func (disp *StringArgsDispatcher) PrintCommands() {
+	commands := slices.SortedFunc(maps.Values(disp.comm), func(a, b *stringArgsCommand) int {
+		return strings.Compare(a.command, b.command)
 	})
 
-	for _, cmd := range list {
-		UsageColor.Printf("  %s %s %s\n", appName, cmd.command, functionArgsString(cmd.commandFunc))
+	for _, cmd := range commands {
+		UsageColor.Printf("  %s %s %s\n", disp.baseCommand, cmd.command, functionArgsString(cmd.commandFunc))
 		if cmd.description != "" {
 			DescriptionColor.Printf("      %s\n", cmd.description)
 		}
@@ -189,11 +185,26 @@ func (disp *StringArgsDispatcher) PrintCommands(appName string) {
 	}
 }
 
-func (disp *StringArgsDispatcher) PrintCommandsUsageIntro(appName string, output io.Writer) {
-	if len(disp.comm) > 0 {
-		fmt.Fprint(output, "Commands:\n")
-		disp.PrintCommands(appName)
-		fmt.Fprint(output, "Flags:\n")
+func (disp *StringArgsDispatcher) PrintCommandsUsageIntro() {
+	if len(disp.comm) == 0 {
+		return
+	}
+	fmt.Println("Commands:")
+	disp.PrintCommands()
+}
+
+func (disp *StringArgsDispatcher) PrintCompletion(args []string) {
+	prefix := ""
+	if len(args) > 0 {
+		prefix = args[0]
+	}
+	commands := slices.SortedFunc(maps.Values(disp.comm), func(a, b *stringArgsCommand) int {
+		return strings.Compare(a.command, b.command)
+	})
+	for _, cmd := range commands {
+		if strings.HasPrefix(cmd.command, prefix) {
+			fmt.Println(disp.baseCommand, cmd.command)
+		}
 	}
 }
 
