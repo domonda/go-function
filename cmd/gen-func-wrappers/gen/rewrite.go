@@ -170,7 +170,7 @@ func RewriteAstFile(fset *token.FileSet, filePkg *ast.Package, astFile *ast.File
 	if verbose {
 		fmt.Println("rewriting", filePath)
 	}
-	return os.WriteFile(filePath, rewritten, 0600)
+	return os.WriteFile(filePath, rewritten, 0644)
 }
 
 type wrapper struct {
