@@ -51,8 +51,8 @@ func parsePackage(pkgDir, excludeFilename string, onlyFuncs ...string) (pkg *ast
 				// ast.Print(fileSet, obj)
 				continue
 			}
-			funcDecl := obj.Decl.(*ast.FuncDecl)
-			if funcDecl.Recv != nil {
+			funcDecl, ok := obj.Decl.(*ast.FuncDecl)
+			if !ok || funcDecl.Recv != nil {
 				continue
 			}
 			if len(onlyFuncs) > 0 {
