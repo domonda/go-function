@@ -74,7 +74,7 @@ func (f *description) ContextArg() bool {
 }
 func (f *description) NumResults() int { return len(f.resultTypes) }
 func (f *description) ErrorResult() bool {
-	return len(f.resultTypes) > 0 && f.resultTypes[0].String() == "error"
+	return len(f.resultTypes) > 0 && f.resultTypes[len(f.resultTypes)-1].Implements(typeOfError)
 }
 func (f *description) ArgNames() []string          { return f.argNames }
 func (f *description) ArgDescriptions() []string   { return f.argDescriptions }

@@ -25,7 +25,7 @@ func checkCommandChars(command string) error {
 		return fmt.Errorf("command contains space characters: '%s'", command)
 	}
 	if strings.IndexFunc(command, unicode.IsGraphic) == -1 {
-		return fmt.Errorf("command contains non graphc characters: '%s'", command)
+		return fmt.Errorf("command contains non graphic characters: '%s'", command)
 	}
 	if strings.ContainsAny(command, "|&;()<>") {
 		return fmt.Errorf("command contains invalid characters: '%s'", command)
@@ -99,12 +99,12 @@ func (disp *StringArgsDispatcher) MustAddDefaultCommand(description string, comm
 	}
 }
 
-func (disp *StringArgsDispatcher) HasCommnd(command string) bool {
+func (disp *StringArgsDispatcher) HasCommand(command string) bool {
 	_, found := disp.comm[command]
 	return found
 }
 
-func (disp *StringArgsDispatcher) HasDefaultCommnd() bool {
+func (disp *StringArgsDispatcher) HasDefaultCommand() bool {
 	_, found := disp.comm[DefaultCommand]
 	return found
 }

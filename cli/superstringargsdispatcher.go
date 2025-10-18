@@ -77,12 +77,12 @@ func (disp *SuperStringArgsDispatcher) MustAddCommand(command, description strin
 	}
 }
 
-func (disp *SuperStringArgsDispatcher) HasCommnd(superCommand string) bool {
+func (disp *SuperStringArgsDispatcher) HasCommand(superCommand string) bool {
 	sub, ok := disp.sub[superCommand]
 	if !ok {
 		return false
 	}
-	return sub.HasDefaultCommnd()
+	return sub.HasDefaultCommand()
 }
 
 func (disp *SuperStringArgsDispatcher) Commands() []string {
@@ -94,7 +94,7 @@ func (disp *SuperStringArgsDispatcher) HasSubCommand(superCommand, command strin
 	if !ok {
 		return false
 	}
-	return sub.HasCommnd(command)
+	return sub.HasCommand(command)
 }
 
 func (disp *SuperStringArgsDispatcher) SubCommands(superCommand string) []string {
@@ -143,7 +143,7 @@ func (disp *SuperStringArgsDispatcher) DispatchCombinedCommandAndArgs(ctx contex
 	default:
 		superCommand = commandAndArgs[0]
 		sub, ok := disp.sub[superCommand]
-		if ok && sub.HasDefaultCommnd() {
+		if ok && sub.HasDefaultCommand() {
 			command = DefaultCommand
 			args = commandAndArgs[1:]
 		} else {

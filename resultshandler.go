@@ -103,7 +103,7 @@ func makeResultsPrintable(results []any) error {
 		default:
 			switch v := derefValue(reflect.ValueOf(result)); v.Kind() {
 			case reflect.Float32, reflect.Float64:
-				// Print with up to 12 decimals precission
+				// Print with up to 12 decimals precision
 				results[i] = strings.TrimRight(fmt.Sprintf("%.12f", v.Interface()), "0")
 
 			case reflect.Struct, reflect.Map, reflect.Slice, reflect.Array:
