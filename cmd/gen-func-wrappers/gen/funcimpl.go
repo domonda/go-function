@@ -10,18 +10,41 @@ import (
 	"github.com/ungerik/go-astvisit"
 )
 
+// Impl represents which wrapper interfaces should be implemented.
+// Multiple interfaces can be combined using bitwise OR.
 type Impl int
 
 const (
+	// ImplDescription implements function.Description interface
 	ImplDescription Impl = 1 << iota
+
+	// ImplCallWrapper implements function.CallWrapper interface
 	ImplCallWrapper
+
+	// ImplCallWithStringsWrapper implements function.CallWithStringsWrapper interface
 	ImplCallWithStringsWrapper
+
+	// ImplCallWithNamedStringsWrapper implements function.CallWithNamedStringsWrapper interface
 	ImplCallWithNamedStringsWrapper
+
+	// ImplCallWithJSONWrapper implements function.CallWithJSONWrapper interface
 	ImplCallWithJSONWrapper
 
+	// ImplWrapper implements the full function.Wrapper interface (all of the above)
 	ImplWrapper = ImplDescription | ImplCallWrapper | ImplCallWithStringsWrapper | ImplCallWithNamedStringsWrapper | ImplCallWithJSONWrapper
 )
 
+// ImplFromString parses a string representation of an interface name into an Impl value.
+//
+// Supported strings:
+//   - "function.Wrapper" -> ImplWrapper (all interfaces)
+//   - "function.Description" -> ImplDescription
+//   - "function.CallWrapper" -> ImplCallWrapper
+//   - "function.CallWithStringsWrapper" -> ImplCallWithStringsWrapper
+//   - "function.CallWithNamedStringsWrapper" -> ImplCallWithNamedStringsWrapper
+//   - "function.ImplCallWithJSONWrapper" -> ImplCallWithJSONWrapper
+//
+// Returns an error if the string doesn't match any known interface.
 func ImplFromString(str string) (Impl, error) {
 	switch str {
 	case "function.Wrapper":
@@ -41,6 +64,8 @@ func ImplFromString(str string) (Impl, error) {
 	}
 }
 
+// String returns the string representation of the Impl value.
+// For combined implementations (bitwise OR), it returns a generic "Impl(n)" format.
 func (impl Impl) String() string {
 	switch impl {
 	case ImplWrapper:
@@ -60,6 +85,36 @@ func (impl Impl) String() string {
 	}
 }
 
+// WriteFunctionWrapper generates a complete wrapper implementation for a function.
+// This is the core code generation logic that produces type-safe wrapper methods.
+//
+// Parameters:
+//   - w: Writer to output generated code to
+//   - funcFile: The AST file containing the function (needed for imports)
+//   - funcDecl: The function declaration to wrap
+//   - implType: Name of the generated wrapper type (e.g., "myFunctionT")
+//   - funcPackage: Package name qualifier for the wrapped function (empty string if same package)
+//   - neededImportLines: Map to collect all imports needed by the generated code
+//   - jsonTypeReplacements: Map of interface types to concrete types for JSON unmarshalling
+//
+// Returns:
+//   - error if code generation fails
+//
+// The generated code includes:
+//  1. Wrapper type declaration (struct{})
+//  2. String() method (always generated)
+//  3. Description methods (if ImplDescription is set): Name, NumArgs, ArgNames, ArgTypes, etc.
+//  4. Call method (if ImplCallWrapper is set): Calls function with []any arguments
+//  5. CallWithStrings method (if ImplCallWithStringsWrapper is set): Parses string arguments
+//  6. CallWithNamedStrings method (if ImplCallWithNamedStringsWrapper is set): Uses map[string]string
+//  7. CallWithJSON method (if ImplCallWithJSONWrapper is set): Unmarshals JSON to arguments
+//
+// The method handles:
+//  - context.Context as first argument (automatic detection and handling)
+//  - Variadic parameters (...type)
+//  - Error return values (automatic error result detection)
+//  - Type conversions for string parsing
+//  - Proper argument descriptions from function comments
 func (impl Impl) WriteFunctionWrapper(w io.Writer, funcFile *ast.File, funcDecl *ast.FuncDecl, implType, funcPackage string, neededImportLines map[string]struct{}, jsonTypeReplacements map[string]string) error {
 	var (
 		argNames        = funcTypeArgNames(funcDecl.Type)
@@ -444,11 +499,32 @@ func (impl Impl) WriteFunctionWrapper(w io.Writer, funcFile *ast.File, funcDecl 
 // 	return b.String(), nil
 // }
 
+// reflectTypeOfTypeName generates code for obtaining a reflect.Type for a given type name.
+// It uses reflect.TypeFor which is the modern generic-based approach.
+//
+// Variadic parameters (...T) are converted to slices ([]T) before creating the reflect.Type.
+//
+// Example:
+//   - "string" -> "reflect.TypeFor[string]()"
+//   - "...int" -> "reflect.TypeFor[[]int]()"
 func reflectTypeOfTypeName(typeName string) string {
 	typeName = strings.Replace(typeName, "...", "[]", 1)
 	return fmt.Sprintf("reflect.TypeFor[%s]()", typeName)
 }
 
+// exportedName converts a variable name to an exported (capitalized) name.
+// This is used when generating struct fields for CallWithJSON argument unmarshalling,
+// since JSON struct fields must be exported.
+//
+// Special cases:
+//   - "id" -> "ID" (common acronym)
+//   - Names starting with known acronyms get fully uppercased (e.g., "apiKey" -> "APIKey")
+//
+// Examples:
+//   - "name" -> "Name"
+//   - "userID" -> "UserID"
+//   - "apiKey" -> "APIKey"
+//   - "htmlContent" -> "HTMLContent"
 func exportedName(name string) string {
 	if name == "id" {
 		return "ID"
@@ -463,6 +539,8 @@ func exportedName(name string) string {
 	return strings.ToUpper(name[:numUpper]) + name[numUpper:]
 }
 
+// allUpper lists common acronyms that should be fully uppercased in exported names.
+// This is used by exportedName to properly capitalize field names like "apiKey" -> "APIKey".
 var allUpper = []string{
 	"acl",
 	"api",

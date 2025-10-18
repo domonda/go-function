@@ -9,11 +9,27 @@ import (
 	"strings"
 )
 
+// funcDeclInFile associates a function declaration with its containing file.
+// This is needed because imports and other context are file-specific.
 type funcDeclInFile struct {
 	Decl *ast.FuncDecl
 	File *ast.File
 }
 
+// parsePackage parses all Go files in a directory and extracts function declarations.
+//
+// Parameters:
+//   - pkgDir: Directory containing the package source files
+//   - excludeFilename: Name of file to skip (typically the generated output file)
+//   - onlyFuncs: Optional list of specific function names to parse; if empty, all exported functions are parsed
+//
+// Returns:
+//   - pkg: The parsed package
+//   - funcs: Map of function names to their declarations
+//   - err: Error if directory contains multiple packages or parsing fails
+//
+// The function filters out test files (_test.go) and the main package automatically.
+// Only exported functions are included unless specific names are requested via onlyFuncs.
 func parsePackage(pkgDir, excludeFilename string, onlyFuncs ...string) (pkg *ast.Package, funcs map[string]funcDeclInFile, err error) {
 	fset := token.NewFileSet()
 	pkgs, err := parser.ParseDir(fset, pkgDir, filterGoFiles(excludeFilename), 0)
@@ -70,6 +86,18 @@ func parsePackage(pkgDir, excludeFilename string, onlyFuncs ...string) (pkg *ast
 	return pkg, funcs, nil
 }
 
+// filterGoFiles creates a file filter function that excludes specified files and test files.
+// This is used by the Go parser to determine which files to parse in a directory.
+//
+// Parameters:
+//   - excludeFilenames: Names of files to exclude from parsing (e.g., previously generated files)
+//
+// Returns:
+//   - A filter function suitable for parser.ParseDir that returns true for files to include
+//
+// The filter automatically excludes:
+//   - Files in the excludeFilenames list
+//   - All test files ending with _test.go
 func filterGoFiles(excludeFilenames ...string) func(info os.FileInfo) bool {
 	return func(info os.FileInfo) bool {
 		name := info.Name()
@@ -85,6 +113,12 @@ func filterGoFiles(excludeFilenames ...string) func(info os.FileInfo) bool {
 	}
 }
 
+// filterOutTests creates a file filter that excludes all test files.
+// This is used when parsing packages for function declarations.
+//
+// Returns:
+//   - true if the file should be included (not a test file)
+//   - false if the file should be excluded (is a test file)
 func filterOutTests(info os.FileInfo) bool {
 	if strings.HasSuffix(info.Name(), "_test.go") {
 		return false

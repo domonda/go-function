@@ -12,15 +12,38 @@ import (
 )
 
 var (
-	// genFilename   string
-	// namePrefix    string
-	// exportedFuncs bool
+	// replaceForJSON specifies type replacements for JSON unmarshalling.
+	// Format: "InterfaceType:ImplementationType,..."
+	// Example: "fs.FileReader:fs.File"
 	replaceForJSON string
-	verbose        bool
-	printOnly      bool
-	printHelp      bool
+
+	// verbose controls whether to print detailed generation information.
+	verbose bool
+
+	// printOnly prints generated code to stdout instead of writing files.
+	printOnly bool
+
+	// printHelp prints usage information and exits.
+	printHelp bool
 )
 
+// main is the entry point for the gen-func-wrappers code generation tool.
+// It processes command-line flags, validates the target path, and invokes
+// the code generator on the specified files or directories.
+//
+// Usage:
+//
+//	gen-func-wrappers [flags] [path]
+//
+// The path argument can be:
+//   - Empty: Processes current working directory
+//   - A directory: Processes that directory
+//   - A directory with "...": Processes recursively (e.g., "./...")
+//   - A file: Processes single file
+//
+// Exit codes:
+//   - 0: Success
+//   - 2: Error (invalid arguments or generation failure)
 func main() {
 	// flag.BoolVar(&exportedFuncs, "exported", false, "generate function.Wrapper implementation types exported package functions")
 	// flag.StringVar(&genFilename, "genfile", "generated.go", "name of the file to be generated")
@@ -71,7 +94,9 @@ func main() {
 		}
 	}
 
-	// TODO replace hard coded prefix with config option and auto-detection
+	// TODO-eh-251018 replace hard coded prefix with config option and auto-detection
+	// localImportPrefixes tells the import formatter which packages are "local"
+	// and should be grouped separately from standard library and third-party imports.
 	localImportPrefixes := []string{"github.com/domonda/"}
 
 	var printOnlyWriter io.Writer

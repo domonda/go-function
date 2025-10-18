@@ -11,16 +11,42 @@ import (
 	"time"
 )
 
-// ScanString uses the configured DefaultStringScanner
-// to scan sourceStr to destPtr.
+// ScanString converts a string to the type pointed to by destPtr.
+// It uses the globally configured StringScanners to perform type conversion.
+//
+// Supported conversions include:
+//   - Basic types: int, float, bool, string, byte slice
+//   - Time types: time.Time (multiple formats), time.Duration
+//   - Pointers: "nil" or "null" converts to nil
+//   - Slices/arrays: JSON-like syntax [1,2,3] or ["a","b"]
+//   - Structs: JSON object syntax
+//   - Custom types: encoding.TextUnmarshaler, json.Unmarshaler, or types with SetNull() method
+//
+// Example:
+//
+//	var i int
+//	err := ScanString("42", &i)  // i = 42
+//
+//	var t time.Time
+//	err := ScanString("2024-01-15", &t)
+//
+//	var slice []int
+//	err := ScanString("[1,2,3]", &slice)  // slice = []int{1,2,3}
 func ScanString(sourceStr string, destPtr any) error {
 	return StringScanners.ScanString(sourceStr, destPtr)
 }
 
-// ScanStrings uses the configured DefaultStringScanner
-// to scan sourceStrings to destPtrs.
-// If the number of sourceStrings and destPtrs is not identical
-// then only the lower number of either will be scanned.
+// ScanStrings converts multiple strings to their respective destination types.
+// It scans sourceStrings[i] into destPtrs[i] for each index.
+// If the slices have different lengths, only the minimum number of elements are scanned.
+// Returns an error on the first conversion failure.
+//
+// Example:
+//
+//	var a int
+//	var b string
+//	var c bool
+//	err := ScanStrings([]string{"42", "hello", "true"}, &a, &b, &c)
 func ScanStrings(sourceStrings []string, destPtrs ...any) error {
 	l := len(sourceStrings)
 	if ll := len(destPtrs); ll < l {
@@ -35,16 +61,30 @@ func ScanStrings(sourceStrings []string, destPtrs ...any) error {
 	return nil
 }
 
+// StringScanner defines the interface for converting strings to typed values.
+// Custom implementations can be registered via TypeStringScanners to add
+// support for additional types or override default conversion behavior.
 type StringScanner interface {
 	ScanString(sourceStr string, destPtr any) error
 }
 
+// StringScannerFunc is a function type that implements StringScanner.
+// It allows standalone functions to be used as StringScanners.
 type StringScannerFunc func(sourceStr string, destPtr any) error
 
 func (f StringScannerFunc) ScanString(sourceStr string, destPtr any) error {
 	return f(sourceStr, destPtr)
 }
 
+// DefaultScanString is the default string-to-type conversion function.
+// It validates that destPtr is a non-nil pointer and delegates to scanString
+// for the actual conversion logic.
+//
+// Special string values:
+//   - Empty string, "nil", or "null" are treated as zero/nil values
+//   - Whitespace is trimmed for most types (except string itself)
+//
+// Returns an error if destPtr is nil, not a pointer, or conversion fails.
 func DefaultScanString(sourceStr string, destPtr any) (err error) {
 	if destPtr == nil {
 		return errors.New("destination pointer is nil")
@@ -59,6 +99,18 @@ func DefaultScanString(sourceStr string, destPtr any) (err error) {
 	return scanString(sourceStr, destPtrVal.Elem())
 }
 
+// scanString is the internal implementation that converts sourceStr to destVal.
+// It handles type-specific conversion logic for all supported types.
+//
+// The conversion strategy is:
+// 1. Check for types with SetNull() method for nil values
+// 2. Type switch on common pointer types (string, error, time, etc.)
+// 3. Check for encoding.TextUnmarshaler interface
+// 4. Check for json.Unmarshaler interface
+// 5. Reflection-based conversion by Kind (bool, int, float, slice, etc.)
+// 6. Fallback to fmt.Sscan for any remaining types
+//
+// This function is performance-critical and is called for every argument conversion.
 func scanString(sourceStr string, destVal reflect.Value) (err error) {
 	var (
 		destPtr    = destVal.Addr().Interface()
@@ -266,7 +318,7 @@ func scanString(sourceStr string, destVal reflect.Value) (err error) {
 		if len(sourceStrings) != arrayLen {
 			return fmt.Errorf("array value %q needs to have %d elements, but has %d", sourceStr, arrayLen, len(sourceStrings))
 		}
-		for i := 0; i < arrayLen; i++ {
+		for i := range arrayLen {
 			err := scanString(sourceStrings[i], destVal.Index(i))
 			if err != nil {
 				return err
@@ -292,6 +344,23 @@ func scanString(sourceStr string, destVal reflect.Value) (err error) {
 	return nil
 }
 
+// sliceLiteralFields parses a JSON-like slice literal string into individual field strings.
+// It handles nested structures by tracking brace and bracket depth, and respects quoted strings.
+//
+// Examples:
+//   - "[1,2,3]" -> ["1", "2", "3"]
+//   - `["a","b"]` -> [`"a"`, `"b"`]
+//   - "[[1,2],[3,4]]" -> ["[1,2]", "[3,4]"]
+//   - `[{"key":"value"},null]` -> [`{"key":"value"}`, "null"]
+//
+// This is a complex state machine parser that carefully handles:
+//   - Nested objects {...} and arrays [...]
+//   - Quoted strings with escaped quotes
+//   - Comma separation at the top level only
+//   - Proper validation of bracket matching
+//
+// Returns an error if the string doesn't start with '[', end with ']',
+// or has unbalanced brackets/braces.
 func sliceLiteralFields(sourceStr string) (fields []string, err error) {
 	if !strings.HasPrefix(sourceStr, "[") {
 		return nil, fmt.Errorf("slice value %q does not begin with '['", sourceStr)
@@ -300,11 +369,11 @@ func sliceLiteralFields(sourceStr string) (fields []string, err error) {
 		return nil, fmt.Errorf("slice value %q does not end with ']'", sourceStr)
 	}
 	var (
-		objectDepth  = 0
-		bracketDepth = 0
-		rLast        rune
-		withinQuote  rune
-		begin        = 1
+		objectDepth  = 0  // Tracks nesting depth of {} braces
+		bracketDepth = 0  // Tracks nesting depth of [] brackets
+		rLast        rune // Previous rune (for escape detection)
+		withinQuote  rune // Non-zero when inside quotes ('"')
+		begin        = 1  // Start index of current field
 	)
 	for i, r := range sourceStr {
 		if withinQuote != 0 {

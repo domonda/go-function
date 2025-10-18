@@ -13,6 +13,28 @@ import (
 	"github.com/ungerik/go-astvisit"
 )
 
+// RewriteDir processes a directory (and optionally subdirectories) to rewrite wrapper declarations.
+// This is the main entry point for the code generator when invoked on directories.
+//
+// Parameters:
+//   - path: Directory path to process; append "..." for recursive processing
+//   - verbose: If true, print detailed information about processing
+//   - printOnly: If not nil, print generated code to this writer instead of modifying files
+//   - jsonTypeReplacements: Map of interface types to concrete types for JSON unmarshalling
+//   - localImportPrefixes: Import path prefixes to treat as "local" for import grouping
+//
+// Returns:
+//   - error if any file processing fails
+//
+// The function:
+//  1. Checks if path ends with "..." for recursive processing
+//  2. Processes all Go files in the directory
+//  3. If recursive, processes all subdirectories (excluding hidden dirs and node_modules)
+//  4. Skips test files (_test.go)
+//
+// Example:
+//
+//	err := RewriteDir("./pkg/mypackage/...", true, nil, nil, []string{"github.com/myorg/"})
 func RewriteDir(path string, verbose bool, printOnly io.Writer, jsonTypeReplacements map[string]string, localImportPrefixes []string) (err error) {
 	recursive := strings.HasSuffix(path, "...")
 	if recursive {
@@ -62,6 +84,22 @@ func RewriteDir(path string, verbose bool, printOnly io.Writer, jsonTypeReplacem
 	return nil
 }
 
+// RewriteFile processes a single Go source file to rewrite wrapper declarations.
+//
+// Parameters:
+//   - filePath: Path to the Go source file to process
+//   - verbose: If true, print detailed information about processing
+//   - printOnly: If not nil, print generated code to this writer instead of modifying file
+//   - jsonTypeReplacements: Map of interface types to concrete types for JSON unmarshalling
+//   - localImportPrefixes: Import path prefixes to treat as "local" for import grouping
+//
+// Returns:
+//   - error if file doesn't exist, is a directory, or processing fails
+//
+// The function:
+//  1. Parses the package containing the file
+//  2. Calls RewriteAstFile to perform the actual rewriting
+//  3. Writes the modified content back to the file (or prints it)
 func RewriteFile(filePath string, verbose bool, printOnly io.Writer, jsonTypeReplacements map[string]string, localImportPrefixes []string) (err error) {
 	filePath = filepath.Clean(filePath)
 	fileInfo, err := os.Stat(filePath)
@@ -79,6 +117,33 @@ func RewriteFile(filePath string, verbose bool, printOnly io.Writer, jsonTypeRep
 	return RewriteAstFile(fset, pkg, pkg.Files[filePath], filePath, verbose, printOnly, jsonTypeReplacements, localImportPrefixes)
 }
 
+// RewriteAstFile is the core rewriting logic that processes an AST file.
+// This function performs the actual wrapper code generation and replacement.
+//
+// Parameters:
+//   - fset: Token file set for position information
+//   - filePkg: The package containing the file
+//   - astFile: The parsed AST of the file to process
+//   - filePath: Original file path (for error messages and writing)
+//   - verbose: If true, print detailed information
+//   - printTo: If not nil, print to this writer instead of modifying file
+//   - jsonTypeReplacements: Map of interface types to concrete types for JSON
+//   - localImportPrefixes: Import path prefixes to treat as "local"
+//
+// Returns:
+//   - error if wrapper generation or file writing fails
+//
+// The function:
+//  1. Scans the AST for wrapper declarations (TODO calls or implementation comments)
+//  2. Finds the wrapped function's declaration in the package or imports
+//  3. Generates wrapper implementation code using WriteFunctionWrapper
+//  4. Replaces old declarations with generated code using AST node replacements
+//  5. Adds missing imports automatically
+//  6. Formats the result and writes it back
+//
+// Wrapper declarations are found by:
+//   - Variable assignments with TODO calls: var x = function.WrapperTODO(F)
+//   - Implementation comments: // myWrapper wraps F as function.Wrapper (generated code)
 func RewriteAstFile(fset *token.FileSet, filePkg *ast.Package, astFile *ast.File, filePath string, verbose bool, printTo io.Writer, jsonTypeReplacements map[string]string, localImportPrefixes []string) (err error) {
 	filePath = filepath.Clean(filePath)
 
@@ -173,14 +238,22 @@ func RewriteAstFile(fset *token.FileSet, filePkg *ast.Package, astFile *ast.File
 	return os.WriteFile(filePath, rewritten, 0644)
 }
 
+// wrapper represents a function wrapper declaration found in source code.
+// It contains all information needed to generate the wrapper implementation.
 type wrapper struct {
-	VarName     string
-	WrappedFunc string
-	Type        string
-	Nodes       []ast.Node
-	Impl        Impl
+	VarName     string      // Name of the wrapper variable (e.g., "myWrapper")
+	WrappedFunc string      // Full name of the wrapped function (e.g., "pkg.MyFunc" or "MyFunc")
+	Type        string      // Name of the wrapper type (e.g., "myWrapperT")
+	Nodes       []ast.Node  // All AST nodes to be replaced (comments, var, type, methods)
+	Impl        Impl        // Which wrapper interfaces to implement
 }
 
+// WrappedFuncPkgAndFuncName splits the WrappedFunc into package and function name.
+// Returns empty package name if the function is in the same package (no dot).
+//
+// Examples:
+//   - "MyFunc" -> ("", "MyFunc")
+//   - "pkg.MyFunc" -> ("pkg", "MyFunc")
 func (impl *wrapper) WrappedFuncPkgAndFuncName() (pkgName, funcName string) {
 	dot := strings.IndexByte(impl.WrappedFunc, '.')
 	if dot == -1 {
@@ -189,6 +262,27 @@ func (impl *wrapper) WrappedFuncPkgAndFuncName() (pkgName, funcName string) {
 	return impl.WrappedFunc[:dot], impl.WrappedFunc[dot+1:]
 }
 
+// findFunctionWrappers scans an AST file for wrapper declarations.
+// It recognizes two declaration patterns:
+//
+// Pattern 1: TODO function call
+//
+//	var myWrapper = function.WrapperTODO(MyFunction)
+//
+// Pattern 2: Implementation comment with var and type
+//
+//	// myWrapper wraps MyFunction as function.Wrapper (generated code)
+//	var myWrapper myWrapperT
+//
+//	// myWrapperT wraps MyFunction as function.Wrapper (generated code)
+//	type myWrapperT struct{}
+//
+// The function also collects all method declarations that belong to wrapper types
+// so they can be replaced along with the type declaration.
+//
+// Returns:
+//   - A slice of wrapper structs in declaration order, each containing all AST nodes
+//     that need to be replaced during code generation
 func findFunctionWrappers(_ *token.FileSet, file *ast.File) []*wrapper {
 	ordered := make([]*wrapper, 0)
 	named := make(map[string]*wrapper)
@@ -318,15 +412,24 @@ func findFunctionWrappers(_ *token.FileSet, file *ast.File) []*wrapper {
 	return ordered
 }
 
-// parseImplementsComment parses a comment that indicates the wrapped function
-// and what interface is implemented
+// parseImplementsComment extracts wrapper information from a generated code comment.
+// The comment format is:
 //
-// Example:
+//	{implementor} wraps {function} as {interface} (generated code)
+//
+// Parameters:
+//   - implementor: Expected name of the wrapper (var or type name)
+//   - comment: The full comment text to parse
+//
+// Returns:
+//   - wrappedFunc: Name of the function being wrapped (e.g., "pkg.MyFunc")
+//   - impl: Which wrapper interfaces to implement
+//   - err: Error if comment doesn't match expected format
+//
+// Examples:
 //
 //	// documentCanUserRead wraps document.CanUserRead as function.Wrapper (generated code)
 //	var documentCanUserRead documentCanUserReadT
-//
-// or:
 //
 //	// documentCanUserReadT wraps document.CanUserRead as function.Wrapper (generated code)
 //	type documentCanUserReadT struct{}

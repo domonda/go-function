@@ -9,7 +9,35 @@ import (
 	"github.com/domonda/go-function"
 )
 
-// Handler returns an http.Handler for a function with a CallWithNamedStringsWrapper
+// Handler creates an http.HandlerFunc from a wrapped function.
+//
+// Parameters:
+//   - getArgs: Extracts function arguments from the HTTP request (can be nil for no args)
+//   - function: The wrapped function to execute
+//   - resultsWriter: Formats and writes results to the response (can be nil for no response)
+//   - errHandlers: Optional custom error handlers (uses global HandleError if empty)
+//
+// The handler:
+//   - Recovers from panics if CatchHandlerPanics is true
+//   - Parses arguments from the request using getArgs
+//   - Executes the wrapped function with request.Context()
+//   - Writes results using resultsWriter
+//   - Handles errors via errHandlers or global HandleError
+//
+// Example:
+//
+//	func Calculate(ctx context.Context, a, b int) (int, error) {
+//	    return a + b, nil
+//	}
+//
+//	handler := httpfun.Handler(
+//	    httpfun.RequestQueryArgs,
+//	    function.MustReflectWrapper("Calculate", Calculate),
+//	    httpfun.RespondJSON,
+//	)
+//	http.Handle("/calculate", handler)
+//
+// Usage: GET /calculate?a=5&b=3 returns: 8
 func Handler(getArgs RequestArgsFunc, function function.CallWithNamedStringsWrapper, resultsWriter ResultsWriter, errHandlers ...httperr.Handler) http.HandlerFunc {
 	return func(response http.ResponseWriter, request *http.Request) {
 		if CatchHandlerPanics {
@@ -51,8 +79,27 @@ func Handler(getArgs RequestArgsFunc, function function.CallWithNamedStringsWrap
 	}
 }
 
-// HandlerNoWrapper returns an http.Handler for a function without a wrapper
-// of type func(context.Context) ([]byte, error) that returns response bytes.
+// HandlerNoWrapper creates an http.HandlerFunc from a simple function without using wrappers.
+// The function must have the signature: func(context.Context) ([]byte, error)
+//
+// This is useful for simple handlers that don't need argument parsing,
+// or when you want to handle the request directly.
+//
+// Parameters:
+//   - function: Function returning response bytes
+//   - resultsWriter: Formats and writes the bytes to the response
+//   - errHandlers: Optional custom error handlers
+//
+// Example:
+//
+//	func GetStatus(ctx context.Context) ([]byte, error) {
+//	    return []byte(`{"status":"ok"}`), nil
+//	}
+//
+//	http.Handle("/status", httpfun.HandlerNoWrapper(
+//	    GetStatus,
+//	    httpfun.RespondJSON,
+//	))
 func HandlerNoWrapper(function func(context.Context) ([]byte, error), resultsWriter ResultsWriter, errHandlers ...httperr.Handler) http.HandlerFunc {
 	return func(response http.ResponseWriter, request *http.Request) {
 		if CatchHandlerPanics {
@@ -78,6 +125,9 @@ func HandlerNoWrapper(function func(context.Context) ([]byte, error), resultsWri
 	}
 }
 
+// handleError routes errors to the appropriate error handler.
+// If custom errHandlers are provided, they're called in order.
+// Otherwise, the global HandleError function is used.
 func handleError(err error, errHandlers []httperr.Handler, response http.ResponseWriter, request *http.Request) {
 	if err == nil {
 		return

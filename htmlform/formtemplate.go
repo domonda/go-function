@@ -1,5 +1,26 @@
 package htmlform
 
+// FormTemplate is the default HTML template used to render forms.
+// It supports multiple input types including text, number, checkbox, select, textarea, and file.
+//
+// The template expects a struct with:
+//   - Title: Page title and heading
+//   - Fields: Slice of formField (Name, Label, Type, Value, Required, Options)
+//   - SubmitButtonText: Text for the submit button
+//
+// You can customize this template by parsing your own HTML template
+// and assigning it to handler.template after creating the handler.
+//
+// The template handles these field types specially:
+//   - checkbox: Inline label, checked state support
+//   - select: Dropdown with options, selected value support
+//   - textarea: Multi-line text with 40 cols × 5 rows
+//   - all others: Standard <input> tags with type attribute
+//
+// Example customization:
+//
+//	handler, _ := htmlform.NewHandler(wrapper, "My Form", resultWriter)
+//	handler.template, _ = template.New("form").Parse(myCustomTemplate)
 var FormTemplate = `
 <!DOCTYPE html>
 <html lang="en">
