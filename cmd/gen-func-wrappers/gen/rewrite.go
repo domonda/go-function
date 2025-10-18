@@ -188,7 +188,7 @@ func RewriteAstFile(fset *token.FileSet, filePkg *ast.Package, astFile *ast.File
 		// fmt.Fprintf(&newSrc, "// %s\n\n", impl.WrappedFunc)
 		fmt.Fprintf(&repl, "// %s wraps %s as %s (generated code)\n", wrapper.VarName, wrapper.WrappedFunc, wrapper.Impl)
 		fmt.Fprintf(&repl, "var %[1]s %[1]sT\n\n", wrapper.VarName)
-		err = wrapper.Impl.WriteFunctionWrapper(&repl, wrappedFunc.File, wrappedFunc.Decl, wrapper.VarName+"T", wrappedFuncPackage, neededImportLines, jsonTypeReplacements)
+		err = wrapper.Impl.WriteFunctionWrapper(&repl, wrappedFunc.File, wrappedFunc.Decl, wrapper.VarName+"T", wrappedFuncPackage, neededImportLines, jsonTypeReplacements, astFile.Imports)
 		if err != nil {
 			return err
 		}

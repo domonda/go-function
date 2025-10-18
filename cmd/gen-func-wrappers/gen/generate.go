@@ -57,12 +57,14 @@ func PackageFunctions(pkgDir, genFilename, namePrefix string, printOnly bool, js
 		`"context"`: {},
 		`function "github.com/domonda/go-function"`: {},
 	}
+	// For the generate approach, there's no target file yet, so pass nil
+	// (no remapping needed since there's no existing imports to conflict with)
 	for _, fun := range funcs {
-		err = gatherFieldListImports(fun.File, fun.Decl.Type.Params, importLines)
+		_, err = gatherFieldListImports(fun.File, fun.Decl.Type.Params, importLines, nil)
 		if err != nil {
 			return err
 		}
-		err = gatherFieldListImports(fun.File, fun.Decl.Type.Results, importLines)
+		_, err = gatherFieldListImports(fun.File, fun.Decl.Type.Results, importLines, nil)
 		if err != nil {
 			return err
 		}
@@ -86,7 +88,7 @@ func PackageFunctions(pkgDir, genFilename, namePrefix string, printOnly bool, js
 	}
 
 	for funName, fun := range funcs {
-		err = ImplWrapper.WriteFunctionWrapper(b, fun.File, fun.Decl, namePrefix+funName, "", importLines, jsonTypeReplacements)
+		err = ImplWrapper.WriteFunctionWrapper(b, fun.File, fun.Decl, namePrefix+funName, "", importLines, jsonTypeReplacements, nil)
 		if err != nil {
 			return err
 		}

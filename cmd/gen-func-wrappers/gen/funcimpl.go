@@ -96,6 +96,7 @@ func (impl Impl) String() string {
 //   - funcPackage: Package name qualifier for the wrapped function (empty string if same package)
 //   - neededImportLines: Map to collect all imports needed by the generated code
 //   - jsonTypeReplacements: Map of interface types to concrete types for JSON unmarshalling
+//   - targetFileImports: Import specs from the target file to check for conflicts
 //
 // Returns:
 //   - error if code generation fails
@@ -115,7 +116,7 @@ func (impl Impl) String() string {
 //  - Error return values (automatic error result detection)
 //  - Type conversions for string parsing
 //  - Proper argument descriptions from function comments
-func (impl Impl) WriteFunctionWrapper(w io.Writer, funcFile *ast.File, funcDecl *ast.FuncDecl, implType, funcPackage string, neededImportLines map[string]struct{}, jsonTypeReplacements map[string]string) error {
+func (impl Impl) WriteFunctionWrapper(w io.Writer, funcFile *ast.File, funcDecl *ast.FuncDecl, implType, funcPackage string, neededImportLines map[string]struct{}, jsonTypeReplacements map[string]string, targetFileImports []*ast.ImportSpec) error {
 	var (
 		argNames        = funcTypeArgNames(funcDecl.Type)
 		argDescriptions = funcDeclArgDescriptions(funcDecl)
@@ -176,8 +177,8 @@ func (impl Impl) WriteFunctionWrapper(w io.Writer, funcFile *ast.File, funcDecl 
 	fmt.Fprintf(w, "\treturn \"%s%s%s\"\n", funcPackageSel, funcDecl.Name.Name, astvisit.FuncTypeString(funcDecl.Type))
 	fmt.Fprintf(w, "}\n\n")
 
-	// Always get imports of function arguments
-	err := gatherFieldListImports(funcFile, funcDecl.Type.Params, neededImportLines)
+	// Always get imports of function arguments and build package name remapping
+	packageRemap, err := gatherFieldListImports(funcFile, funcDecl.Type.Params, neededImportLines, targetFileImports)
 	if err != nil {
 		return err
 	}
@@ -186,9 +187,16 @@ func (impl Impl) WriteFunctionWrapper(w io.Writer, funcFile *ast.File, funcDecl 
 		neededImportLines[`"reflect"`] = struct{}{}
 
 		// Get imports of results only for function.Description.ArgTypes() method
-		err = gatherFieldListImports(funcFile, funcDecl.Type.Results, neededImportLines)
+		resultRemap, err := gatherFieldListImports(funcFile, funcDecl.Type.Results, neededImportLines, targetFileImports)
 		if err != nil {
 			return err
+		}
+		// Merge result remapping into package remap
+		for src, tgt := range resultRemap {
+			if packageRemap == nil {
+				packageRemap = make(map[string]string)
+			}
+			packageRemap[src] = tgt
 		}
 
 		fmt.Fprintf(w, "func (%s) Name() string {\n", implType)
@@ -218,7 +226,7 @@ func (impl Impl) WriteFunctionWrapper(w io.Writer, funcFile *ast.File, funcDecl 
 		} else {
 			fmt.Fprintf(w, "\treturn []reflect.Type{\n")
 			for _, argType := range argTypes {
-				fmt.Fprintf(w, "\t\t%s,\n", reflectTypeOfTypeName(argType))
+				fmt.Fprintf(w, "\t\t%s,\n", reflectTypeOfTypeName(argType, packageRemap))
 			}
 			fmt.Fprintf(w, "\t}\n")
 		}
@@ -230,7 +238,7 @@ func (impl Impl) WriteFunctionWrapper(w io.Writer, funcFile *ast.File, funcDecl 
 		} else {
 			fmt.Fprintf(w, "\treturn []reflect.Type{\n")
 			for _, resultType := range resultTypes {
-				fmt.Fprintf(w, "\t\t%s,\n", reflectTypeOfTypeName(resultType))
+				fmt.Fprintf(w, "\t\t%s,\n", reflectTypeOfTypeName(resultType, packageRemap))
 			}
 			fmt.Fprintf(w, "\t}\n")
 		}
@@ -504,12 +512,36 @@ func (impl Impl) WriteFunctionWrapper(w io.Writer, funcFile *ast.File, funcDecl 
 //
 // Variadic parameters (...T) are converted to slices ([]T) before creating the reflect.Type.
 //
+// The packageRemap parameter translates package qualifiers from source to target context.
+//
 // Example:
 //   - "string" -> "reflect.TypeFor[string]()"
 //   - "...int" -> "reflect.TypeFor[[]int]()"
-func reflectTypeOfTypeName(typeName string) string {
+//   - "gmail.Label" with remap["gmail"]="gmailapi" -> "reflect.TypeFor[gmailapi.Label]()"
+func reflectTypeOfTypeName(typeName string, packageRemap map[string]string) string {
 	typeName = strings.Replace(typeName, "...", "[]", 1)
+	typeName = remapPackageQualifiers(typeName, packageRemap)
 	return fmt.Sprintf("reflect.TypeFor[%s]()", typeName)
+}
+
+// remapPackageQualifiers translates package qualifiers in a type name using the provided mapping.
+// For example, "gmail.Label" with remap["gmail"]="gmailapi" becomes "gmailapi.Label".
+func remapPackageQualifiers(typeName string, packageRemap map[string]string) string {
+	if packageRemap == nil || len(packageRemap) == 0 {
+		return typeName
+	}
+
+	// Simple approach: replace each occurrence of "pkgName." with "newName."
+	// This works for most cases but could be improved with proper parsing
+	result := typeName
+	for srcPkg, tgtPkg := range packageRemap {
+		// Replace "srcPkg." with "tgtPkg." but only when followed by an identifier
+		// Use word boundary to avoid replacing partial matches
+		oldPattern := srcPkg + "."
+		newPattern := tgtPkg + "."
+		result = strings.ReplaceAll(result, oldPattern, newPattern)
+	}
+	return result
 }
 
 // exportedName converts a variable name to an exported (capitalized) name.

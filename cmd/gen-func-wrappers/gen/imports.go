@@ -96,56 +96,131 @@ func localAndImportedFunctions(fset *token.FileSet, filePkg *ast.Package, file *
 	return functions, nil
 }
 
-// gatherFieldListImports collects import statements needed for types in a field list.
-// This is used to ensure the generated wrapper code has all necessary imports.
+// gatherFieldListImports collects import statements needed for types in a field list
+// and returns a mapping to translate package qualifiers from source context to target context.
 //
 // Parameters:
 //   - funcFile: The file containing the function (source of import information)
 //   - fieldList: AST field list containing parameters or results
 //   - setImportLines: Map to add required import lines to (modified in-place)
+//   - targetFileImports: Optional slice of imports from the target file to check for conflicts
 //
 // Returns:
+//   - packageRemap: Map of source package name -> target package name (for type translation)
 //   - error if package name cannot be guessed from import path
 //
 // The function:
 //  1. Extracts all package qualifiers used in the field types (e.g., "context" from "context.Context")
 //  2. Matches qualifiers against the file's imports
-//  3. Adds matching imports to setImportLines in proper format:
+//  3. Checks for alias conflicts with targetFileImports (if provided)
+//  4. Builds a translation map (source pkg name -> target pkg name) for type rewriting
+//  5. Adds matching imports to setImportLines in proper format:
 //     - `"path/to/package"` for imports without aliases
 //     - `alias "path/to/package"` for aliased imports
+//     - Uses alternative alias if there's a conflict
 //
 // Example:
 //
-//	Field list: (ctx context.Context, r io.Reader)
-//	funcFile imports: import "context"; import "io"
-//	Result: setImportLines gets `"context"` and `"io"` added
-func gatherFieldListImports(funcFile *ast.File, fieldList *ast.FieldList, setImportLines map[string]struct{}) error {
+//	Source file: import gmail "google.golang.org/api/gmail/v1"
+//	Target file: import gmailapi "google.golang.org/api/gmail/v1"
+//	Result: packageRemap["gmail"] = "gmailapi"
+func gatherFieldListImports(funcFile *ast.File, fieldList *ast.FieldList, setImportLines map[string]struct{}, targetFileImports []*ast.ImportSpec) (packageRemap map[string]string, err error) {
 	if fieldList == nil {
-		return nil
+		return nil, nil
 	}
+
+	packageRemap = make(map[string]string) // source name -> target name
+
+	// Build maps of the target file's imports
+	// to detect conflicts and reuse existing aliases
+	targetImportsByName := make(map[string]string) // name -> path
+	targetImportsByPath := make(map[string]string) // path -> name
+	if targetFileImports != nil {
+		for _, imp := range targetFileImports {
+			var name string
+			if imp.Name != nil {
+				name = imp.Name.Name
+			} else {
+				var err error
+				name, err = guessPackageNameFromPath(imp.Path.Value)
+				if err != nil {
+					// Skip imports we can't parse
+					continue
+				}
+			}
+			targetImportsByName[name] = imp.Path.Value
+			targetImportsByPath[imp.Path.Value] = name
+		}
+	}
+
 	packageNames := make(map[string]struct{})
 	for _, field := range fieldList.List {
 		astvisit.TypeExprNameQualifyers(field.Type, packageNames)
 	}
+
 	for _, imp := range funcFile.Imports {
+		var importName string
+		var importPath string
+
 		if imp.Name != nil {
-			if _, ok := packageNames[imp.Name.Name]; ok {
-				delete(setImportLines, imp.Path.Value)
-				setImportLines[imp.Name.Name+" "+imp.Path.Value] = struct{}{}
+			importName = imp.Name.Name
+			importPath = imp.Path.Value
+		} else {
+			var err error
+			importName, err = guessPackageNameFromPath(imp.Path.Value)
+			if err != nil {
+				return nil, err
 			}
+			importPath = imp.Path.Value
+		}
+
+		// Check if this package name is used in the field types
+		if _, needed := packageNames[importName]; !needed {
 			continue
 		}
-		guessedName, err := guessPackageNameFromPath(imp.Path.Value)
-		if err != nil {
-			return err
-		}
-		if _, ok := packageNames[guessedName]; ok {
-			if _, ok = setImportLines[guessedName+" "+imp.Path.Value]; !ok {
-				setImportLines[imp.Path.Value] = struct{}{}
+
+		// First, check if the target file already imports this path (possibly with different alias)
+		if targetName, alreadyImported := targetImportsByPath[importPath]; alreadyImported {
+			// Target file already has this package imported
+			// Record the name mapping for type translation
+			if importName != targetName {
+				packageRemap[importName] = targetName
 			}
+			// Don't add import - it's already there with whatever alias/name target uses
+			continue
+		}
+
+		// Check if the import name we want to use conflicts with target file's imports
+		if _, nameUsed := targetImportsByName[importName]; nameUsed {
+			// The target file uses this name for a DIFFERENT package
+			// We need to use an alternative alias to avoid conflict
+			altAlias := importName + "2"
+			for i := 2; ; i++ {
+				if _, conflict := targetImportsByName[altAlias]; !conflict {
+					break
+				}
+				altAlias = importName + fmt.Sprint(i+1)
+			}
+			delete(setImportLines, importPath)
+			setImportLines[altAlias+" "+importPath] = struct{}{}
+			// Record the remapping
+			packageRemap[importName] = altAlias
+		} else {
+			// No conflict - add with or without alias
+			if imp.Name != nil {
+				// Source uses an alias, preserve it
+				delete(setImportLines, importPath)
+				setImportLines[importName+" "+importPath] = struct{}{}
+			} else {
+				// No alias in source, add without alias
+				if _, ok := setImportLines[importName+" "+importPath]; !ok {
+					setImportLines[importPath] = struct{}{}
+				}
+			}
+			// No remapping needed - source and target use same name
 		}
 	}
-	return nil
+	return packageRemap, nil
 }
 
 // guessPackageNameFromPath attempts to guess a package's name from its import path.
