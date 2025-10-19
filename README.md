@@ -141,45 +141,6 @@ func main() {
 // Deploying api-server v42 to production
 ```
 
-## String to Type Conversion
-
-The library automatically converts strings to the required types:
-
-```go
-// Basic types
-var i int
-function.ScanString("42", &i) // i = 42
-
-var f float64
-function.ScanString("3.14", &f) // f = 3.14
-
-var b bool
-function.ScanString("true", &b) // b = true
-
-// Time types
-var t time.Time
-function.ScanString("2024-01-15", &t)
-
-var d time.Duration
-function.ScanString("5m30s", &d) // d = 5*time.Minute + 30*time.Second
-
-// Slices
-var nums []int
-function.ScanString("[1,2,3]", &nums) // nums = []int{1,2,3}
-
-// Structs (as JSON)
-type Person struct {
-    Name string
-    Age  int
-}
-var p Person
-function.ScanString(`{"Name":"Alice","Age":30}`, &p)
-
-// Nil values
-var ptr *int
-function.ScanString("nil", &ptr) // ptr = nil
-```
-
 ## Code Generation for Better Performance
 
 For production use, generate optimized wrappers without reflection overhead:
@@ -269,7 +230,44 @@ func Variadic(args ...string) string
 
 ### String Scanners
 
-Customize type conversion:
+The library automatically converts strings to the required types:
+
+```go
+// Basic types
+var i int
+function.ScanString("42", &i) // i = 42
+
+var f float64
+function.ScanString("3.14", &f) // f = 3.14
+
+var b bool
+function.ScanString("true", &b) // b = true
+
+// Time types
+var t time.Time
+function.ScanString("2024-01-15", &t)
+
+var d time.Duration
+function.ScanString("5m30s", &d) // d = 5*time.Minute + 30*time.Second
+
+// Slices
+var nums []int
+function.ScanString("[1,2,3]", &nums) // nums = []int{1,2,3}
+
+// Structs (as JSON)
+type Person struct {
+    Name string
+    Age  int
+}
+var p Person
+function.ScanString(`{"Name":"Alice","Age":30}`, &p)
+
+// Nil values
+var ptr *int
+function.ScanString("nil", &ptr) // ptr = nil
+```
+
+But you can customize type to string conversions:
 
 ```go
 import "github.com/domonda/go-function"
