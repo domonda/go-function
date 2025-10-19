@@ -1,5 +1,7 @@
 # gen-func-wrappers
 
+[![Go Reference](https://pkg.go.dev/badge/github.com/domonda/go-function/cmd/gen-func-wrappers.svg)](https://pkg.go.dev/github.com/domonda/go-function/cmd/gen-func-wrappers)
+
 A code generator that creates zero-overhead wrapper implementations for Go functions, enabling them to be called with multiple calling conventions (typed arguments, strings, JSON, etc.) without runtime reflection.
 
 ## Table of Contents
