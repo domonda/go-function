@@ -84,7 +84,7 @@ func main() {
 
 	jsonTypeReplacements := make(map[string]string)
 	if replaceForJSON != "" {
-		for _, repl := range strings.Split(replaceForJSON, ",") {
+		for repl := range strings.SplitSeq(replaceForJSON, ",") {
 			types := strings.Split(repl, ":")
 			if len(types) != 2 {
 				fmt.Fprintln(os.Stderr, "gen-func-wrappers error: invalid -replaceForJSON syntax")

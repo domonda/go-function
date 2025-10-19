@@ -111,11 +111,11 @@ func (impl Impl) String() string {
 //  7. CallWithJSON method (if ImplCallWithJSONWrapper is set): Unmarshals JSON to arguments
 //
 // The method handles:
-//  - context.Context as first argument (automatic detection and handling)
-//  - Variadic parameters (...type)
-//  - Error return values (automatic error result detection)
-//  - Type conversions for string parsing
-//  - Proper argument descriptions from function comments
+//   - context.Context as first argument (automatic detection and handling)
+//   - Variadic parameters (...type)
+//   - Error return values (automatic error result detection)
+//   - Type conversions for string parsing
+//   - Proper argument descriptions from function comments
 func (impl Impl) WriteFunctionWrapper(w io.Writer, funcFile *ast.File, funcDecl *ast.FuncDecl, implType, funcPackage string, neededImportLines map[string]struct{}, jsonTypeReplacements map[string]string, targetFileImports []*ast.ImportSpec) error {
 	var (
 		argNames        = funcTypeArgNames(funcDecl.Type)
@@ -527,7 +527,7 @@ func reflectTypeOfTypeName(typeName string, packageRemap map[string]string) stri
 // remapPackageQualifiers translates package qualifiers in a type name using the provided mapping.
 // For example, "gmail.Label" with remap["gmail"]="gmailapi" becomes "gmailapi.Label".
 func remapPackageQualifiers(typeName string, packageRemap map[string]string) string {
-	if packageRemap == nil || len(packageRemap) == 0 {
+	if len(packageRemap) == 0 {
 		return typeName
 	}
 

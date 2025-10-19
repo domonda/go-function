@@ -55,7 +55,7 @@ func RewriteDir(path string, verbose bool, printOnly io.Writer, jsonTypeReplacem
 	}
 	if err == nil {
 		for fileName, file := range pkg.Files {
-			err = RewriteAstFile(fset, pkg, file, fileName, verbose, printOnly, jsonTypeReplacements, localImportPrefixes)
+			err = RewriteAstFile(fset, pkg.Name, pkg.Files, file, fileName, verbose, printOnly, jsonTypeReplacements, localImportPrefixes)
 			if err != nil {
 				return err
 			}
@@ -114,7 +114,7 @@ func RewriteFile(filePath string, verbose bool, printOnly io.Writer, jsonTypeRep
 	if err != nil {
 		return err
 	}
-	return RewriteAstFile(fset, pkg, pkg.Files[filePath], filePath, verbose, printOnly, jsonTypeReplacements, localImportPrefixes)
+	return RewriteAstFile(fset, pkg.Name, pkg.Files, pkg.Files[filePath], filePath, verbose, printOnly, jsonTypeReplacements, localImportPrefixes)
 }
 
 // RewriteAstFile is the core rewriting logic that processes an AST file.
@@ -144,7 +144,36 @@ func RewriteFile(filePath string, verbose bool, printOnly io.Writer, jsonTypeRep
 // Wrapper declarations are found by:
 //   - Variable assignments with TODO calls: var x = function.WrapperTODO(F)
 //   - Implementation comments: // myWrapper wraps F as function.Wrapper (generated code)
-func RewriteAstFile(fset *token.FileSet, filePkg *ast.Package, astFile *ast.File, filePath string, verbose bool, printTo io.Writer, jsonTypeReplacements map[string]string, localImportPrefixes []string) (err error) {
+func RewriteAstFile(fset *token.FileSet, pkgName string, pkgFiles map[string]*ast.File, astFile *ast.File, filePath string, verbose bool, printTo io.Writer, jsonTypeReplacements map[string]string, localImportPrefixes []string) (err error) {
+	filePath = filepath.Clean(filePath)
+
+	source, err := os.ReadFile(filePath) //#nosec G304
+	if err != nil {
+		return err
+	}
+	return RewriteAstFileSource(fset, pkgName, pkgFiles, astFile, filePath, source, verbose, printTo, jsonTypeReplacements, localImportPrefixes)
+}
+
+// RewriteAstFileSource is like RewriteAstFile but accepts the source content directly.
+// This allows for in-memory testing without requiring files on disk.
+//
+// Parameters:
+//   - fset: Token file set for position information
+//   - pkgName: The package name
+//   - pkgFiles: All files in the package (for finding function declarations)
+//   - astFile: The parsed AST of the file to process
+//   - filePath: File path for error messages (doesn't need to exist)
+//   - source: The original source code as bytes
+//   - verbose: If true, print detailed information
+//   - printTo: If not nil, print to this writer instead of modifying file
+//   - jsonTypeReplacements: Map of interface types to concrete types for JSON
+//   - localImportPrefixes: Import path prefixes to treat as "local"
+//
+// Returns:
+//   - error if wrapper generation or file writing fails
+//
+// This function is useful for testing as it doesn't require actual files on disk.
+func RewriteAstFileSource(fset *token.FileSet, pkgName string, pkgFiles map[string]*ast.File, astFile *ast.File, filePath string, source []byte, verbose bool, printTo io.Writer, jsonTypeReplacements map[string]string, localImportPrefixes []string) (err error) {
 	filePath = filepath.Clean(filePath)
 
 	// ast.Print(fset, file)
@@ -164,7 +193,7 @@ func RewriteAstFile(fset *token.FileSet, filePkg *ast.Package, astFile *ast.File
 	// Also parse all functions of the file's package
 	// because they could als be referenced with an empty import name.
 	// Added with empty string as package/import name.
-	functions, err := localAndImportedFunctions(fset, filePkg, astFile, pkgDir)
+	functions, err := localAndImportedFunctions(fset, pkgName, pkgFiles, astFile, pkgDir)
 	if err != nil {
 		return err
 	}
@@ -205,10 +234,6 @@ func RewriteAstFile(fset *token.FileSet, filePkg *ast.Package, astFile *ast.File
 		replacements.Add(implReplacements)
 	}
 
-	source, err := os.ReadFile(filePath) //#nosec G304
-	if err != nil {
-		return err
-	}
 	rewritten, err := replacements.Apply(fset, source)
 	if err != nil {
 		return err
@@ -241,11 +266,11 @@ func RewriteAstFile(fset *token.FileSet, filePkg *ast.Package, astFile *ast.File
 // wrapper represents a function wrapper declaration found in source code.
 // It contains all information needed to generate the wrapper implementation.
 type wrapper struct {
-	VarName     string      // Name of the wrapper variable (e.g., "myWrapper")
-	WrappedFunc string      // Full name of the wrapped function (e.g., "pkg.MyFunc" or "MyFunc")
-	Type        string      // Name of the wrapper type (e.g., "myWrapperT")
-	Nodes       []ast.Node  // All AST nodes to be replaced (comments, var, type, methods)
-	Impl        Impl        // Which wrapper interfaces to implement
+	VarName     string     // Name of the wrapper variable (e.g., "myWrapper")
+	WrappedFunc string     // Full name of the wrapped function (e.g., "pkg.MyFunc" or "MyFunc")
+	Type        string     // Name of the wrapper type (e.g., "myWrapperT")
+	Nodes       []ast.Node // All AST nodes to be replaced (comments, var, type, methods)
+	Impl        Impl       // Which wrapper interfaces to implement
 }
 
 // WrappedFuncPkgAndFuncName splits the WrappedFunc into package and function name.

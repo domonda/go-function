@@ -11,8 +11,8 @@ import (
 
 // packageFuncs holds function declarations for a package along with package location info.
 type packageFuncs struct {
-	Location *astvisit.PackageLocation  // Package location and metadata
-	Funcs    map[string]funcDeclInFile  // Map of function name to declaration
+	Location *astvisit.PackageLocation // Package location and metadata
+	Funcs    map[string]funcDeclInFile // Map of function name to declaration
 }
 
 // localAndImportedFunctions builds a complete map of all functions available to a file.
@@ -40,9 +40,9 @@ type packageFuncs struct {
 //
 // This is used by the code generator to find the wrapped function's declaration
 // when it's referenced as "pkg.FuncName" or just "FuncName".
-func localAndImportedFunctions(fset *token.FileSet, filePkg *ast.Package, file *ast.File, pkgDir string) (map[string]packageFuncs, error) {
+func localAndImportedFunctions(fset *token.FileSet, pkgName string, pkgFiles map[string]*ast.File, file *ast.File, pkgDir string) (map[string]packageFuncs, error) {
 	localFuncs := make(map[string]funcDeclInFile)
-	for _, f := range filePkg.Files {
+	for _, f := range pkgFiles {
 		for _, decl := range f.Decls {
 			funcDecl, ok := decl.(*ast.FuncDecl)
 			if ok && funcDecl.Recv == nil {
@@ -56,7 +56,7 @@ func localAndImportedFunctions(fset *token.FileSet, filePkg *ast.Package, file *
 	functions := map[string]packageFuncs{
 		"": {
 			Location: &astvisit.PackageLocation{
-				PkgName:    filePkg.Name,
+				PkgName:    pkgName,
 				SourcePath: pkgDir,
 			},
 			Funcs: localFuncs,
@@ -135,22 +135,20 @@ func gatherFieldListImports(funcFile *ast.File, fieldList *ast.FieldList, setImp
 	// to detect conflicts and reuse existing aliases
 	targetImportsByName := make(map[string]string) // name -> path
 	targetImportsByPath := make(map[string]string) // path -> name
-	if targetFileImports != nil {
-		for _, imp := range targetFileImports {
-			var name string
-			if imp.Name != nil {
-				name = imp.Name.Name
-			} else {
-				var err error
-				name, err = guessPackageNameFromPath(imp.Path.Value)
-				if err != nil {
-					// Skip imports we can't parse
-					continue
-				}
+	for _, imp := range targetFileImports {
+		var name string
+		if imp.Name != nil {
+			name = imp.Name.Name
+		} else {
+			var err error
+			name, err = guessPackageNameFromPath(imp.Path.Value)
+			if err != nil {
+				// Skip imports we can't parse
+				continue
 			}
-			targetImportsByName[name] = imp.Path.Value
-			targetImportsByPath[imp.Path.Value] = name
 		}
+		targetImportsByName[name] = imp.Path.Value
+		targetImportsByPath[imp.Path.Value] = name
 	}
 
 	packageNames := make(map[string]struct{})
