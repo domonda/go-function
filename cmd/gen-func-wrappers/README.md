@@ -303,55 +303,6 @@ go tool gen-func-wrappers \
 
 ## Advanced Usage
 
-### Wrapping Functions from Other Packages
-
-You can wrap functions from imported packages:
-
-```go
-import (
-    "github.com/domonda/go-function"
-    "github.com/someorg/somepkg"
-)
-
-var someFunc = function.WrapperTODO(somepkg.SomeFunction)
-```
-
-### Functions Without Context
-
-Functions without a `context.Context` first parameter are also supported:
-
-```go
-func Add(a, b int) int {
-    return a + b
-}
-
-var addWrapper = function.WrapperTODO(Add)
-```
-
-### Functions Without Errors
-
-Functions that don't return errors work too:
-
-```go
-func Multiply(x, y float64) float64 {
-    return x * y
-}
-
-var multiplyWrapper = function.WrapperTODO(Multiply)
-```
-
-### Void Functions
-
-Functions with no return values:
-
-```go
-func LogMessage(ctx context.Context, message string) {
-    log.Println(message)
-}
-
-var logMessageWrapper = function.WrapperTODO(LogMessage)
-```
-
 ### Integration with HTTP Handlers
 
 ```go
@@ -468,17 +419,6 @@ Make sure the function is:
 
 The generator automatically handles import alias conflicts. If your file imports a package with alias `A` and the wrapped function's package uses alias `B`, the generator remaps package qualifiers correctly.
 
-## Examples
-
-See the [wrapper_example_test.go](../../wrapper_example_test.go) file for comprehensive examples of:
-- Basic wrapper usage
-- All calling conventions
-- Error handling
-- Functions with/without context
-- Functions with/without errors
-- HTTP integration
-- CLI integration
-
 ## License
 
-Same as parent project.
+MIT License. See [LICENSE](../../LICENSE) file.

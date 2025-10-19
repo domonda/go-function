@@ -2,6 +2,7 @@ package gen
 
 import (
 	"bytes"
+	"fmt"
 	"go/ast"
 	"go/parser"
 	"go/token"
@@ -162,4 +163,181 @@ func SimpleAdd(a, b int) int {
 
 	// Should not generate anything if there are no wrappers
 	assert.Empty(t, output.String())
+}
+
+// ExampleRewriteAstFileSource demonstrates in-memory wrapper generation without disk I/O.
+// This is useful for testing or integrating wrapper generation into other tools.
+func ExampleRewriteAstFileSource() {
+	// Define source code with a wrapper TODO in memory
+	source := []byte(`package example
+
+import "github.com/domonda/go-function"
+
+// Add adds two integers.
+//   a: First number
+//   b: Second number
+func Add(a, b int) int {
+	return a + b
+}
+
+var addWrapper = function.WrapperTODO(Add)
+`)
+
+	// Parse the source code into an AST
+	fset := token.NewFileSet()
+	astFile, err := parser.ParseFile(fset, "example.go", source, parser.ParseComments)
+	if err != nil {
+		panic(err)
+	}
+
+	// Create package files map (single file in this example)
+	pkgFiles := map[string]*ast.File{
+		"example.go": astFile,
+	}
+
+	// Buffer to capture the generated output
+	var output bytes.Buffer
+
+	// Generate wrapper code in memory
+	err = RewriteAstFileSource(
+		fset,              // Token file set
+		"example",         // Package name
+		pkgFiles,          // All package files
+		astFile,           // The AST file to process
+		"example.go",      // File path (for error messages only)
+		source,            // Original source code
+		false,             // verbose
+		&output,           // Write output here instead of to disk
+		nil,               // No JSON type replacements
+		nil,               // No local import prefixes
+	)
+	if err != nil {
+		panic(err)
+	}
+
+	// Print the generated wrapper code
+	fmt.Println(output.String())
+
+	// Output:
+	// package example
+	//
+	// import (
+	// 	"context"
+	// 	"encoding/json"
+	// 	"reflect"
+	//
+	// 	"github.com/domonda/go-function"
+	// )
+	//
+	// // Add adds two integers.
+	// //
+	// //	a: First number
+	// //	b: Second number
+	// func Add(a, b int) int {
+	// 	return a + b
+	// }
+	//
+	// // addWrapper wraps Add as function.Wrapper (generated code)
+	// var addWrapper addWrapperT
+	//
+	// // addWrapperT wraps Add as function.Wrapper (generated code)
+	// type addWrapperT struct{}
+	//
+	// func (addWrapperT) String() string {
+	// 	return "Add(a, b int) int"
+	// }
+	//
+	// func (addWrapperT) Name() string {
+	// 	return "Add"
+	// }
+	//
+	// func (addWrapperT) NumArgs() int      { return 2 }
+	// func (addWrapperT) ContextArg() bool  { return false }
+	// func (addWrapperT) NumResults() int   { return 1 }
+	// func (addWrapperT) ErrorResult() bool { return false }
+	//
+	// func (addWrapperT) ArgNames() []string {
+	// 	return []string{"a", "b"}
+	// }
+	//
+	// func (addWrapperT) ArgDescriptions() []string {
+	// 	return []string{"First number", "Second number"}
+	// }
+	//
+	// func (addWrapperT) ArgTypes() []reflect.Type {
+	// 	return []reflect.Type{
+	// 		reflect.TypeFor[int](),
+	// 		reflect.TypeFor[int](),
+	// 	}
+	// }
+	//
+	// func (addWrapperT) ResultTypes() []reflect.Type {
+	// 	return []reflect.Type{
+	// 		reflect.TypeFor[int](),
+	// 	}
+	// }
+	//
+	// func (addWrapperT) Call(_ context.Context, args []any) (results []any, err error) {
+	// 	results = make([]any, 1)
+	// 	results[0] = Add(args[0].(int), args[1].(int)) // wrapped call
+	// 	return results, err
+	// }
+	//
+	// func (f addWrapperT) CallWithStrings(_ context.Context, strs ...string) (results []any, err error) {
+	// 	var a struct {
+	// 		a int
+	// 		b int
+	// 	}
+	// 	if 0 < len(strs) {
+	// 		err := function.ScanString(strs[0], &a.a)
+	// 		if err != nil {
+	// 			return nil, function.NewErrParseArgString(err, f, "a", strs[0])
+	// 		}
+	// 	}
+	// 	if 1 < len(strs) {
+	// 		err := function.ScanString(strs[1], &a.b)
+	// 		if err != nil {
+	// 			return nil, function.NewErrParseArgString(err, f, "b", strs[1])
+	// 		}
+	// 	}
+	// 	results = make([]any, 1)
+	// 	results[0] = Add(a.a, a.b) // wrapped call
+	// 	return results, err
+	// }
+	//
+	// func (f addWrapperT) CallWithNamedStrings(_ context.Context, strs map[string]string) (results []any, err error) {
+	// 	var a struct {
+	// 		a int
+	// 		b int
+	// 	}
+	// 	if str, ok := strs["a"]; ok {
+	// 		err := function.ScanString(str, &a.a)
+	// 		if err != nil {
+	// 			return nil, function.NewErrParseArgString(err, f, "a", str)
+	// 		}
+	// 	}
+	// 	if str, ok := strs["b"]; ok {
+	// 		err := function.ScanString(str, &a.b)
+	// 		if err != nil {
+	// 			return nil, function.NewErrParseArgString(err, f, "b", str)
+	// 		}
+	// 	}
+	// 	results = make([]any, 1)
+	// 	results[0] = Add(a.a, a.b) // wrapped call
+	// 	return results, err
+	// }
+	//
+	// func (f addWrapperT) CallWithJSON(_ context.Context, argsJSON []byte) (results []any, err error) {
+	// 	var a struct {
+	// 		A int
+	// 		B int
+	// 	}
+	// 	err = json.Unmarshal(argsJSON, &a)
+	// 	if err != nil {
+	// 		return nil, function.NewErrParseArgsJSON(err, f, argsJSON)
+	// 	}
+	// 	results = make([]any, 1)
+	// 	results[0] = Add(a.A, a.B) // wrapped call
+	// 	return results, err
+	// }
 }
