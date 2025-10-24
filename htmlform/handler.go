@@ -324,7 +324,7 @@ func requiredBasedOnType(t reflect.Type) bool {
 	if t == reflect.TypeFor[string]() {
 		return false
 	}
-	if t.Kind() == reflect.Ptr {
+	if t.Kind() == reflect.Pointer {
 		return false
 	}
 	if t.Implements(reflect.TypeFor[interface{ IsNull() bool }]()) {

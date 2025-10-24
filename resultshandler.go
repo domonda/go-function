@@ -286,10 +286,10 @@ var PrintStructSliceAsTable ResultsHandlerFunc = func(ctx context.Context, resul
 		if resultType.Kind() != reflect.Slice && resultType.Kind() != reflect.Array {
 			return fmt.Errorf("expected slice or array, got %T for result %d", result, i)
 		}
-		if resultType.Elem().Kind() != reflect.Struct && resultType.Elem().Kind() != reflect.Ptr {
+		if resultType.Elem().Kind() != reflect.Struct && resultType.Elem().Kind() != reflect.Pointer {
 			return fmt.Errorf("expected slice/array of structs or struct pointers, got %T for result %d", result, i)
 		}
-		isPtr := resultType.Elem().Kind() == reflect.Ptr
+		isPtr := resultType.Elem().Kind() == reflect.Pointer
 		structType := resultType.Elem()
 		if isPtr {
 			structType = structType.Elem()
