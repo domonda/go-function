@@ -21,17 +21,57 @@ package htmlform
 //
 //	handler, _ := htmlform.NewHandler(wrapper, "My Form", resultWriter)
 //	handler.template, _ = template.New("form").Parse(myCustomTemplate)
-var FormTemplate = `
+var FormTemplate = /*html*/ `
 <!DOCTYPE html>
 <html lang="en">
 <head>
 	<meta charset="utf-8"/>
+	<meta name="viewport" content="width=device-width,initial-scale=1.0">
 	<title>{{.Title}}</title>
 	<style>
-		* { font-family: "Lucida Console", Monaco, monospace; }
+		:root {
+			--bg: #ffffff;
+			--text: #222222;
+			--link: #0a7ea4;
+			--link-visited: #6a4fb3;
+			--space: 1rem;
+		}
+		*, *::before, *::after { box-sizing: border-box; }
+		html { 
+			margin: 8px;
+			padding: 0;
+			color-scheme: light;
+		}
+		body {
+			margin: 0;
+			padding: 0;
+			background: var(--bg);
+			color: var(--text);
+			font-family: system-ui, -apple-system, Segoe UI, Roboto, Arial, sans-serif;
+			line-height: 1.6;
+			font-size: 16px;
+			-webkit-font-smoothing: antialiased;
+			text-rendering: optimizeLegibility;
+		}
 		label { display: block; }
 		form { margin: 10px; }
 		form div { padding-bottom: 10px; }
+		p, ul, ol, blockquote, pre { margin: 0 0 var(--space); }
+		ul, ol { padding-left: 1.25rem; }
+		h1, h2, h3, h4, h5, h6 {
+			line-height: 1.2;
+			margin: 1.5rem 0 0.5rem;
+		}
+		a {
+			color: var(--link);
+			text-underline-offset: 0.15em;
+		}
+		a:visited { color: var(--link-visited); }
+		a:hover, a:focus { text-decoration: underline; }
+		:focus-visible {
+			outline: 3px solid #ffbf47; /* high-contrast focus */
+			outline-offset: 2px;
+		}
 	</style>
 </head>
 <body>
