@@ -6,9 +6,52 @@ cd $SCRIPT_DIR
 
 MODULE_PATHS=("" "cli/" "htmlform/" "cmd/gen-func-wrappers/")
 
+# Show current tags and usage if no arguments provided
+if [ -z "$1" ]; then
+    echo "Current release tags:"
+    echo ""
+
+    for PREFIX in "${MODULE_PATHS[@]}"; do
+        if [ -z "$PREFIX" ]; then
+            MODULE_NAME="(root module)"
+        else
+            MODULE_NAME="${PREFIX%/}"
+        fi
+        echo "  Module: $MODULE_NAME"
+
+        # Get the latest tag for this module
+        LATEST_TAG=$(git tag -l "${PREFIX}v*" --sort=-v:refname | head -1)
+        if [ -n "$LATEST_TAG" ]; then
+            echo "    Latest: $LATEST_TAG"
+            # Show last 3 tags for this module
+            echo "    Recent:"
+            git tag -l "${PREFIX}v*" --sort=-v:refname | head -3 | sed 's/^/      /'
+        else
+            echo "    No tags yet"
+        fi
+        echo ""
+    done
+
+    echo "Usage: $0 <version> [message]"
+    echo ""
+    echo "Creates tags for all modules with the specified version."
+    echo ""
+    echo "Examples:"
+    echo "  $0 v0.99.1               # Creates v0.99.1, cli/v0.99.1, htmlform/v0.99.1, cmd/gen-func-wrappers/v0.99.1"
+    echo "  $0 v0.99.1 \"bug fixes\"   # Same with custom message"
+    echo "  $0 v1.0.0-beta1          # Pre-release version"
+    echo ""
+    echo "Version format: vMAJOR.MINOR.PATCH[-PRERELEASE]"
+    exit 0
+fi
+
 SEMVER_REGEX='^v([0-9]+)\.([0-9]+)\.([0-9]+)(-[a-zA-Z0-9]+)?$'
 if [[ ! "$1" =~ $SEMVER_REGEX ]]; then
+    echo "Error: Invalid version format: $1"
+    echo ""
     echo "Usage: $0 <version> [message]"
+    echo "Version must be in format: vMAJOR.MINOR.PATCH[-PRERELEASE]"
+    echo "Examples: v0.99.1, v1.0.0, v2.1.3-beta1"
     exit 1
 fi
 
