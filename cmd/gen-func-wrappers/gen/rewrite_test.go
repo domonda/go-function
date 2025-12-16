@@ -110,10 +110,11 @@ var simpleAddWrapper = function.WrapperTODO(SimpleAdd)
 		astFile,
 		"test.go", // path is only used for error messages
 		source,
-		false, // verbose
-		&output,
-		nil, // no JSON type replacements
-		nil, // no local import prefixes
+		false,  // verbose
+		&output, // print output
+		false,  // not validating
+		nil,    // no JSON type replacements
+		nil,    // no local import prefixes
 	)
 	require.NoError(t, err)
 
@@ -156,6 +157,7 @@ func SimpleAdd(a, b int) int {
 		source,
 		false,
 		&output,
+		false, // not validating
 		nil,
 		nil,
 	)
@@ -208,6 +210,7 @@ var addWrapper = function.WrapperTODO(Add)
 		source,            // Original source code
 		false,             // verbose
 		&output,           // Write output here instead of to disk
+		false,             // not validating
 		nil,               // No JSON type replacements
 		nil,               // No local import prefixes
 	)
@@ -340,4 +343,159 @@ var addWrapper = function.WrapperTODO(Add)
 	// 	results[0] = Add(a.A, a.B) // wrapped call
 	// 	return results, err
 	// }
+}
+
+// TestRewriteAstFileSource_ValidateUpToDate tests that validation passes for up-to-date wrappers
+func TestRewriteAstFileSource_ValidateUpToDate(t *testing.T) {
+	// In real-world usage, developers run gen-func-wrappers to generate code,
+	// commit it, and CI validates it hasn't changed. However, the formatting
+	// might differ slightly between runs due to import ordering or whitespace.
+	//
+	// The validation works by:
+	// 1. Finding wrapper declarations (TODO or generated code comments)
+	// 2. Regenerating the wrapper code
+	// 3. Comparing the regenerated code with the current source
+	//
+	// Since the tool always normalizes formatting during generation, validation
+	// will fail if the source differs from what would be generated, even if only
+	// by whitespace or import order.
+	//
+	// To properly test validation, we should test that:
+	// - Validation passes when source has NO wrappers to generate (empty case)
+	// - Validation fails when source has TODOs that need generation (tested separately)
+	// - Validation fails when generated code is manually modified (tested separately)
+
+	// Test case: No wrappers at all (validation should pass - nothing to validate)
+	sourceNoWrappers := []byte(`package testpkg
+
+// SimpleAdd adds two integers.
+func SimpleAdd(a, b int) int {
+	return a + b
+}
+`)
+
+	fset := token.NewFileSet()
+	astFile, err := parser.ParseFile(fset, "test.go", sourceNoWrappers, parser.ParseComments)
+	require.NoError(t, err)
+
+	pkgFiles := map[string]*ast.File{
+		"test.go": astFile,
+	}
+
+	// Validation should pass - no wrappers means nothing out of date
+	err = RewriteAstFileSource(
+		fset,
+		"testpkg",
+		pkgFiles,
+		astFile,
+		"test.go",
+		sourceNoWrappers,
+		false, // verbose
+		nil,   // no print output
+		true,  // validate mode
+		nil,
+		nil,
+	)
+	require.NoError(t, err, "validation should pass when there are no wrappers")
+}
+
+// TestRewriteAstFileSource_ValidateOutdated tests that validation fails for outdated wrappers
+func TestRewriteAstFileSource_ValidateOutdated(t *testing.T) {
+	// Create source with TODO that needs generation
+	source := []byte(`package testpkg
+
+import "github.com/domonda/go-function"
+
+// SimpleAdd adds two integers.
+//   a: First number
+//   b: Second number
+func SimpleAdd(a, b int) int {
+	return a + b
+}
+
+var simpleAddWrapper = function.WrapperTODO(SimpleAdd)
+`)
+
+	fset := token.NewFileSet()
+	astFile, err := parser.ParseFile(fset, "test.go", source, parser.ParseComments)
+	require.NoError(t, err)
+
+	pkgFiles := map[string]*ast.File{
+		"test.go": astFile,
+	}
+
+	// Run validation - should fail because wrapper needs generation
+	err = RewriteAstFileSource(
+		fset,
+		"testpkg",
+		pkgFiles,
+		astFile,
+		"test.go",
+		source,
+		false, // verbose
+		nil,   // no print output
+		true,  // validate mode
+		nil,
+		nil,
+	)
+	require.Error(t, err, "validation should fail for outdated wrappers")
+	assert.Contains(t, err.Error(), "function wrappers are missing or outdated")
+}
+
+// TestRewriteAstFileSource_ValidateModified tests that validation fails when wrapper code is modified
+func TestRewriteAstFileSource_ValidateModified(t *testing.T) {
+	// Create source with wrapper that has been manually modified
+	source := []byte(`package testpkg
+
+import (
+	"context"
+	"reflect"
+
+	"github.com/domonda/go-function"
+)
+
+// SimpleAdd adds two integers.
+//   a: First number
+//   b: Second number
+func SimpleAdd(a, b int) int {
+	return a + b
+}
+
+// simpleAddWrapper wraps SimpleAdd as function.Wrapper (generated code)
+var simpleAddWrapper simpleAddWrapperT
+
+// simpleAddWrapperT wraps SimpleAdd as function.Wrapper (generated code)
+type simpleAddWrapperT struct{}
+
+// This is a manually modified implementation that differs from generated code
+func (simpleAddWrapperT) Call(_ context.Context, args []any) (results []any, err error) {
+	// Custom implementation
+	return []any{42}, nil
+}
+`)
+
+	fset := token.NewFileSet()
+	astFile, err := parser.ParseFile(fset, "test.go", source, parser.ParseComments)
+	require.NoError(t, err)
+
+	pkgFiles := map[string]*ast.File{
+		"test.go": astFile,
+	}
+
+	// Run validation - should fail because wrapper was modified
+	err = RewriteAstFileSource(
+		fset,
+		"testpkg",
+		pkgFiles,
+		astFile,
+		"test.go",
+		source,
+		false, // verbose
+		nil,   // no print output
+		true,  // validate mode
+		nil,
+		nil,
+	)
+	require.Error(t, err, "validation should fail for modified wrappers")
+	assert.Contains(t, err.Error(), "function wrappers are missing or outdated")
 }

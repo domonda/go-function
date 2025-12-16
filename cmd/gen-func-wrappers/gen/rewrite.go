@@ -1,6 +1,7 @@
 package gen
 
 import (
+	"bytes"
 	"errors"
 	"fmt"
 	"go/ast"
@@ -20,11 +21,12 @@ import (
 //   - path: Directory path to process; append "..." for recursive processing
 //   - verbose: If true, print detailed information about processing
 //   - printOnly: If not nil, print generated code to this writer instead of modifying files
+//   - validate: If true, check for outdated wrappers without modifying files
 //   - jsonTypeReplacements: Map of interface types to concrete types for JSON unmarshalling
 //   - localImportPrefixes: Import path prefixes to treat as "local" for import grouping
 //
 // Returns:
-//   - error if any file processing fails
+//   - error if any file processing fails or validation detects issues
 //
 // The function:
 //  1. Checks if path ends with "..." for recursive processing
@@ -34,8 +36,8 @@ import (
 //
 // Example:
 //
-//	err := RewriteDir("./pkg/mypackage/...", true, nil, nil, []string{"github.com/myorg/"})
-func RewriteDir(path string, verbose bool, printOnly io.Writer, jsonTypeReplacements map[string]string, localImportPrefixes []string) (err error) {
+//	err := RewriteDir("./pkg/mypackage/...", true, nil, false, nil, []string{"github.com/myorg/"})
+func RewriteDir(path string, verbose bool, printOnly io.Writer, validate bool, jsonTypeReplacements map[string]string, localImportPrefixes []string) (err error) {
 	recursive := strings.HasSuffix(path, "...")
 	if recursive {
 		path = filepath.Clean(strings.TrimSuffix(path, "..."))
@@ -45,7 +47,7 @@ func RewriteDir(path string, verbose bool, printOnly io.Writer, jsonTypeReplacem
 		return err
 	}
 	if !fileInfo.IsDir() {
-		return RewriteFile(path, verbose, printOnly, jsonTypeReplacements, localImportPrefixes)
+		return RewriteFile(path, verbose, printOnly, validate, jsonTypeReplacements, localImportPrefixes)
 	}
 
 	fset := token.NewFileSet()
@@ -55,7 +57,7 @@ func RewriteDir(path string, verbose bool, printOnly io.Writer, jsonTypeReplacem
 	}
 	if err == nil {
 		for fileName, file := range pkg.Files {
-			err = RewriteAstFile(fset, pkg.Name, pkg.Files, file, fileName, verbose, printOnly, jsonTypeReplacements, localImportPrefixes)
+			err = RewriteAstFile(fset, pkg.Name, pkg.Files, file, fileName, verbose, printOnly, validate, jsonTypeReplacements, localImportPrefixes)
 			if err != nil {
 				return err
 			}
@@ -76,7 +78,7 @@ func RewriteDir(path string, verbose bool, printOnly io.Writer, jsonTypeReplacem
 		if !file.IsDir() || fileName[0] == '.' || fileName == "node_modules" {
 			continue
 		}
-		err = RewriteDir(filepath.Join(path, fileName, "..."), verbose, printOnly, jsonTypeReplacements, localImportPrefixes)
+		err = RewriteDir(filepath.Join(path, fileName, "..."), verbose, printOnly, validate, jsonTypeReplacements, localImportPrefixes)
 		if err != nil {
 			return err
 		}
@@ -90,6 +92,7 @@ func RewriteDir(path string, verbose bool, printOnly io.Writer, jsonTypeReplacem
 //   - filePath: Path to the Go source file to process
 //   - verbose: If true, print detailed information about processing
 //   - printOnly: If not nil, print generated code to this writer instead of modifying file
+//   - validate: If true, check for outdated wrappers without modifying files
 //   - jsonTypeReplacements: Map of interface types to concrete types for JSON unmarshalling
 //   - localImportPrefixes: Import path prefixes to treat as "local" for import grouping
 //
@@ -100,7 +103,7 @@ func RewriteDir(path string, verbose bool, printOnly io.Writer, jsonTypeReplacem
 //  1. Parses the package containing the file
 //  2. Calls RewriteAstFile to perform the actual rewriting
 //  3. Writes the modified content back to the file (or prints it)
-func RewriteFile(filePath string, verbose bool, printOnly io.Writer, jsonTypeReplacements map[string]string, localImportPrefixes []string) (err error) {
+func RewriteFile(filePath string, verbose bool, printOnly io.Writer, validate bool, jsonTypeReplacements map[string]string, localImportPrefixes []string) (err error) {
 	filePath = filepath.Clean(filePath)
 	fileInfo, err := os.Stat(filePath)
 	if err != nil {
@@ -114,7 +117,7 @@ func RewriteFile(filePath string, verbose bool, printOnly io.Writer, jsonTypeRep
 	if err != nil {
 		return err
 	}
-	return RewriteAstFile(fset, pkg.Name, pkg.Files, pkg.Files[filePath], filePath, verbose, printOnly, jsonTypeReplacements, localImportPrefixes)
+	return RewriteAstFile(fset, pkg.Name, pkg.Files, pkg.Files[filePath], filePath, verbose, printOnly, validate, jsonTypeReplacements, localImportPrefixes)
 }
 
 // RewriteAstFile is the core rewriting logic that processes an AST file.
@@ -122,11 +125,13 @@ func RewriteFile(filePath string, verbose bool, printOnly io.Writer, jsonTypeRep
 //
 // Parameters:
 //   - fset: Token file set for position information
-//   - filePkg: The package containing the file
+//   - pkgName: The package name
+//   - pkgFiles: All files in the package
 //   - astFile: The parsed AST of the file to process
 //   - filePath: Original file path (for error messages and writing)
 //   - verbose: If true, print detailed information
 //   - printTo: If not nil, print to this writer instead of modifying file
+//   - validate: If true, check for outdated wrappers without modifying files
 //   - jsonTypeReplacements: Map of interface types to concrete types for JSON
 //   - localImportPrefixes: Import path prefixes to treat as "local"
 //
@@ -144,14 +149,14 @@ func RewriteFile(filePath string, verbose bool, printOnly io.Writer, jsonTypeRep
 // Wrapper declarations are found by:
 //   - Variable assignments with TODO calls: var x = function.WrapperTODO(F)
 //   - Implementation comments: // myWrapper wraps F as function.Wrapper (generated code)
-func RewriteAstFile(fset *token.FileSet, pkgName string, pkgFiles map[string]*ast.File, astFile *ast.File, filePath string, verbose bool, printTo io.Writer, jsonTypeReplacements map[string]string, localImportPrefixes []string) (err error) {
+func RewriteAstFile(fset *token.FileSet, pkgName string, pkgFiles map[string]*ast.File, astFile *ast.File, filePath string, verbose bool, printTo io.Writer, validate bool, jsonTypeReplacements map[string]string, localImportPrefixes []string) (err error) {
 	filePath = filepath.Clean(filePath)
 
 	source, err := os.ReadFile(filePath) //#nosec G304
 	if err != nil {
 		return err
 	}
-	return RewriteAstFileSource(fset, pkgName, pkgFiles, astFile, filePath, source, verbose, printTo, jsonTypeReplacements, localImportPrefixes)
+	return RewriteAstFileSource(fset, pkgName, pkgFiles, astFile, filePath, source, verbose, printTo, validate, jsonTypeReplacements, localImportPrefixes)
 }
 
 // RewriteAstFileSource is like RewriteAstFile but accepts the source content directly.
@@ -166,6 +171,7 @@ func RewriteAstFile(fset *token.FileSet, pkgName string, pkgFiles map[string]*as
 //   - source: The original source code as bytes
 //   - verbose: If true, print detailed information
 //   - printTo: If not nil, print to this writer instead of modifying file
+//   - validate: If true, check for outdated wrappers without modifying files
 //   - jsonTypeReplacements: Map of interface types to concrete types for JSON
 //   - localImportPrefixes: Import path prefixes to treat as "local"
 //
@@ -173,7 +179,7 @@ func RewriteAstFile(fset *token.FileSet, pkgName string, pkgFiles map[string]*as
 //   - error if wrapper generation or file writing fails
 //
 // This function is useful for testing as it doesn't require actual files on disk.
-func RewriteAstFileSource(fset *token.FileSet, pkgName string, pkgFiles map[string]*ast.File, astFile *ast.File, filePath string, source []byte, verbose bool, printTo io.Writer, jsonTypeReplacements map[string]string, localImportPrefixes []string) (err error) {
+func RewriteAstFileSource(fset *token.FileSet, pkgName string, pkgFiles map[string]*ast.File, astFile *ast.File, filePath string, source []byte, verbose bool, printTo io.Writer, validate bool, jsonTypeReplacements map[string]string, localImportPrefixes []string) (err error) {
 	filePath = filepath.Clean(filePath)
 
 	// ast.Print(fset, file)
@@ -248,6 +254,17 @@ func RewriteAstFileSource(fset *token.FileSet, pkgName string, pkgFiles map[stri
 	rewritten, err = astvisit.FormatFileWithImports(fset, rewritten, neededImportLines, localImportPrefixes...)
 	if err != nil {
 		return err
+	}
+
+	// In validate mode, check if the generated code differs from the current source
+	if validate {
+		if !bytes.Equal(source, rewritten) {
+			return fmt.Errorf("%s: function wrappers are missing or outdated", filePath)
+		}
+		if verbose {
+			fmt.Println(filePath, "is up to date")
+		}
+		return nil
 	}
 
 	if printTo != nil {
