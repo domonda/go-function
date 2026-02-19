@@ -7,6 +7,7 @@ import (
 	"encoding/json"
 	"net/http"
 	"reflect"
+	"time"
 
 	"github.com/ungerik/go-fs"
 	"github.com/ungerik/go-httpx/httperr"
@@ -49,7 +50,13 @@ func main() {
 	handler.SetArgDefaultValue("color", ColorGreen)
 
 	log.Info("Listening on http://localhost:8080").Log()
-	err = http.ListenAndServe(":8080", handler)
+	server := &http.Server{
+		Addr:         ":8080",
+		Handler:      handler,
+		ReadTimeout:  30 * time.Second,
+		WriteTimeout: 30 * time.Second,
+	}
+	err = server.ListenAndServe()
 	log.FatalAndPanic(err)
 }
 

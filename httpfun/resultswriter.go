@@ -300,7 +300,7 @@ func (html RespondStaticHTML) WriteResults(results []any, resultErr error, respo
 
 func (html RespondStaticHTML) ServeHTTP(response http.ResponseWriter, _ *http.Request) {
 	response.Header().Add("Content-Type", contenttype.HTML)
-	response.Write([]byte(html)) //#nosec G104
+	response.Write([]byte(html)) //#nosec G104,G705
 }
 
 type RespondStaticXML string
@@ -316,7 +316,7 @@ func (xml RespondStaticXML) WriteResults(results []any, resultErr error, respons
 
 func (xml RespondStaticXML) ServeHTTP(response http.ResponseWriter, _ *http.Request) {
 	response.Header().Set("Content-Type", contenttype.XML)
-	response.Write([]byte(xml)) //#nosec G104
+	response.Write([]byte(xml)) //#nosec G104,G705
 }
 
 type RespondStaticJSON string
@@ -332,7 +332,7 @@ func (json RespondStaticJSON) WriteResults(results []any, resultErr error, respo
 
 func (json RespondStaticJSON) ServeHTTP(response http.ResponseWriter, _ *http.Request) {
 	response.Header().Set("Content-Type", contenttype.JSON)
-	response.Write([]byte(json)) //#nosec G104
+	response.Write([]byte(json)) //#nosec G104,G705
 }
 
 type RespondStaticPlaintext string
@@ -348,7 +348,7 @@ func (text RespondStaticPlaintext) WriteResults(results []any, resultErr error, 
 
 func (text RespondStaticPlaintext) ServeHTTP(response http.ResponseWriter, _ *http.Request) {
 	response.Header().Add("Content-Type", contenttype.PlainText)
-	response.Write([]byte(text)) //#nosec G104
+	response.Write([]byte(text)) //#nosec G104,G705
 }
 
 // RespondRedirect implements HTTPResultsWriter and http.Handler

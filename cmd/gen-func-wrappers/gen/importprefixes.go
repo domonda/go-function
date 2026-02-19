@@ -45,7 +45,7 @@ func DetectLocalImportPrefixes(startPath string) []string {
 	currentDir := absPath
 	for {
 		goModPath := filepath.Join(currentDir, "go.mod")
-		if data, err := os.ReadFile(goModPath); err == nil {
+		if data, err := os.ReadFile(goModPath); err == nil { //#nosec G304 -- path is constructed from filepath.Join
 			// Parse go.mod to extract module path
 			modFile, err := modfile.Parse(goModPath, data, nil)
 			if err == nil && modFile.Module != nil && modFile.Module.Mod.Path != "" {

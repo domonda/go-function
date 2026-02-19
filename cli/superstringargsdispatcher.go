@@ -187,9 +187,9 @@ func (disp *SuperStringArgsDispatcher) PrintCommands() {
 			command += " " + cmd.command
 		}
 
-		UsageColor.Printf("  %s %s %s\n", disp.baseCommand, command, functionArgsString(cmd.commandFunc))
+		UsageColor.Printf("  %s %s %s\n", disp.baseCommand, command, functionArgsString(cmd.commandFunc)) //#nosec G104
 		if cmd.description != "" {
-			DescriptionColor.Printf("      %s\n", cmd.description)
+			DescriptionColor.Printf("      %s\n", cmd.description) //#nosec G104
 		}
 		hasAnyArgDesc := false
 		for _, desc := range cmd.commandFunc.ArgDescriptions() {
@@ -200,10 +200,10 @@ func (disp *SuperStringArgsDispatcher) PrintCommands() {
 		}
 		if hasAnyArgDesc {
 			for i, desc := range cmd.commandFunc.ArgDescriptions() {
-				DescriptionColor.Printf("          <%s:%s> %s\n", cmd.commandFunc.ArgNames()[i], derefType(cmd.commandFunc.ArgTypes()[i]), desc)
+				DescriptionColor.Printf("          <%s:%s> %s\n", cmd.commandFunc.ArgNames()[i], derefType(cmd.commandFunc.ArgTypes()[i]), desc) //#nosec G104
 			}
 		}
-		DescriptionColor.Println()
+		DescriptionColor.Println() //#nosec G104
 	}
 }
 
