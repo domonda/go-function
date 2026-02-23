@@ -223,7 +223,7 @@ func RespondContentType(contentType string) ResultsWriter {
 		}
 
 		response.Header().Add("Content-Type", contentType)
-		_, err := response.Write(data)
+		_, err := response.Write(data) //#nosec G705 -- contentType was chosen by the caller of this package
 		return err
 	})
 }

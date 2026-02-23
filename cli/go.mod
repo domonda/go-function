@@ -1,6 +1,6 @@
 module github.com/domonda/go-function/cli
 
-go 1.24.0
+go 1.24.11
 
 replace github.com/domonda/go-function => ../
 
