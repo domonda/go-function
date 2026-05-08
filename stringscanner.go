@@ -144,7 +144,7 @@ func scanString(sourceStr string, destVal reflect.Value) (err error) {
 			return nil
 		}
 		for _, format := range TimeFormats {
-			t, err := time.ParseInLocation(format, trimmedSrc, time.Local)
+			t, err := time.ParseInLocation(format, trimmedSrc, TimeLocation)
 			if err == nil {
 				*dest = t
 				return nil
@@ -158,7 +158,7 @@ func scanString(sourceStr string, destVal reflect.Value) (err error) {
 			return nil
 		}
 		for _, format := range TimeFormats {
-			t, err := time.ParseInLocation(format, trimmedSrc, time.Local)
+			t, err := time.ParseInLocation(format, trimmedSrc, TimeLocation)
 			if err == nil {
 				dest.Set(t)
 				return nil
@@ -194,9 +194,17 @@ func scanString(sourceStr string, destVal reflect.Value) (err error) {
 		return dest.UnmarshalJSON(source)
 
 	case *map[string]any:
+		if nilSrc {
+			*dest = nil
+			return nil
+		}
 		return json.Unmarshal([]byte(trimmedSrc), destPtr)
 
 	case *[]any:
+		if nilSrc {
+			*dest = nil
+			return nil
+		}
 		return json.Unmarshal([]byte(trimmedSrc), destPtr)
 
 	case *[]byte:
@@ -274,6 +282,10 @@ func scanString(sourceStr string, destVal reflect.Value) (err error) {
 		return nil
 
 	case reflect.Struct:
+		if nilSrc {
+			destVal.SetZero()
+			return nil
+		}
 		// JSON might not be the best format for command line arguments,
 		// but it could have also come from a HTTP request body or other sources
 		return json.Unmarshal([]byte(trimmedSrc), destPtr)
@@ -283,19 +295,13 @@ func scanString(sourceStr string, destVal reflect.Value) (err error) {
 			destVal.SetZero()
 			return nil
 		}
-		var sourceStrings []string
-		if strings.HasPrefix(trimmedSrc, "[") && strings.HasSuffix(trimmedSrc, "]") {
-			sourceStrings, err = sliceLiteralFields(trimmedSrc)
-			if err != nil {
-				return err
-			}
-		} else {
-			// Treat non-slice literals as single element slice
-			sourceStrings = []string{trimmedSrc}
+		sourceStrings, err := parseSliceLiteralOrSingle(trimmedSrc)
+		if err != nil {
+			return err
 		}
 		sliceLen := len(sourceStrings)
 		destVal.Set(reflect.MakeSlice(destVal.Type(), sliceLen, sliceLen))
-		for i := 0; i < sliceLen; i++ {
+		for i := range sliceLen {
 			err = scanString(sourceStrings[i], destVal.Index(i))
 			if err != nil {
 				return err
@@ -304,15 +310,9 @@ func scanString(sourceStr string, destVal reflect.Value) (err error) {
 		return nil
 
 	case reflect.Array:
-		var sourceStrings []string
-		if strings.HasPrefix(trimmedSrc, "[") && strings.HasSuffix(trimmedSrc, "]") {
-			sourceStrings, err = sliceLiteralFields(trimmedSrc)
-			if err != nil {
-				return err
-			}
-		} else {
-			// Treat non-slice literals as single element slice
-			sourceStrings = []string{trimmedSrc}
+		sourceStrings, err := parseSliceLiteralOrSingle(trimmedSrc)
+		if err != nil {
+			return err
 		}
 		arrayLen := destVal.Len()
 		if len(sourceStrings) != arrayLen {
@@ -344,6 +344,25 @@ func scanString(sourceStr string, destVal reflect.Value) (err error) {
 	return nil
 }
 
+// parseSliceLiteralOrSingle interprets sourceStr as either a JSON-like slice
+// literal `[a,b,...]` (split via sliceLiteralFields) or as a single-element
+// slice value when it has neither `[` prefix nor `]` suffix. Mixed forms like
+// `[1,2` or `1,2]` are rejected as malformed instead of silently treated as a
+// single element — that fallthrough used to surface as misleading downstream
+// "can't parse" errors when callers truncated input.
+func parseSliceLiteralOrSingle(sourceStr string) ([]string, error) {
+	hasPrefix := strings.HasPrefix(sourceStr, "[")
+	hasSuffix := strings.HasSuffix(sourceStr, "]")
+	switch {
+	case hasPrefix && hasSuffix:
+		return sliceLiteralFields(sourceStr)
+	case hasPrefix != hasSuffix:
+		return nil, fmt.Errorf("malformed slice literal %q: must be wrapped in matching '[' and ']'", sourceStr)
+	default:
+		return []string{sourceStr}, nil
+	}
+}
+
 // sliceLiteralFields parses a JSON-like slice literal string into individual field strings.
 // It handles nested structures by tracking brace and bracket depth, and respects quoted strings.
 //
@@ -355,12 +374,12 @@ func scanString(sourceStr string, destVal reflect.Value) (err error) {
 //
 // This is a complex state machine parser that carefully handles:
 //   - Nested objects {...} and arrays [...]
-//   - Quoted strings with escaped quotes
+//   - Quoted strings with escaped quotes (`\"`) and escaped backslashes (`\\`)
 //   - Comma separation at the top level only
 //   - Proper validation of bracket matching
 //
 // Returns an error if the string doesn't start with '[', end with ']',
-// or has unbalanced brackets/braces.
+// or has unbalanced brackets/braces/quotes.
 func sliceLiteralFields(sourceStr string) (fields []string, err error) {
 	if !strings.HasPrefix(sourceStr, "[") {
 		return nil, fmt.Errorf("slice value %q does not begin with '['", sourceStr)
@@ -371,14 +390,21 @@ func sliceLiteralFields(sourceStr string) (fields []string, err error) {
 	var (
 		objectDepth  = 0  // Tracks nesting depth of {} braces
 		bracketDepth = 0  // Tracks nesting depth of [] brackets
-		rLast        rune // Previous rune (for escape detection)
-		withinQuote  rune // Non-zero when inside quotes ('"')
+		withinQuote  bool // True while inside a "..." string
+		escaped      bool // True when the next rune is the escaped char (consumed without interpretation)
 		begin        = 1  // Start index of current field
 	)
 	for i, r := range sourceStr {
-		if withinQuote != 0 {
-			if r == '"' && rLast != '\\' {
-				withinQuote = 0
+		if withinQuote {
+			// Track JSON-style escapes so that `\"` does not terminate the string
+			// and `\\` does not leave a stray backslash that could fool the next char.
+			switch {
+			case escaped:
+				escaped = false
+			case r == '\\':
+				escaped = true
+			case r == '"':
+				withinQuote = false
 			}
 			continue
 		}
@@ -412,10 +438,17 @@ func sliceLiteralFields(sourceStr string) (fields []string, err error) {
 			}
 
 		case '"':
-			withinQuote = r
+			withinQuote = true
 		}
-
-		rLast = r
+	}
+	if withinQuote {
+		return nil, fmt.Errorf("slice value %q has unterminated string literal", sourceStr)
+	}
+	if objectDepth != 0 {
+		return nil, fmt.Errorf("slice value %q has unbalanced '{}'", sourceStr)
+	}
+	if bracketDepth != 0 {
+		return nil, fmt.Errorf("slice value %q has unbalanced '[]'", sourceStr)
 	}
 	return fields, nil
 }

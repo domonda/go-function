@@ -287,6 +287,11 @@ function.TimeFormats = []string{
     "2006-01-02",
     "2006-01-02 15:04",
 }
+
+// Configure the time zone used when a parsed timestamp has no zone of its own.
+// Defaults to time.Local; set at process start if you want naive timestamps
+// (e.g. "2024-01-15 10:00:00") interpreted in UTC instead.
+function.TimeLocation = time.UTC
 ```
 
 ### HTTP Configuration

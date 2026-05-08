@@ -55,6 +55,82 @@ func Test_sliceLiteralFields(t *testing.T) {
 			sourceStr:  `[[1,2,3], {"key": "comma,string"}, null]`,
 			wantFields: []string{`[1,2,3]`, `{"key": "comma,string"}`, `null`},
 		},
+
+		// JSON escape handling — without proper escape tracking these inputs
+		// caused the splitter to silently drop trailing fields when partner
+		// names contained quotes (idwell-finance-service masterdata import bug).
+		{
+			name:       `escaped quote inside string`,
+			sourceStr:  `["a\"b","c"]`,
+			wantFields: []string{`"a\"b"`, `"c"`},
+		},
+		{
+			name:       `escaped quote at start of string`,
+			sourceStr:  `["\"Die Familienunternehmer e.V.","next"]`,
+			wantFields: []string{`"\"Die Familienunternehmer e.V."`, `"next"`},
+		},
+		{
+			name:       `escaped quote in middle of string`,
+			sourceStr:  `["Abwasserzweckverband \"Chemnitz","next"]`,
+			wantFields: []string{`"Abwasserzweckverband \"Chemnitz"`, `"next"`},
+		},
+		{
+			name:       `escaped backslash before closing quote`,
+			sourceStr:  `["path\\","next"]`,
+			wantFields: []string{`"path\\"`, `"next"`},
+		},
+		{
+			name:       `escaped backslash followed by escaped quote`,
+			sourceStr:  `["path\\\"end","next"]`,
+			wantFields: []string{`"path\\\"end"`, `"next"`},
+		},
+		{
+			name: `partner-companies reproducer with escaped quotes in names`,
+			sourceStr: `[` +
+				`{"Name":"Abwasserzweckverband \"Chemnitz","VendorAccountNumber":"77226"},` +
+				`{"Name":"\"Die Familienunternehmer e.V.","VendorAccountNumber":"77483"},` +
+				`{"Name":"CANARY","VendorAccountNumber":"99999"}` +
+				`]`,
+			wantFields: []string{
+				`{"Name":"Abwasserzweckverband \"Chemnitz","VendorAccountNumber":"77226"}`,
+				`{"Name":"\"Die Familienunternehmer e.V.","VendorAccountNumber":"77483"}`,
+				`{"Name":"CANARY","VendorAccountNumber":"99999"}`,
+			},
+		},
+		{
+			// Invalid UTF-8 (raw 0xE4 from Latin-1 ä) inside a quoted string
+			// must not trip the splitter — the bad byte is the JSON decoder's
+			// problem, not the array splitter's.
+			name:      `invalid utf8 byte inside quoted string`,
+			sourceStr: "[{\"Name\":\"Karli Geb\xe4udereinigung GbR\",\"VendorAccountNumber\":\"81230\"},{\"Name\":\"CANARY\",\"VendorAccountNumber\":\"99999\"}]",
+			wantFields: []string{
+				"{\"Name\":\"Karli Geb\xe4udereinigung GbR\",\"VendorAccountNumber\":\"81230\"}",
+				`{"Name":"CANARY","VendorAccountNumber":"99999"}`,
+			},
+		},
+
+		// Validation of unbalanced state — previously the function silently
+		// returned a partial prefix, which let bad inputs corrupt the batch.
+		{
+			name:      `unterminated string literal`,
+			sourceStr: `["abc, "next"]`,
+			wantErr:   true,
+		},
+		{
+			name:      `unbalanced opening brace`,
+			sourceStr: `[{"a":1]`,
+			wantErr:   true,
+		},
+		{
+			name:      `unbalanced opening bracket`,
+			sourceStr: `[[1,2]`,
+			wantErr:   true,
+		},
+		{
+			name:      `unescaped quote inside object value desyncs and is rejected`,
+			sourceStr: `[{"Name":"Abwasserzweckverband "Chemnitz","V":"77226"}]`,
+			wantErr:   true,
+		},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
@@ -138,6 +214,81 @@ func TestScanString(t *testing.T) {
 			wantDest: []*TestStruct{{Int: 1, Str: "test"}, {Int: 2, Str: "test2"}},
 		},
 
+		// nilSrc handling — empty/null inputs become the zero/nil value of
+		// the destination type instead of bubbling up JSON parse errors.
+		// scanString is intentionally tolerant for CLI/HTTP arg use.
+		{
+			name:     "empty string into struct",
+			args:     args{sourceStr: "", destPtr: &TestStruct{Int: 99, Str: "stale"}},
+			wantDest: TestStruct{},
+		},
+		{
+			name:     "null into struct",
+			args:     args{sourceStr: "null", destPtr: &TestStruct{Int: 99, Str: "stale"}},
+			wantDest: TestStruct{},
+		},
+		{
+			name:     "whitespace into struct",
+			args:     args{sourceStr: "   \t\n", destPtr: &TestStruct{Int: 99, Str: "stale"}},
+			wantDest: TestStruct{},
+		},
+		{
+			name:     "empty string into *map[string]any",
+			args:     args{sourceStr: "", destPtr: &map[string]any{"stale": 1}},
+			wantDest: map[string]any(nil),
+		},
+		{
+			name:     "null into *map[string]any",
+			args:     args{sourceStr: "null", destPtr: &map[string]any{"stale": 1}},
+			wantDest: map[string]any(nil),
+		},
+		{
+			name:     "JSON null into *map[string]any (already worked, lock it in)",
+			args:     args{sourceStr: `{"a":1}`, destPtr: &map[string]any{}},
+			wantDest: map[string]any{"a": float64(1)},
+		},
+		{
+			name:     "empty string into *[]any",
+			args:     args{sourceStr: "", destPtr: &[]any{"stale"}},
+			wantDest: []any(nil),
+		},
+		{
+			name:     "null into *[]any",
+			args:     args{sourceStr: "null", destPtr: &[]any{"stale"}},
+			wantDest: []any(nil),
+		},
+
+		// Malformed slice literal — a stray '[' or ']' should error explicitly
+		// rather than silently fall through to single-element interpretation,
+		// which used to surface as misleading downstream parse errors.
+		{
+			name:    "truncated slice literal missing close bracket",
+			args:    args{sourceStr: "[1,2,3", destPtr: &[]int{}},
+			wantErr: true,
+		},
+		{
+			name:    "stray close bracket without open",
+			args:    args{sourceStr: "1,2,3]", destPtr: &[]int{}},
+			wantErr: true,
+		},
+		{
+			name:    "truncated slice literal into array",
+			args:    args{sourceStr: "[1,2", destPtr: &[2]int{}},
+			wantErr: true,
+		},
+		{
+			name:    "stray close bracket into array",
+			args:    args{sourceStr: "1,2]", destPtr: &[2]int{}},
+			wantErr: true,
+		},
+		{
+			// The single-element fallback still works when there is neither
+			// '[' nor ']' — required for CLI scalar-as-slice convenience.
+			name:     "scalar coerced to single-element slice",
+			args:     args{sourceStr: "42", destPtr: &[]int{}},
+			wantDest: []int{42},
+		},
+
 		// // wantErr
 		{
 			name:    "nil destPtr",
@@ -160,6 +311,100 @@ func TestScanString(t *testing.T) {
 			}
 		})
 	}
+}
+
+// timeSetter is a minimal stub for the `interface{ Set(time.Time) }` branch
+// in scanString — exercised by the second TimeLocation case below.
+type timeSetter struct{ t time.Time }
+
+func (s *timeSetter) Set(t time.Time) { s.t = t }
+
+func TestScanString_TimeLocation(t *testing.T) {
+	originalLoc := TimeLocation
+	t.Cleanup(func() { TimeLocation = originalLoc })
+
+	// given — a naive timestamp string with no timezone component
+	naive := "2024-01-15 10:00:00"
+
+	t.Run("default time.Local interprets naive timestamp in local zone", func(t *testing.T) {
+		// given
+		TimeLocation = time.Local
+
+		// when
+		var got time.Time
+		err := ScanString(naive, &got)
+
+		// then
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+		want, _ := time.ParseInLocation(time.DateTime, naive, time.Local)
+		if !got.Equal(want) {
+			t.Errorf("got %v, want %v", got, want)
+		}
+	})
+
+	t.Run("override to UTC interprets naive timestamp in UTC", func(t *testing.T) {
+		// given
+		TimeLocation = time.UTC
+
+		// when
+		var got time.Time
+		err := ScanString(naive, &got)
+
+		// then
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+		want, _ := time.ParseInLocation(time.DateTime, naive, time.UTC)
+		if !got.Equal(want) {
+			t.Errorf("got %v (loc=%v), want %v (loc=%v)", got, got.Location(), want, want.Location())
+		}
+		if got.Location() != time.UTC {
+			t.Errorf("got location %v, want UTC", got.Location())
+		}
+	})
+
+	t.Run("override to fixed zone applies to interface{ Set(time.Time) } branch too", func(t *testing.T) {
+		// given
+		paris, err := time.LoadLocation("Europe/Paris")
+		if err != nil {
+			t.Skipf("zoneinfo unavailable: %v", err)
+		}
+		TimeLocation = paris
+
+		// when
+		var dest timeSetter
+		err = ScanString(naive, &dest)
+
+		// then
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+		want, _ := time.ParseInLocation(time.DateTime, naive, paris)
+		if !dest.t.Equal(want) {
+			t.Errorf("got %v, want %v", dest.t, want)
+		}
+	})
+
+	t.Run("source string with explicit timezone ignores TimeLocation", func(t *testing.T) {
+		// given
+		TimeLocation = time.UTC
+
+		// when
+		var got time.Time
+		err := ScanString("2024-01-15T10:00:00+02:00", &got)
+
+		// then
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+		// The +02:00 offset must be preserved, not replaced by UTC.
+		_, offset := got.Zone()
+		if offset != 2*60*60 {
+			t.Errorf("got offset %d seconds, want 7200 (+02:00)", offset)
+		}
+	})
 }
 
 func TestStringScannerFunc_ScanString(t *testing.T) {
@@ -501,8 +746,8 @@ func Test_scanString(t *testing.T) {
 			wantErr: true,
 		},
 		{
-			name:    "map type not supported via scanString",
-			args:    args{sourceStr: "nil", destVal: reflect.ValueOf(new(map[string]int)).Elem()},
+			name:     "map type not supported via scanString",
+			args:     args{sourceStr: "nil", destVal: reflect.ValueOf(new(map[string]int)).Elem()},
 			wantDest: map[string]int(nil),
 		},
 		{
