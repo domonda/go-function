@@ -310,6 +310,10 @@ httpfun.HandleError = func(err error, w http.ResponseWriter, r *http.Request) {
 
 // Panic recovery
 httpfun.CatchHandlerPanics = true
+
+// Multipart form size limits (used by RequestMultipartFormArgs)
+httpfun.MaxMultipartFormSize = 32 << 20   // total request body cap, default 32 MiB
+httpfun.MaxMultipartFormMemory = 1 << 20  // in-memory threshold, default 1 MiB
 ```
 
 ## Advanced Examples

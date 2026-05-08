@@ -45,4 +45,16 @@ var (
 			httperr.DefaultHandler.HandleError(err, response, request)
 		}
 	}
+
+	// MaxMultipartFormSize caps the total request body size accepted by
+	// RequestMultipartFormArgs. Requests larger than this are rejected
+	// before they can exhaust memory.
+	// Default: 32 MiB.
+	MaxMultipartFormSize int64 = 32 << 20
+
+	// MaxMultipartFormMemory is the in-memory threshold passed to
+	// http.Request.ParseMultipartForm. Form parts above this size are
+	// spooled to temporary files.
+	// Default: 1 MiB.
+	MaxMultipartFormMemory int64 = 1 << 20
 )

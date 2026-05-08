@@ -277,7 +277,7 @@ func RewriteAstFileSource(fset *token.FileSet, pkgName string, pkgFiles map[stri
 	if verbose {
 		fmt.Println("rewriting", filePath)
 	}
-	return os.WriteFile(filePath, rewritten, 0640) //#nosec G306
+	return os.WriteFile(filePath, rewritten, 0640) //#nosec G306,G703 -- developer tool: filePath comes from CLI args, writing back the rewritten source is the intended behavior
 }
 
 // wrapper represents a function wrapper declaration found in source code.

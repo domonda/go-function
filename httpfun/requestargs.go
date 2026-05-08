@@ -135,8 +135,11 @@ func RequestQueryArgs(request *http.Request) (map[string]string, error) {
 
 // RequestMultipartFormArgs returns the multipart form values of the request as string map.
 // If a form field has multiple values, they are joined with ";".
+// The total request body is capped by MaxMultipartFormSize and the in-memory
+// portion by MaxMultipartFormMemory.
 func RequestMultipartFormArgs(request *http.Request) (map[string]string, error) {
-	err := request.ParseMultipartForm(1 << 20)
+	request.Body = http.MaxBytesReader(nil, request.Body, MaxMultipartFormSize)
+	err := request.ParseMultipartForm(MaxMultipartFormMemory) // #nosec G120 -- body bounded by MaxMultipartFormSize above
 	if err != nil {
 		return nil, err
 	}
