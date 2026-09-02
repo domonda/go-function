@@ -19,16 +19,41 @@ jobs:
     - name: Set up Go
       uses: actions/setup-go@v6
       with:
-        go-version: 1.24
+        go-version: '1.26.5'
+
+    # Every step below used to pipe `go list -m` straight into xargs. When that
+    # listing failed the pipeline still exited 0, xargs got empty input, and the
+    # job passed green without having checked a single package -- which is what
+    # happened once go.work required a newer Go than this workflow set up. Write
+    # the list out once so a failure here stops the job.
+    - name: List modules
+      run: |
+        go list -f '{{.Dir}}' -m | tee module-dirs
+        test -s module-dirs
 
     - name: Build
-      run: go list -f '{{.Dir}}' -m | xargs -I {} go build {}/...
+      run: xargs -I {} go build {}/... < module-dirs
 
+    # The tools module holds only a `tool` directive and no packages of its own.
+    # `go vet`, `go test` and gosec all treat a pattern that matches no packages
+    # as an error, so check only the modules that have something to look at.
     - name: Vet
-      run: go list -f '{{.Dir}}' -m | xargs -I {} go vet {}/...
+      run: |
+        while read -r dir; do
+          [ -n "$(go list "$dir/..." 2>/dev/null)" ] || continue
+          go vet "$dir/..."
+        done < module-dirs
 
     - name: Test
-      run: go list -f '{{.Dir}}' -m | xargs -I {} go test -count=1 -v {}/...
+      run: |
+        while read -r dir; do
+          [ -n "$(go list "$dir/..." 2>/dev/null)" ] || continue
+          go test -count=1 -v "$dir/..."
+        done < module-dirs
 
     - name: Gosec
-      run: go list -f '{{.Dir}}' -m | xargs -I {} go tool gosec {}/...
+      run: |
+        while read -r dir; do
+          [ -n "$(go list "$dir/..." 2>/dev/null)" ] || continue
+          go tool gosec "$dir/..."
+        done < module-dirs
