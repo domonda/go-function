@@ -57,7 +57,7 @@ type formField struct {
 //	http.Handle("/create-user", handler)
 type Handler struct {
 	wrappedFunc     function.Wrapper
-	argValidator    map[string]types.ValidatErr
+	argValidator    map[string]types.Validatable
 	argRequired     map[string]bool
 	argOptions      map[string][]Option
 	argDefaultValue map[string]any
@@ -90,7 +90,7 @@ type Handler struct {
 func NewHandler(wrappedFunc function.Wrapper, title string, resultWriter httpfun.ResultsWriter) (handler *Handler, err error) {
 	handler = &Handler{
 		wrappedFunc:     wrappedFunc,
-		argValidator:    make(map[string]types.ValidatErr),
+		argValidator:    make(map[string]types.Validatable),
 		argRequired:     make(map[string]bool),
 		argOptions:      make(map[string][]Option),
 		argDefaultValue: make(map[string]any),
@@ -128,7 +128,7 @@ func MustNewHandler(fun function.Wrapper, title string, successHandler httpfun.R
 //	    }
 //	    return nil
 //	})
-func (handler *Handler) SetArgValidator(arg string, validator types.ValidatErr) {
+func (handler *Handler) SetArgValidator(arg string, validator types.Validatable) {
 	handler.argValidator[arg] = validator
 }
 
