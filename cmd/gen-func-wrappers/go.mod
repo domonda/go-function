@@ -4,9 +4,9 @@ go 1.26.0
 
 require (
 	github.com/stretchr/testify v1.12.1
-	github.com/ungerik/go-astvisit v0.0.0-20251017171216-b7bb0384dd33
-	golang.org/x/mod v0.41.0
-	golang.org/x/tools v0.51.0
+	github.com/ungerik/go-astvisit v0.0.0-20261013080339-68c5a526b805
+	golang.org/x/mod v0.42.0
+	golang.org/x/tools v0.52.0
 )
 
 require (
