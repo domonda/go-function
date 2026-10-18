@@ -21,7 +21,7 @@
 //	}
 //
 //	func main() {
-//	    wrapper := function.MustReflectWrapper("Calculate", Calculate)
+//	    wrapper := function.MustReflectWrapper(Calculate, "ctx", "operation", "a", "b")
 //	    handler := httpfun.Handler(
 //	        httpfun.RequestQueryArgs,     // Parse args from query params
 //	        wrapper,
@@ -36,6 +36,9 @@
 //
 //	GET /calculate?operation=add&a=5&b=3
 //	Response: 8
+//
+// Use httpfun.RequestBodyJSONFieldsAsArgs instead of httpfun.RequestQueryArgs
+// to read the arguments from a JSON object request body:
 //
 //	POST /calculate with JSON: {"operation":"multiply","a":5,"b":3}
 //	Response: 15
@@ -78,7 +81,7 @@
 //
 // Format function results as HTTP responses:
 //
-//	// JSON response (default)
+//	// JSON response
 //	httpfun.RespondJSON
 //
 //	// JSON with named fields
@@ -131,11 +134,13 @@
 //
 // # Error Handling
 //
-// Customize error responses:
+// Customize error responses, for example to log errors,
+// and delegate to DefaultHandleError to keep its responses
+// like 400 Bad Request for invalid argument values:
 //
 //	httpfun.HandleError = func(err error, w http.ResponseWriter, r *http.Request) {
 //	    log.Printf("Error: %v", err)
-//	    http.Error(w, "Internal Server Error", http.StatusInternalServerError)
+//	    httpfun.DefaultHandleError(err, w, r)
 //	}
 //
 // Or provide custom error handlers per endpoint:
@@ -158,10 +163,14 @@
 //	// Catch panics in handlers (default: true)
 //	httpfun.CatchHandlerPanics = true
 //
-//	// Custom error handler (default uses go-httpx/httperr)
+//	// Custom error handler (default: httpfun.DefaultHandleError)
 //	httpfun.HandleError = func(err error, w http.ResponseWriter, r *http.Request) {
 //	    // Custom error handling
 //	}
+//
+//	// Maximum request body size read by RequestBodyAsArg
+//	// and RequestBodyJSONFieldsAsArgs (default: 32 MiB)
+//	httpfun.MaxRequestBodySize = 32 << 20
 //
 // # Advanced Examples
 //
@@ -181,13 +190,13 @@
 //	            httpfun.ConstRequestArg("id", ""),
 //	            httpfun.RequestQueryArgs,
 //	        ),
-//	        function.MustReflectWrapper("GetUser", svc.GetUser),
+//	        function.MustReflectWrapper(svc.GetUser, "ctx", "id"),
 //	        httpfun.RespondJSON,
 //	    ))
 //
 //	    http.Handle("/user/create", httpfun.Handler(
 //	        httpfun.RequestBodyJSONFieldsAsArgs,
-//	        function.MustReflectWrapper("CreateUser", svc.CreateUser),
+//	        function.MustReflectWrapper(svc.CreateUser, "ctx", "name", "email"),
 //	        httpfun.RespondJSON,
 //	    ))
 //
@@ -203,7 +212,7 @@
 //
 //	handler := httpfun.Handler(
 //	    httpfun.RequestBodyAsArg("fileData"),
-//	    function.MustReflectWrapper("ProcessFile", ProcessFile),
+//	    function.MustReflectWrapper(ProcessFile, "ctx", "fileData"),
 //	    httpfun.RespondPlaintext,
 //	)
 //
@@ -216,7 +225,7 @@
 //
 //	handler := httpfun.Handler(
 //	    httpfun.RequestQueryArgs,
-//	    function.MustReflectWrapper("GeneratePDF", GeneratePDF),
+//	    function.MustReflectWrapper(GeneratePDF, "ctx", "title"),
 //	    httpfun.RespondBinary("application/pdf"),
 //	)
 //

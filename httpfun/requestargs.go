@@ -2,6 +2,7 @@ package httpfun
 
 import (
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"maps"
@@ -31,10 +32,11 @@ func ConstRequestArg(name, value string) RequestArgsFunc {
 
 // RequestBodyAsArg returns a RequestArgsFunc
 // that returns the body of the request as the value of the argument argName.
+// The request body is capped by MaxRequestBodySize.
 func RequestBodyAsArg(argName string) RequestArgsFunc {
 	return func(request *http.Request) (map[string]string, error) {
 		defer request.Body.Close()
-		body, err := io.ReadAll(request.Body)
+		body, err := io.ReadAll(http.MaxBytesReader(nil, request.Body, MaxRequestBodySize))
 		if err != nil {
 			return nil, err
 		}
@@ -108,6 +110,9 @@ func RequestHeadersAsArgs(headerToArg map[string]string) RequestArgsFunc {
 	}
 }
 
+// errEnvVarNotSet is an error of the server configuration, not of the request
+var errEnvVarNotSet = errors.New("environment variable is not set")
+
 // RequestArgFromEnvVar returns a RequestArgsFunc
 // that returns the value of the environment variable envVar
 // as the value of the argument argName.
@@ -117,7 +122,7 @@ func RequestArgFromEnvVar(envVar, argName string) RequestArgsFunc {
 	return func(request *http.Request) (map[string]string, error) {
 		value, ok := os.LookupEnv(envVar)
 		if !ok {
-			return nil, fmt.Errorf("environment variable %s is not set", envVar)
+			return nil, fmt.Errorf("%w: %s", errEnvVarNotSet, envVar)
 		}
 		return map[string]string{argName: value}, nil
 	}
@@ -137,10 +142,15 @@ func RequestQueryArgs(request *http.Request) (map[string]string, error) {
 // If a form field has multiple values, they are joined with ";".
 // The total request body is capped by MaxMultipartFormSize and the in-memory
 // portion by MaxMultipartFormMemory.
+// Handler removes the temporary files of uploads after the response.
 func RequestMultipartFormArgs(request *http.Request) (map[string]string, error) {
 	request.Body = http.MaxBytesReader(nil, request.Body, MaxMultipartFormSize)
 	err := request.ParseMultipartForm(MaxMultipartFormMemory) // #nosec G120 -- body bounded by MaxMultipartFormSize above
 	if err != nil {
+		// Parsing can fail after buffering the uploads in temporary files
+		if request.MultipartForm != nil {
+			_ = request.MultipartForm.RemoveAll()
+		}
 		return nil, err
 	}
 	args := make(map[string]string)
@@ -154,9 +164,10 @@ func RequestMultipartFormArgs(request *http.Request) (map[string]string, error) 
 // that parses the body of the request as JSON object
 // with the object field names as argument names
 // and the field values as argument values.
+// The request body is capped by MaxRequestBodySize.
 func RequestBodyJSONFieldsAsArgs(request *http.Request) (map[string]string, error) {
 	defer request.Body.Close()
-	body, err := io.ReadAll(request.Body)
+	body, err := io.ReadAll(http.MaxBytesReader(nil, request.Body, MaxRequestBodySize))
 	if err != nil {
 		return nil, err
 	}

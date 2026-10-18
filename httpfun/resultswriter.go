@@ -68,12 +68,13 @@ var RespondJSON ResultsWriterFunc = func(results []any, resultErr error, respons
 // If the last result is an error and the resultKeys don't have a key for it
 // then the error is returned unhandled if not nil.
 // If there is a result key for the error then the error
-// is marshalled as JSON string and not returned.
+// is marshalled as JSON string, or null if nil, and not returned.
 //
 // An error is returned if the number of results does not match the number of resultKeys
 // or number of resultKeys minus one if the last result is an error.
 func RespondJSONObject(resultKeys ...string) ResultsWriterFunc {
-	if len(slices.Compact(resultKeys)) != len(resultKeys) {
+	// Compact a sorted copy to find all duplicates without modifying resultKeys
+	if len(slices.Compact(slices.Sorted(slices.Values(resultKeys)))) != len(resultKeys) {
 		panic(fmt.Sprintf("RespondJSONObject resultKeys contains duplicates: %#v", resultKeys))
 	}
 	return func(results []any, resultErr error, response http.ResponseWriter, request *http.Request) error {
@@ -93,7 +94,11 @@ func RespondJSONObject(resultKeys ...string) ResultsWriterFunc {
 			r[resultKeys[i]] = result
 		}
 		if errorHasKey {
-			r[resultKeys[len(resultKeys)-1]] = resultErr.Error()
+			var errStr any // JSON null for nil error
+			if resultErr != nil {
+				errStr = resultErr.Error()
+			}
+			r[resultKeys[len(resultKeys)-1]] = errStr
 		}
 		j, err := encodeJSON(r)
 		if err != nil {
@@ -167,7 +172,7 @@ var RespondPlaintext ResultsWriterFunc = func(results []any, resultErr error, re
 	}
 	var buf bytes.Buffer
 	fmt.Fprint(&buf, results...)
-	response.Header().Add("Content-Type", contenttype.PlainText)
+	response.Header().Set("Content-Type", contenttype.PlainText)
 	_, err := response.Write(buf.Bytes())
 	return err
 }
@@ -185,7 +190,7 @@ var RespondHTML ResultsWriterFunc = func(results []any, resultErr error, respons
 			fmt.Fprint(&buf, result)
 		}
 	}
-	response.Header().Add("Content-Type", contenttype.HTML)
+	response.Header().Set("Content-Type", contenttype.HTML)
 	_, err := response.Write(buf.Bytes())
 	return err
 }
@@ -203,7 +208,7 @@ var RespondDetectContentType ResultsWriterFunc = func(results []any, resultErr e
 		return fmt.Errorf("RespondDetectContentType needs []byte result, got %T", results[0])
 	}
 
-	response.Header().Add("Content-Type", DetectContentType(data))
+	response.Header().Set("Content-Type", DetectContentType(data))
 	_, err := response.Write(data)
 	return err
 }
@@ -222,7 +227,7 @@ func RespondContentType(contentType string) ResultsWriter {
 			return fmt.Errorf("RespondContentType(%s)  needs []byte result, got %T", contentType, results[0])
 		}
 
-		response.Header().Add("Content-Type", contentType)
+		response.Header().Set("Content-Type", contentType)
 		_, err := response.Write(data) //#nosec G705 -- contentType was chosen by the caller of this package
 		return err
 	})
@@ -231,9 +236,9 @@ func RespondContentType(contentType string) ResultsWriter {
 // DetectContentType tries to detect the MIME content-type of data,
 // or returns "application/octet-stream" if none could be identified.
 func DetectContentType(data []byte) string {
-	jsonData := map[string]any{}
-	jsonErr := json.Unmarshal(data, &jsonData)
-	if jsonErr == nil {
+	// JSON objects and arrays, but not scalars like 123 or true
+	// that are more likely plain text
+	if trimmed := bytes.TrimSpace(data); len(trimmed) > 0 && (trimmed[0] == '{' || trimmed[0] == '[') && json.Valid(trimmed) {
 		return "application/json"
 	}
 
@@ -299,7 +304,7 @@ func (html RespondStaticHTML) WriteResults(results []any, resultErr error, respo
 }
 
 func (html RespondStaticHTML) ServeHTTP(response http.ResponseWriter, _ *http.Request) {
-	response.Header().Add("Content-Type", contenttype.HTML)
+	response.Header().Set("Content-Type", contenttype.HTML)
 	response.Write([]byte(html)) //#nosec G104,G705
 }
 
@@ -347,7 +352,7 @@ func (text RespondStaticPlaintext) WriteResults(results []any, resultErr error, 
 }
 
 func (text RespondStaticPlaintext) ServeHTTP(response http.ResponseWriter, _ *http.Request) {
-	response.Header().Add("Content-Type", contenttype.PlainText)
+	response.Header().Set("Content-Type", contenttype.PlainText)
 	response.Write([]byte(text)) //#nosec G104,G705
 }
 

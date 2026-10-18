@@ -2,7 +2,11 @@ package httpfun
 
 import (
 	"context"
+	"errors"
+	"fmt"
 	"net/http"
+	"os"
+	"reflect"
 
 	"github.com/ungerik/go-httpx/httperr"
 
@@ -24,6 +28,17 @@ import (
 //   - Writes results using resultsWriter
 //   - Handles errors via errHandlers or global HandleError
 //
+// Errors of getArgs, like of an unreadable request body, and argument values
+// that the wrapped function can't parse are errors of the request,
+// passed to the error handlers wrapped so that DefaultHandleError answers them with 400 Bad Request,
+// or 413 Request Entity Too Large if the request body exceeded a limit
+// like MaxRequestBodySize or MaxMultipartFormSize, without calling resultsWriter.
+// Errors of the file system, like a failed temporary file of an upload,
+// and a missing environment variable of RequestArgFromEnvVar are errors of the server.
+// A RequestArgsFunc can return an error that implements http.Handler,
+// like the errors of httperr, to respond with another status.
+// Temporary files of uploads parsed by getArgs are removed after the response.
+//
 // Example:
 //
 //	func Calculate(ctx context.Context, a, b int) (int, error) {
@@ -32,7 +47,7 @@ import (
 //
 //	handler := httpfun.Handler(
 //	    httpfun.RequestQueryArgs,
-//	    function.MustReflectWrapper("Calculate", Calculate),
+//	    function.MustReflectWrapper(Calculate, "ctx", "a", "b"),
 //	    httpfun.RespondJSON,
 //	)
 //	http.Handle("/calculate", handler)
@@ -48,23 +63,34 @@ func Handler(getArgs RequestArgsFunc, function function.CallWithNamedStringsWrap
 			}()
 		}
 
+		if request.MultipartForm == nil {
+			// Remove the temporary files of uploads that getArgs buffered
+			// after the response, because net/http doesn't remove them
+			// for requests cloned by middleware
+			defer func() {
+				if request.MultipartForm != nil {
+					_ = request.MultipartForm.RemoveAll()
+				}
+			}()
+		}
+
 		var args map[string]string
 		if getArgs != nil {
 			a, err := getArgs(request)
 			if err != nil {
-				if len(errHandlers) == 0 {
-					http.Error(response, http.StatusText(http.StatusBadRequest), http.StatusBadRequest)
-				} else {
-					for _, errHandler := range errHandlers {
-						errHandler.HandleError(err, response, request)
-					}
-				}
+				handleError(argsRequestError(err), errHandlers, response, request)
 				return
 			}
 			args = a
 		}
 
 		results, err := function.CallWithNamedStrings(request.Context(), args)
+		if reqErr, ok := argParseRequestError(err, function); ok {
+			// The function was not called because the request
+			// contained an invalid argument value
+			handleError(reqErr, errHandlers, response, request)
+			return
+		}
 		if resultsWriter != nil {
 			err = resultsWriter.WriteResults(results, err, response, request)
 		}
@@ -98,7 +124,7 @@ func Handler(getArgs RequestArgsFunc, function function.CallWithNamedStringsWrap
 //
 //	http.Handle("/status", httpfun.HandlerNoWrapper(
 //	    GetStatus,
-//	    httpfun.RespondJSON,
+//	    httpfun.RespondContentType("application/json"),
 //	))
 func HandlerNoWrapper(function func(context.Context) ([]byte, error), resultsWriter ResultsWriter, errHandlers ...httperr.Handler) http.HandlerFunc {
 	return func(response http.ResponseWriter, request *http.Request) {
@@ -139,4 +165,96 @@ func handleError(err error, errHandlers []httperr.Handler, response http.Respons
 	for _, errHandler := range errHandlers {
 		errHandler.HandleError(err, response, request)
 	}
+}
+
+// requestError is an error caused by the request, not by the server,
+// like an invalid argument value or an unreadable request body.
+// It wraps the original error for logging and responds
+// with its status code and a message without details of the server.
+type requestError struct {
+	err        error
+	statusCode int
+	message    string
+}
+
+func (e *requestError) Error() string { return e.err.Error() }
+
+func (e *requestError) Unwrap() error { return e.err }
+
+// ServeHTTP responds with the status code and message of the error,
+// httperr.DefaultHandler uses it for errors wrapping a requestError.
+func (e *requestError) ServeHTTP(response http.ResponseWriter, _ *http.Request) {
+	http.Error(response, e.message, e.statusCode)
+}
+
+// argsRequestError returns an error of a RequestArgsFunc as requestError,
+// except for errors of the server like a missing environment variable
+// or a failed temporary file of an upload.
+func argsRequestError(err error) error {
+	if errors.Is(err, errEnvVarNotSet) {
+		return err
+	}
+	if _, ok := errors.AsType[*os.PathError](err); ok {
+		// Not wrapped because httperr answers a wrapped fs.ErrNotExist,
+		// like of a missing temporary directory, with 404 Not Found
+		return fmt.Errorf("can't get arguments of request because of file system error: %s", err)
+	}
+	var errResponse http.Handler
+	if errors.As(err, &errResponse) {
+		// The error already carries its response, like httperr.Unauthorized
+		return err
+	}
+	if _, ok := errors.AsType[*http.MaxBytesError](err); ok {
+		return &requestError{err: err, statusCode: http.StatusRequestEntityTooLarge, message: http.StatusText(http.StatusRequestEntityTooLarge)}
+	}
+	return &requestError{err: err, statusCode: http.StatusBadRequest, message: http.StatusText(http.StatusBadRequest)}
+}
+
+// argParseRequestError returns err as requestError
+// if it is an error from parsing the arguments of wrapper,
+// so the request contained an invalid argument value.
+// The message names the argument but not its value.
+// Errors from parsing arguments of other functions
+// that the wrapped function called are errors of the server.
+func argParseRequestError(err error, wrapper any) (*requestError, bool) {
+	if err == nil {
+		return nil, false
+	}
+	if e, ok := errors.AsType[function.ErrParseArgString](err); ok && isWrapperOf(e.Func, wrapper) {
+		return &requestError{err: err, statusCode: http.StatusBadRequest, message: fmt.Sprintf("invalid value for argument %q", e.ArgName)}, true
+	}
+	if e, ok := errors.AsType[function.ErrParseArgJSON](err); ok && isWrapperOf(e.Func, wrapper) {
+		return &requestError{err: err, statusCode: http.StatusBadRequest, message: fmt.Sprintf("invalid JSON for argument %q", e.Arg)}, true
+	}
+	if e, ok := errors.AsType[function.ErrParseArgsJSON](err); ok && isWrapperOf(e.Func, wrapper) {
+		return &requestError{err: err, statusCode: http.StatusBadRequest, message: "invalid JSON object for arguments"}, true
+	}
+	return nil, false
+}
+
+// isWrapperOf returns true if errFunc, the function of an argument parse error,
+// is wrapper itself, the value wrapper points to,
+// or a wrapper embedded in wrapper, like by a decorating struct.
+func isWrapperOf(errFunc, wrapper any) bool {
+	return isValueOf(reflect.ValueOf(errFunc), reflect.ValueOf(wrapper), 0)
+}
+
+func isValueOf(errFunc, wrapper reflect.Value, depth int) bool {
+	if !errFunc.IsValid() || !wrapper.IsValid() || depth > 8 {
+		return false
+	}
+	if errFunc.Type() == wrapper.Type() && errFunc.Comparable() && wrapper.Comparable() && errFunc.Equal(wrapper) {
+		return true
+	}
+	switch wrapper.Kind() {
+	case reflect.Interface, reflect.Pointer:
+		return !wrapper.IsNil() && isValueOf(errFunc, wrapper.Elem(), depth+1)
+	case reflect.Struct:
+		for i := range wrapper.NumField() {
+			if wrapper.Type().Field(i).Anonymous && isValueOf(errFunc, wrapper.Field(i), depth+1) {
+				return true
+			}
+		}
+	}
+	return false
 }
