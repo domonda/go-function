@@ -86,7 +86,8 @@ func makeResultsPrintable(results []any) error {
 			results[i] = strings.Join(x, "\n")
 
 		case []byte:
-			if utf8.Valid(x) && bytes.IndexFunc(x, func(r rune) bool { return !unicode.IsPrint(r) }) == -1 {
+			// Whitespace like newlines and tabs is printable text
+			if utf8.Valid(x) && bytes.IndexFunc(x, func(r rune) bool { return !unicode.IsPrint(r) && !unicode.IsSpace(r) }) == -1 {
 				results[i] = string(x)
 			} else {
 				results[i] = fmt.Sprintf("%#x", x)
@@ -104,7 +105,10 @@ func makeResultsPrintable(results []any) error {
 			switch v := derefValue(reflect.ValueOf(result)); v.Kind() {
 			case reflect.Float32, reflect.Float64:
 				// Print with up to 12 decimals precision
-				results[i] = strings.TrimRight(fmt.Sprintf("%.12f", v.Interface()), "0")
+				// without trailing zeros and without a trailing decimal point
+				// for whole numbers (TrimSuffix after TrimRight, so the zeros
+				// of the integer part are never trimmed)
+				results[i] = strings.TrimSuffix(strings.TrimRight(fmt.Sprintf("%.12f", v.Interface()), "0"), ".")
 
 			case reflect.Struct, reflect.Map, reflect.Slice, reflect.Array:
 				b, err := json.MarshalIndent(result, "", "  ")
@@ -221,7 +225,7 @@ type Logger interface {
 	Printf(format string, args ...any)
 }
 
-// LogTo calls logger.Printf(fmt.Sprintln(results...))
+// LogTo calls logger.Printf("%s", fmt.Sprintln(results...))
 func LogTo(logger Logger) ResultsHandlerFunc {
 	return func(ctx context.Context, results []any, resultErr error) error {
 		if resultErr != nil {
@@ -231,12 +235,12 @@ func LogTo(logger Logger) ResultsHandlerFunc {
 		if err != nil {
 			return err
 		}
-		logger.Printf(fmt.Sprintln(results...))
+		logger.Printf("%s", fmt.Sprintln(results...))
 		return nil
 	}
 }
 
-// LogWithPrefixTo calls logger.Printf(fmt.Sprintln(results...)) with prefix prepended to the results
+// LogWithPrefixTo calls logger.Printf("%s", fmt.Sprintln(results...)) with prefix prepended to the results
 func LogWithPrefixTo(prefix string, logger Logger) ResultsHandlerFunc {
 	return func(ctx context.Context, results []any, resultErr error) error {
 		if resultErr != nil {
@@ -247,7 +251,7 @@ func LogWithPrefixTo(prefix string, logger Logger) ResultsHandlerFunc {
 			return err
 		}
 		results = append([]any{prefix}, results...)
-		logger.Printf(fmt.Sprintln(results...))
+		logger.Printf("%s", fmt.Sprintln(results...))
 		return nil
 	}
 }
@@ -283,20 +287,29 @@ var PrintStructSliceAsTable ResultsHandlerFunc = func(ctx context.Context, resul
 	for i, result := range results {
 		// Check if all results are slices of the same type
 		resultType := reflect.TypeOf(result)
-		if resultType.Kind() != reflect.Slice && resultType.Kind() != reflect.Array {
+		if resultType == nil || resultType.Kind() != reflect.Slice && resultType.Kind() != reflect.Array {
 			return fmt.Errorf("expected slice or array, got %T for result %d", result, i)
-		}
-		if resultType.Elem().Kind() != reflect.Struct && resultType.Elem().Kind() != reflect.Pointer {
-			return fmt.Errorf("expected slice/array of structs or struct pointers, got %T for result %d", result, i)
 		}
 		isPtr := resultType.Elem().Kind() == reflect.Pointer
 		structType := resultType.Elem()
 		if isPtr {
 			structType = structType.Elem()
 		}
-		var header []string
-		for col := 0; col < structType.NumField(); col++ {
-			header = append(header, structType.Field(col).Name)
+		if structType.Kind() != reflect.Struct {
+			return fmt.Errorf("expected slice/array of structs or struct pointers, got %T for result %d", result, i)
+		}
+		// Values of unexported fields can't be accessed
+		// so only exported fields are used as columns
+		var (
+			header       []string
+			fieldIndices []int
+		)
+		for field := range structType.Fields() {
+			if !field.IsExported() {
+				continue
+			}
+			header = append(header, field.Name)
+			fieldIndices = append(fieldIndices, field.Index[0])
 		}
 		rows := [][]string{header}
 
@@ -309,16 +322,16 @@ var PrintStructSliceAsTable ResultsHandlerFunc = func(ctx context.Context, resul
 				}
 				structVal = structVal.Elem()
 			}
-			fieldStrings := make([]string, structType.NumField())
-			for col := 0; col < structType.NumField(); col++ {
-				fieldStrings[col] = fmt.Sprint(structVal.Field(col).Interface())
+			fieldStrings := make([]string, len(fieldIndices))
+			for col, fieldIndex := range fieldIndices {
+				fieldStrings[col] = fmt.Sprint(structVal.Field(fieldIndex).Interface())
 			}
 			rows = append(rows, fieldStrings)
 		}
 
-		colWidths := make([]int, structType.NumField())
+		colWidths := make([]int, len(header))
 		for row := range rows {
-			for col := 0; col < structType.NumField() && col < len(rows[row]); col++ {
+			for col := 0; col < len(header) && col < len(rows[row]); col++ {
 				numRunes := utf8.RuneCountInString(rows[row][col])
 				colWidths[col] = max(colWidths[col], numRunes)
 			}

@@ -6,6 +6,8 @@ import (
 	"errors"
 	"fmt"
 	"reflect"
+	"runtime"
+	"strings"
 )
 
 // ReflectWrapper returns a Wrapper for the passed function
@@ -30,14 +32,12 @@ func MustReflectWrapper(function any, argNames ...string) Wrapper {
 
 // newReflectWrapper unexported function returns testable struct type
 func newReflectWrapper(function any, argNames []string) (*reflectWrapper, error) {
-	var (
-		funcVal  = reflect.ValueOf(function)
-		funcType = funcVal.Type()
-	)
+	funcVal := reflect.ValueOf(function)
+	if funcVal.Kind() != reflect.Func {
+		return nil, fmt.Errorf("expected function but got %T", function)
+	}
+	funcType := funcVal.Type()
 	switch {
-	case funcType.Kind() != reflect.Func:
-		return nil, fmt.Errorf("expected function but got %s", funcType)
-
 	case len(argNames) == 0 && funcType.NumIn() == 1 && funcType.In(0) == typeOfContext:
 		argNames = []string{"ctx"}
 
@@ -53,12 +53,28 @@ type reflectWrapper struct {
 	argNames []string
 }
 
+// String returns the signature of the wrapped function.
 func (f *reflectWrapper) String() string {
-	return f.funcVal.String()
+	argTypes := make([]reflect.Type, f.funcType.NumIn())
+	for i := range argTypes {
+		argTypes[i] = f.funcType.In(i)
+	}
+	resultTypes := make([]reflect.Type, f.funcType.NumOut())
+	for i := range resultTypes {
+		resultTypes[i] = f.funcType.Out(i)
+	}
+	return signatureString(f.Name(), f.argNames, argTypes, resultTypes, f.funcType.IsVariadic())
 }
 
+// Name returns the name of the wrapped function like "pkg.Func"
+// with the last element of the package path as qualifier,
+// or "func" if the name can't be determined.
 func (f *reflectWrapper) Name() string {
-	return f.String()
+	if fn := runtime.FuncForPC(f.funcVal.Pointer()); fn != nil {
+		name := fn.Name()
+		return name[strings.LastIndexByte(name, '/')+1:]
+	}
+	return "func"
 }
 
 func (f *reflectWrapper) NumArgs() int {
@@ -70,11 +86,7 @@ func (f *reflectWrapper) ContextArg() bool {
 }
 
 func (f *reflectWrapper) NumResults() int {
-	numResults := f.funcType.NumOut()
-	if numResults > 0 && f.funcType.Out(numResults-1) == typeOfError {
-		numResults--
-	}
-	return numResults
+	return f.funcType.NumOut()
 }
 
 func (f *reflectWrapper) ErrorResult() bool {
@@ -125,11 +137,17 @@ func (f *reflectWrapper) call(in []reflect.Value) (results []any, err error) {
 			in[i] = reflect.Zero(f.funcType.In(i))
 		}
 	}
-	out := f.funcVal.Call(in)
+	var out []reflect.Value
+	if f.funcType.IsVariadic() {
+		// The last argument is a slice with the variadic arguments
+		out = f.funcVal.CallSlice(in)
+	} else {
+		out = f.funcVal.Call(in)
+	}
 	resultsLen := len(out)
 	if f.ErrorResult() {
 		resultsLen--
-		err, _ = out[len(out)-1].Interface().(error)
+		err, _ = reflect.TypeAssert[error](out[len(out)-1])
 	}
 	results = make([]any, resultsLen)
 	for i := range results {
@@ -145,8 +163,16 @@ func (f *reflectWrapper) Call(ctx context.Context, args []any) (results []any, e
 		offs = 1
 		in[0] = reflect.ValueOf(ctx)
 	}
+	if len(args) > len(in)-offs {
+		return nil, fmt.Errorf("%d arguments passed, but function %s takes %d", len(args), f, len(in)-offs)
+	}
 	for i, arg := range args {
-		in[i+offs] = reflect.ValueOf(arg)
+		argVal := reflect.ValueOf(arg)
+		// Untyped nil is passed as zero value by f.call
+		if argVal.IsValid() && !argVal.Type().AssignableTo(f.funcType.In(i+offs)) {
+			return nil, fmt.Errorf("can't use %s as type %s for argument '%s' of function %s", argVal.Type(), f.funcType.In(i+offs), f.argNames[i+offs], f)
+		}
+		in[i+offs] = argVal
 	}
 	return f.call(in)
 }
@@ -158,11 +184,33 @@ func (f *reflectWrapper) CallWithStrings(ctx context.Context, strs ...string) (r
 		offs = 1
 		in[0] = reflect.ValueOf(ctx)
 	}
+	variadic := f.funcType.IsVariadic()
+	if len(strs) > len(in)-offs && !variadic {
+		return nil, fmt.Errorf("%d arguments passed, but function %s takes %d", len(strs), f, len(in)-offs)
+	}
 	for i := offs; i < len(in); i++ {
 		argType := f.funcType.In(i)
 		if i-offs >= len(strs) {
 			// Pass default value if not enough strs
 			in[i] = reflect.Zero(argType)
+			continue
+		}
+		if variadic && i == len(in)-1 {
+			// Like in a Go call every string from the variadic
+			// argument on is one element, also a single string
+			variadicStrs := strs[i-offs:]
+			elems := reflect.MakeSlice(argType, len(variadicStrs), len(variadicStrs))
+			for j, str := range variadicStrs {
+				if argType.Elem() == typeOfAny {
+					elems.Index(j).Set(reflect.ValueOf(str))
+					continue
+				}
+				err = ScanString(str, elems.Index(j).Addr().Interface())
+				if err != nil {
+					return nil, NewErrParseArgString(err, f, f.argNames[i], str)
+				}
+			}
+			in[i] = elems
 			continue
 		}
 		str := strs[i-offs]
@@ -231,7 +279,7 @@ func (f *reflectWrapper) CallWithJSON(ctx context.Context, argsJSON []byte) (res
 				var errStr string
 				err = json.Unmarshal(arg, &errStr)
 				if err != nil {
-					return nil, NewErrParseArgsJSON(err, f, argsJSON)
+					return nil, NewErrParseArgJSON(err, f, argName)
 				}
 				var err error
 				if errStr != "" {
@@ -242,7 +290,7 @@ func (f *reflectWrapper) CallWithJSON(ctx context.Context, argsJSON []byte) (res
 			}
 			err = json.Unmarshal(arg, destPtr.Interface())
 			if err != nil {
-				return nil, NewErrParseArgsJSON(err, f, argsJSON)
+				return nil, NewErrParseArgJSON(err, f, argName)
 			}
 		}
 		in[i] = destPtr.Elem()

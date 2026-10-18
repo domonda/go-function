@@ -28,20 +28,28 @@ type Wrapper interface {
 //
 //	var MyFuncWrapper = function.WrapperTODO(MyFunc)
 //
-// Then run: go run github.com/domonda/go-function/cmd/gen-func-wrappers
+// Then add the code generator as tool to your module once
+// and run it:
+//
+//	go get -tool github.com/domonda/go-function/cmd/gen-func-wrappers@latest
+//	go tool gen-func-wrappers ./...
 //
 // This will replace WrapperTODO calls with generated wrapper implementations.
 // The function panics at runtime to ensure you don't forget to run the code generator.
 func WrapperTODO(function any) Wrapper {
 	if reflect.ValueOf(function).Kind() != reflect.Func {
-		panic("function.WrapperTODO must be used with a function as argument, then run gen-func-wrappers to to replace it with generated code")
+		panic("function.WrapperTODO must be used with a function as argument, then run gen-func-wrappers to replace it with generated code")
 	}
 	panic("function.WrapperTODO: run gen-func-wrappers")
 }
 
 // CallWrapper provides the ability to call a function with a slice of any values.
-// The context is passed as the first argument if the function accepts context.Context.
-// Arguments are type-checked and converted as needed before calling the wrapped function.
+// The context is passed as the first argument if the function accepts context.Context,
+// so args don't include a context.Context argument.
+// The arg for a variadic last argument is a slice of its element type.
+// Missing or untyped nil args are passed as zero values.
+// ReflectWrapper and generated wrappers return an error for too many args
+// or args not assignable to their argument type.
 type CallWrapper interface {
 	Call(ctx context.Context, args []any) (results []any, err error)
 }
@@ -49,7 +57,7 @@ type CallWrapper interface {
 // CallWrapperTODO is a placeholder for code generation. See WrapperTODO for details.
 func CallWrapperTODO(function any) CallWrapper {
 	if reflect.ValueOf(function).Kind() != reflect.Func {
-		panic("function.CallWrapperTODO must be used with a function as argument, then run gen-func-wrappers to to replace it with generated code")
+		panic("function.CallWrapperTODO must be used with a function as argument, then run gen-func-wrappers to replace it with generated code")
 	}
 	panic("function.CallWrapperTODO: run gen-func-wrappers")
 }
@@ -57,7 +65,20 @@ func CallWrapperTODO(function any) CallWrapper {
 // CallWithStringsWrapper provides the ability to call a function with string arguments
 // that are automatically converted to the required types.
 // String conversion supports basic types, time values, slices, structs (as JSON), and more.
-// See StringScanner for conversion details.
+// See ScanString for conversion details.
+//
+// Like in a Go call, every string from the position of a variadic last argument on
+// is one element of the variadic slice, also a single string, so it is never parsed
+// as slice literal. Elements are converted to the element type,
+// elements of type any get the unconverted string.
+// No strings at the variadic position result in no variadic elements.
+// Missing strings for other arguments are passed as zero values.
+// ReflectWrapper and generated wrappers return an error
+// for too many strings for a function without variadic argument.
+//
+// Security: the strings become argument values as they are, so don't pass
+// untrusted input for arguments of types that name files or other resources,
+// like fs.File of github.com/ungerik/go-fs which is a path on the server.
 type CallWithStringsWrapper interface {
 	CallWithStrings(ctx context.Context, args ...string) (results []any, err error)
 }
@@ -74,6 +95,11 @@ func CallWithStringsWrapperTODO(function any) CallWithStringsWrapper {
 // The argument names must match the function's parameter names.
 // String values are automatically converted to the required types.
 // Missing arguments will use zero values.
+// The single string of a variadic last argument is parsed as slice literal like "[1,2]".
+//
+// Security: the strings become argument values as they are, so don't pass
+// untrusted input for arguments of types that name files or other resources,
+// like fs.File of github.com/ungerik/go-fs which is a path on the server.
 type CallWithNamedStringsWrapper interface {
 	CallWithNamedStrings(ctx context.Context, args map[string]string) (results []any, err error)
 }
@@ -87,8 +113,17 @@ func CallWithNamedStringsWrapperTODO(function any) CallWithNamedStringsWrapper {
 }
 
 // CallWithJSONWrapper provides the ability to call a function with JSON-encoded arguments.
-// The JSON can be either an array of arguments or an object with named arguments.
-// Arguments are unmarshaled using json.Unmarshal into the required types.
+// The JSON must be an object with the argument names as keys,
+// a JSON array of arguments is not supported,
+// ReflectWrapper and generated wrappers return an error for JSON that is no object,
+// except null, which they handle like an empty object.
+// Arguments are unmarshaled using json.Unmarshal into the required types,
+// except error arguments, which are JSON strings where an empty string
+// or null is no error.
+//
+// Security: the JSON values become argument values as they are, so don't pass
+// untrusted input for arguments of types that name files or other resources,
+// like fs.File of github.com/ungerik/go-fs which is a path on the server.
 type CallWithJSONWrapper interface {
 	CallWithJSON(ctx context.Context, argsJSON []byte) (results []any, err error)
 }
@@ -143,6 +178,7 @@ func (f CallWithJSONWrapperFunc) CallWithJSON(ctx context.Context, argsJSON []by
 
 // VoidFuncWrapper is a Wrapper for a function without arguments and without results.
 // It implements all wrapper interfaces and can be used for simple callback-style functions.
+// Its Call methods ignore all arguments.
 //
 // Example:
 //
@@ -184,6 +220,7 @@ func (f VoidFuncWrapper) CallWithJSON(context.Context, []byte) (results []any, e
 
 // ErrorFuncWrapper is a Wrapper for a function without arguments that returns only an error.
 // It implements all wrapper interfaces and is useful for validation or initialization functions.
+// Its Call methods ignore all arguments.
 //
 // Example:
 //

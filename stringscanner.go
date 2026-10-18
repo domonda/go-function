@@ -9,6 +9,7 @@ import (
 	"strconv"
 	"strings"
 	"time"
+	"unicode/utf8"
 )
 
 // ScanString converts a string to the type pointed to by destPtr.
@@ -19,8 +20,15 @@ import (
 //   - Time types: time.Time (multiple formats), time.Duration
 //   - Pointers: "nil" or "null" converts to nil
 //   - Slices/arrays: JSON-like syntax [1,2,3] or ["a","b"]
+//     with at most MaxSliceLiteralElements elements
 //   - Structs: JSON object syntax
-//   - Custom types: encoding.TextUnmarshaler, json.Unmarshaler, or types with SetNull() method
+//   - Custom types: encoding.TextUnmarshaler gets the unmodified string,
+//     json.Unmarshaler the string if it is valid JSON, else the string encoded as JSON string,
+//     types with a SetNull() method get it called for "", "nil", or "null"
+//     (see DefaultScanString)
+//
+// Scanners registered in StringScanners also apply to slice and array
+// elements and pointer targets scanned by DefaultScanString.
 //
 // Example:
 //
@@ -64,6 +72,11 @@ func ScanStrings(sourceStrings []string, destPtrs ...any) error {
 // StringScanner defines the interface for converting strings to typed values.
 // Custom implementations can be registered via TypeStringScanners to add
 // support for additional types or override default conversion behavior.
+//
+// Security: a scanned string becomes the value of the destination as it is,
+// so a string scanned into a type that names a file or other resource,
+// like fs.File of github.com/ungerik/go-fs, becomes a path on the server.
+// Don't scan untrusted input into such types.
 type StringScanner interface {
 	ScanString(sourceStr string, destPtr any) error
 }
@@ -82,7 +95,40 @@ func (f StringScannerFunc) ScanString(sourceStr string, destPtr any) error {
 //
 // Special string values:
 //   - Empty string, "nil", or "null" are treated as zero/nil values
-//   - Whitespace is trimmed for most types (except string itself)
+//     (except for string kinds and []byte, which keep "nil" and "null" as text,
+//     and encoding.TextUnmarshaler and json.Unmarshaler)
+//   - Whitespace is trimmed for most types
+//     (except string, []byte, and encoding.TextUnmarshaler)
+//
+// A type with a SetNull() method gets it called for an empty string,
+// "nil", or "null" before any other conversion.
+//
+// Destinations implementing encoding.TextUnmarshaler (except time.Time,
+// which is parsed using TimeFormats) get the unmodified string passed
+// to UnmarshalText for all input, including whitespace, "", "nil", and "null",
+// so the type owns its parsing and validation.
+// Destinations implementing json.Unmarshaler get the string passed
+// to UnmarshalJSON if it is valid JSON like null, 123, or "text",
+// else the unmodified string encoded as JSON string.
+// If valid non-string JSON is rejected, it is retried as JSON string.
+//
+// Elements of a slice literal that are JSON strings like in ["a","b"]
+// are unquoted and explicit string values, so "", "nil", and "null"
+// are not treated as zero/nil values for them: [1, "", 3] and [1, "null"]
+// can't be scanned as []int, ["", "null"] is scanned as []*string
+// with pointers to "" and "null", and as []string{"", "null"}.
+// Unquoted elements like in [1, null, 3] keep being treated as zero/nil values.
+// Quoted elements are also passed as JSON strings to destinations decoding JSON,
+// so ["123"] scanned as []json.RawMessage or []any keeps the string "123".
+//
+// Slice and array elements and pointer targets are scanned with the
+// package-level StringScanners, also if DefaultScanString is called directly
+// or by another TypeStringScanners, so that scanners registered there apply
+// to them like to the top-level destination. Values without a matching
+// registered scanner are scanned by StringScanners.Default, which is
+// DefaultScanString if not changed, except quoted elements:
+// only DefaultScanString knows that they are explicit strings,
+// so it scans them instead of StringScanners.Default.
 //
 // Returns an error if destPtr is nil, not a pointer, or conversion fails.
 func DefaultScanString(sourceStr string, destPtr any) (err error) {
@@ -96,7 +142,7 @@ func DefaultScanString(sourceStr string, destPtr any) (err error) {
 	if destPtrVal.IsNil() {
 		return errors.New("destination pointer is nil")
 	}
-	return scanString(sourceStr, destPtrVal.Elem())
+	return scanString(sourceStr, destPtrVal.Elem(), false)
 }
 
 // scanString is the internal implementation that converts sourceStr to destVal.
@@ -110,14 +156,19 @@ func DefaultScanString(sourceStr string, destPtr any) (err error) {
 // 5. Reflection-based conversion by Kind (bool, int, float, slice, etc.)
 // 6. Fallback to fmt.Sscan for any remaining types
 //
+// Slice and array elements and pointer targets are scanned
+// with scanNestedString, so that registered scanners apply to them.
+//
+// If explicitStr is true, then sourceStr is an explicit string value
+// like a quoted element of a slice literal, so "", "nil", and "null"
+// are scanned as string instead of being interpreted as nil/zero value.
+//
 // This function is performance-critical and is called for every argument conversion.
-func scanString(sourceStr string, destVal reflect.Value) (err error) {
+func scanString(sourceStr string, destVal reflect.Value, explicitStr bool) (err error) {
 	var (
 		destPtr    = destVal.Addr().Interface()
 		trimmedSrc = strings.TrimSpace(sourceStr)
-		nilSrc     = trimmedSrc == "" ||
-			strings.EqualFold(trimmedSrc, "nil") ||
-			strings.EqualFold(trimmedSrc, "null")
+		nilSrc     = !explicitStr && isNilSource(trimmedSrc)
 	)
 
 	if n, ok := destPtr.(interface{ SetNull() }); ok && nilSrc {
@@ -131,7 +182,9 @@ func scanString(sourceStr string, destVal reflect.Value) (err error) {
 		return nil
 
 	case *error:
-		if nilSrc {
+		// Like for the error arguments of CallWithJSON,
+		// an empty error message is no error, also for an explicit string
+		if nilSrc || trimmedSrc == "" {
 			*dest = nil
 		} else {
 			*dest = errors.New(trimmedSrc)
@@ -179,33 +232,52 @@ func scanString(sourceStr string, destVal reflect.Value) (err error) {
 		return nil
 
 	case encoding.TextUnmarshaler:
+		// The type owns its parsing and validation,
+		// so pass the unmodified string for all input
 		return dest.UnmarshalText([]byte(sourceStr))
 
 	case json.Unmarshaler:
 		source := []byte(trimmedSrc)
-		if !json.Valid(source) {
-			// sourceStr is not already valid JSON
+		if explicitStr || !json.Valid(source) {
+			// sourceStr is an explicit string value
+			// or not already valid JSON,
 			// then escape it as JSON string
 			source, err = json.Marshal(sourceStr)
 			if err != nil {
 				return fmt.Errorf("can't marshal %q as JSON string: %w", sourceStr, err)
 			}
+			return dest.UnmarshalJSON(source)
 		}
-		return dest.UnmarshalJSON(source)
+		err = dest.UnmarshalJSON(source)
+		if err == nil || source[0] == '"' {
+			return err
+		}
+		// sourceStr is valid JSON but not a JSON string like 123 or true,
+		// which a string valued type can't unmarshal,
+		// so retry with sourceStr escaped as JSON string
+		jsonStr, marshalErr := json.Marshal(sourceStr)
+		if marshalErr != nil {
+			return err
+		}
+		retryErr := dest.UnmarshalJSON(jsonStr)
+		if retryErr != nil {
+			return err // Return the error of the original JSON
+		}
+		return nil
 
 	case *map[string]any:
 		if nilSrc {
 			*dest = nil
 			return nil
 		}
-		return json.Unmarshal([]byte(trimmedSrc), destPtr)
+		return unmarshalTrimmedJSON(sourceStr, trimmedSrc, explicitStr, destPtr)
 
 	case *[]any:
 		if nilSrc {
 			*dest = nil
 			return nil
 		}
-		return json.Unmarshal([]byte(trimmedSrc), destPtr)
+		return unmarshalTrimmedJSON(sourceStr, trimmedSrc, explicitStr, destPtr)
 
 	case *[]byte:
 		*dest = []byte(sourceStr)
@@ -222,7 +294,7 @@ func scanString(sourceStr string, destVal reflect.Value) (err error) {
 		if ptr.IsNil() {
 			ptr = reflect.New(destVal.Type().Elem())
 		}
-		err := scanString(sourceStr, ptr.Elem())
+		err := scanNestedString(sourceStr, ptr.Elem(), explicitStr)
 		if err != nil {
 			return err
 		}
@@ -288,21 +360,20 @@ func scanString(sourceStr string, destVal reflect.Value) (err error) {
 		}
 		// JSON might not be the best format for command line arguments,
 		// but it could have also come from a HTTP request body or other sources
-		return json.Unmarshal([]byte(trimmedSrc), destPtr)
+		return unmarshalTrimmedJSON(sourceStr, trimmedSrc, explicitStr, destPtr)
 
 	case reflect.Slice:
 		if nilSrc {
 			destVal.SetZero()
 			return nil
 		}
-		sourceStrings, err := parseSliceLiteralOrSingle(trimmedSrc)
+		elems, explicit, err := parseSliceLiteralOrSingle(trimmedSrc, explicitStr)
 		if err != nil {
 			return err
 		}
-		sliceLen := len(sourceStrings)
-		destVal.Set(reflect.MakeSlice(destVal.Type(), sliceLen, sliceLen))
-		for i := range sliceLen {
-			err = scanString(sourceStrings[i], destVal.Index(i))
+		destVal.Set(reflect.MakeSlice(destVal.Type(), len(elems), len(elems)))
+		for i, elem := range elems {
+			err = scanNestedString(elem, destVal.Index(i), explicit[i])
 			if err != nil {
 				return err
 			}
@@ -310,16 +381,20 @@ func scanString(sourceStr string, destVal reflect.Value) (err error) {
 		return nil
 
 	case reflect.Array:
-		sourceStrings, err := parseSliceLiteralOrSingle(trimmedSrc)
+		if nilSrc {
+			destVal.SetZero()
+			return nil
+		}
+		elems, explicit, err := parseSliceLiteralOrSingle(trimmedSrc, explicitStr)
 		if err != nil {
 			return err
 		}
 		arrayLen := destVal.Len()
-		if len(sourceStrings) != arrayLen {
-			return fmt.Errorf("array value %q needs to have %d elements, but has %d", sourceStr, arrayLen, len(sourceStrings))
+		if len(elems) != arrayLen {
+			return fmt.Errorf("array value %q needs to have %d elements, but has %d", sourceStr, arrayLen, len(elems))
 		}
-		for i := range arrayLen {
-			err := scanString(sourceStrings[i], destVal.Index(i))
+		for i, elem := range elems {
+			err := scanNestedString(elem, destVal.Index(i), explicit[i])
 			if err != nil {
 				return err
 			}
@@ -344,23 +419,126 @@ func scanString(sourceStr string, destVal reflect.Value) (err error) {
 	return nil
 }
 
+// isNilSource returns true if the trimmed source string
+// is interpreted as nil/zero value: "", "nil", or "null".
+func isNilSource(trimmedSrc string) bool {
+	return trimmedSrc == "" ||
+		strings.EqualFold(trimmedSrc, "nil") ||
+		strings.EqualFold(trimmedSrc, "null")
+}
+
+// unmarshalTrimmedJSON unmarshals trimmedSrc as JSON into destPtr.
+// An explicit string value is unmarshalled as JSON string,
+// so it stays a string for destinations like []any
+// and is rejected like json.Unmarshal rejects a JSON string
+// for a destination that is not a string.
+func unmarshalTrimmedJSON(sourceStr, trimmedSrc string, explicitStr bool, destPtr any) error {
+	if explicitStr {
+		source, err := json.Marshal(sourceStr)
+		if err != nil {
+			return fmt.Errorf("can't marshal %q as JSON string: %w", sourceStr, err)
+		}
+		return json.Unmarshal(source, destPtr)
+	}
+	return json.Unmarshal([]byte(trimmedSrc), destPtr)
+}
+
+// scanNestedString scans sourceStr into destVal, which is a slice or array
+// element or the target of a pointer, with the package-level StringScanners
+// instead of recursing into scanString, so that scanners registered for
+// a type, interface, or kind apply at every level of a destination type.
+// Like a direct recursion into scanString, this only scans a part
+// of the destination and never the same destination again.
+// Without StringScanners it recurses into scanString.
+//
+// An explicitStr is scanned with the Types, Interfaces, and Kinds scanners
+// of StringScanners, and else as explicit string by scanString
+// instead of StringScanners.Default.
+func scanNestedString(sourceStr string, destVal reflect.Value, explicitStr bool) error {
+	scanners := StringScanners
+	if scanners == nil {
+		return scanString(sourceStr, destVal, explicitStr)
+	}
+	destPtr := destVal.Addr().Interface()
+	if explicitStr {
+		// Registered scanners get the explicit string first,
+		// the default scanner keeps it a string value
+		explicitScanners := *scanners
+		explicitScanners.Default = StringScannerFunc(scanExplicitString)
+		return explicitScanners.ScanString(sourceStr, destPtr)
+	}
+	return scanners.ScanString(sourceStr, destPtr)
+}
+
+// scanExplicitString is DefaultScanString for an explicit string value
+// that is not interpreted as nil/zero value. It is only used as default
+// scanner of TypeStringScanners, which validates destPtr before.
+func scanExplicitString(sourceStr string, destPtr any) error {
+	return scanString(sourceStr, reflect.ValueOf(destPtr).Elem(), true)
+}
+
 // parseSliceLiteralOrSingle interprets sourceStr as either a JSON-like slice
 // literal `[a,b,...]` (split via sliceLiteralFields) or as a single-element
 // slice value when it has neither `[` prefix nor `]` suffix. Mixed forms like
 // `[1,2` or `1,2]` are rejected as malformed instead of silently treated as a
 // single element — that fallthrough used to surface as misleading downstream
 // "can't parse" errors when callers truncated input.
-func parseSliceLiteralOrSingle(sourceStr string) ([]string, error) {
+// Elements of a slice literal that are valid JSON strings are unquoted,
+// so `["a","b"]` returns the same elements as `[a,b]`,
+// and are explicit string values.
+// The single element of a value without brackets is explicit if explicitStr is true.
+// explicit reports for every element if it is an explicit string value,
+// see the explicitStr argument of scanString.
+func parseSliceLiteralOrSingle(sourceStr string, explicitStr bool) (elems []string, explicit []bool, err error) {
 	hasPrefix := strings.HasPrefix(sourceStr, "[")
 	hasSuffix := strings.HasSuffix(sourceStr, "]")
 	switch {
 	case hasPrefix && hasSuffix:
-		return sliceLiteralFields(sourceStr)
+		elems, err = sliceLiteralFields(sourceStr)
+		if err != nil {
+			return nil, nil, err
+		}
+		// Unquote in place, because large literals of request bodies
+		// would need a lot of memory for a copy of the elements
+		explicit = make([]bool, len(elems))
+		for i, field := range elems {
+			elems[i], explicit[i] = unquoteSliceElement(field)
+		}
+		return elems, explicit, nil
 	case hasPrefix != hasSuffix:
-		return nil, fmt.Errorf("malformed slice literal %q: must be wrapped in matching '[' and ']'", sourceStr)
+		return nil, nil, fmt.Errorf("malformed slice literal %q: must be wrapped in matching '[' and ']'", sourceStr)
 	default:
-		return []string{sourceStr}, nil
+		return []string{sourceStr}, []bool{explicitStr}, nil
 	}
+}
+
+// unquoteSliceElement returns the unquoted string and true
+// if field is a valid JSON string, else field and false.
+func unquoteSliceElement(field string) (str string, ok bool) {
+	if len(field) < 2 || field[0] != '"' || field[len(field)-1] != '"' {
+		return field, false
+	}
+	// Fast path without json.Unmarshal: the unquoted string of a JSON string
+	// without escapes, quotes, control characters, and invalid UTF-8
+	// (which json.Unmarshal replaces with U+FFFD) is the string between the quotes
+	inner := field[1 : len(field)-1]
+	simple := true
+	for i := 0; i < len(inner); i++ {
+		if c := inner[i]; c == '\\' || c == '"' || c < 0x20 {
+			simple = false
+			break
+		}
+	}
+	if simple && utf8.ValidString(inner) {
+		return inner, true
+	}
+	// Not the named result, which would escape to the heap for every call
+	var unquoted string
+	err := json.Unmarshal([]byte(field), &unquoted)
+	if err != nil {
+		return field, false
+	}
+	return unquoted, true
 }
 
 // sliceLiteralFields parses a JSON-like slice literal string into individual field strings.
@@ -379,7 +557,9 @@ func parseSliceLiteralOrSingle(sourceStr string) ([]string, error) {
 //   - Proper validation of bracket matching
 //
 // Returns an error if the string doesn't start with '[', end with ']',
+// has content after the closing ']', has an empty element,
 // or has unbalanced brackets/braces/quotes.
+// Brackets containing only whitespace like "[ ]" return no fields like "[]".
 func sliceLiteralFields(sourceStr string) (fields []string, err error) {
 	if !strings.HasPrefix(sourceStr, "[") {
 		return nil, fmt.Errorf("slice value %q does not begin with '['", sourceStr)
@@ -424,16 +604,36 @@ func sliceLiteralFields(sourceStr string) (fields []string, err error) {
 
 		case ']':
 			bracketDepth--
-			if bracketDepth < 0 {
-				return nil, fmt.Errorf("slice value %q has too many ']'", sourceStr)
-			}
-			if objectDepth == 0 && bracketDepth == 0 && i-begin > 0 {
-				fields = append(fields, strings.TrimSpace(sourceStr[begin:i]))
+			if bracketDepth == 0 {
+				// Closing bracket of the slice literal must be the last character
+				if i != len(sourceStr)-1 {
+					return nil, fmt.Errorf("slice value %q has content after closing ']'", sourceStr)
+				}
+				if objectDepth == 0 {
+					field := strings.TrimSpace(sourceStr[begin:i])
+					switch {
+					case field != "":
+						fields = append(fields, field)
+					case len(fields) > 0:
+						// Element after last comma is empty
+						return nil, fmt.Errorf("slice value %q has an empty element", sourceStr)
+					}
+					// else only whitespace between the brackets: empty slice
+				}
 			}
 
 		case ',':
 			if objectDepth == 0 && bracketDepth == 1 {
-				fields = append(fields, strings.TrimSpace(sourceStr[begin:i]))
+				field := strings.TrimSpace(sourceStr[begin:i])
+				if field == "" {
+					return nil, fmt.Errorf("slice value %q has an empty element", sourceStr)
+				}
+				fields = append(fields, field)
+				// Another element follows the comma, so stop parsing
+				// before allocating memory for more elements than the limit
+				if MaxSliceLiteralElements > 0 && len(fields) >= MaxSliceLiteralElements {
+					return nil, fmt.Errorf("slice value has more than %d elements (MaxSliceLiteralElements)", MaxSliceLiteralElements)
+				}
 				begin = i + 1
 			}
 
