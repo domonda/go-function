@@ -2,6 +2,7 @@ package cli
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"maps"
 	"reflect"
@@ -97,7 +98,7 @@ func NewStringArgsDispatcher(baseCommand string, loggers ...StringArgsCommandLog
 // Example:
 //
 //	err := dispatcher.AddCommand("deploy", "Deploy a service",
-//	    function.MustReflectWrapper("deploy", Deploy))
+//	    function.MustReflectWrapper(Deploy, "env", "service", "version"))
 func (disp *StringArgsDispatcher) AddCommand(command, description string, commandFunc function.Wrapper, resultsHandlers ...function.ResultsHandler) error {
 	if _, exists := disp.comm[command]; exists {
 		return fmt.Errorf("Command '%s' already added", command)
@@ -131,8 +132,11 @@ func (disp *StringArgsDispatcher) MustAddCommand(command, description string, co
 //
 //	// When user runs just "myapp" with no arguments
 //	dispatcher.AddDefaultCommand("Run the server",
-//	    function.MustReflectWrapper("serve", Serve))
+//	    function.MustReflectWrapper(Serve))
 func (disp *StringArgsDispatcher) AddDefaultCommand(description string, commandFunc function.Wrapper, resultsHandlers ...function.ResultsHandler) error {
+	if _, exists := disp.comm[DefaultCommand]; exists {
+		return errors.New("Default command already added")
+	}
 	disp.comm[DefaultCommand] = &stringArgsCommand{
 		command:         DefaultCommand,
 		description:     description,
@@ -223,7 +227,7 @@ func (disp *StringArgsDispatcher) MustDispatchDefaultCommand() {
 //	}
 func (disp *StringArgsDispatcher) DispatchCombinedCommandAndArgs(ctx context.Context, commandAndArgs []string) (command string, err error) {
 	if len(commandAndArgs) == 0 {
-		return DefaultCommand, disp.DispatchDefaultCommand()
+		return DefaultCommand, disp.Dispatch(ctx, DefaultCommand)
 	}
 	command = commandAndArgs[0]
 	args := commandAndArgs[1:]
@@ -278,8 +282,9 @@ func (disp *StringArgsDispatcher) PrintCommandsUsageIntro() {
 	disp.PrintCommands()
 }
 
-// PrintCompletion prints commands matching the given prefix for shell completion.
-// This is used internally by the completion system.
+// PrintCompletion prints the commands starting with the prefix args[0]
+// for shell completion, one per line prefixed with the base command.
+// See CompleteStringArgsDispatcher for shell completion with posener/complete.
 func (disp *StringArgsDispatcher) PrintCompletion(args []string) {
 	prefix := ""
 	if len(args) > 0 {
@@ -289,7 +294,12 @@ func (disp *StringArgsDispatcher) PrintCompletion(args []string) {
 		return strings.Compare(a.command, b.command)
 	})
 	for _, cmd := range commands {
-		if strings.HasPrefix(cmd.command, prefix) {
+		if !strings.HasPrefix(cmd.command, prefix) {
+			continue
+		}
+		if cmd.command == DefaultCommand {
+			fmt.Println(disp.baseCommand)
+		} else {
 			fmt.Println(disp.baseCommand, cmd.command)
 		}
 	}

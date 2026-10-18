@@ -3,6 +3,7 @@ package cli
 import (
 	"os"
 	"path/filepath"
+	"slices"
 	"sort"
 	"strings"
 
@@ -26,7 +27,8 @@ func (c completer) ArgsGet() complete.Predictor             { return c }
 
 func (c completer) Predict(prefix string) (commands []string) {
 	for command := range c.comm {
-		if strings.HasPrefix(command, prefix) {
+		// The default command has no name that could be completed
+		if command != DefaultCommand && strings.HasPrefix(command, prefix) {
 			commands = append(commands, command)
 		}
 	}
@@ -44,7 +46,10 @@ type superCompleter struct {
 }
 
 func (c superCompleter) SubCmdList() []string {
-	return c.Commands()
+	// The default command has no name that could be completed
+	return slices.DeleteFunc(c.Commands(), func(command string) bool {
+		return command == DefaultCommand
+	})
 }
 
 func (c superCompleter) SubCmdGet(cmd string) complete.Completer {
@@ -61,7 +66,7 @@ func (c superCompleter) ArgsGet() complete.Predictor            { return c }
 
 func (c superCompleter) Predict(prefix string) (commands []string) {
 	for command := range c.sub {
-		if strings.HasPrefix(command, prefix) {
+		if command != DefaultCommand && strings.HasPrefix(command, prefix) {
 			commands = append(commands, command)
 		}
 	}

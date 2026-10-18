@@ -9,11 +9,13 @@ require github.com/domonda/go-function v0.0.0-00010101000000-000000000000 // rep
 require (
 	github.com/fatih/color v1.19.0
 	github.com/posener/complete/v2 v2.1.0
+	github.com/stretchr/testify v1.12.1
 )
 
 require (
-	github.com/mattn/go-colorable v0.1.16 // indirect
-	github.com/mattn/go-isatty v0.0.24 // indirect
+	github.com/mattn/go-colorable v0.1.14 // indirect
+	github.com/mattn/go-isatty v0.0.22 // indirect
 	github.com/posener/script v1.2.0 // indirect
+	go.yaml.in/yaml/v3 v3.0.5 // indirect
 	golang.org/x/sys v0.49.0 // indirect
 )

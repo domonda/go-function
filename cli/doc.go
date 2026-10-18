@@ -18,9 +18,9 @@
 //	func main() {
 //	    dispatcher := cli.NewStringArgsDispatcher("myapp")
 //	    dispatcher.MustAddCommand("deploy", "Deploy a service",
-//	        function.MustReflectWrapper("deploy", Deploy))
+//	        function.MustReflectWrapper(Deploy, "env", "service", "version"))
 //
-//	    err := dispatcher.DispatchCombinedCommandAndArgs(context.Background(), os.Args[1:])
+//	    _, err := dispatcher.DispatchCombinedCommandAndArgs(context.Background(), os.Args[1:])
 //	    if err != nil {
 //	        fmt.Fprintf(os.Stderr, "Error: %v\n", err)
 //	        os.Exit(1)
@@ -41,14 +41,14 @@
 //	// Add user commands
 //	userCmd := dispatcher.MustAddSuperCommand("user")
 //	userCmd.MustAddCommand("create", "Create a new user",
-//	    function.MustReflectWrapper("CreateUser", CreateUser))
+//	    function.MustReflectWrapper(CreateUser, "name", "email"))
 //	userCmd.MustAddCommand("delete", "Delete a user",
-//	    function.MustReflectWrapper("DeleteUser", DeleteUser))
+//	    function.MustReflectWrapper(DeleteUser, "name"))
 //
 //	// Add db commands
 //	dbCmd := dispatcher.MustAddSuperCommand("db")
 //	dbCmd.MustAddCommand("migrate", "Run migrations",
-//	    function.MustReflectWrapper("Migrate", Migrate))
+//	    function.MustReflectWrapper(Migrate))
 //
 //	dispatcher.DispatchCombinedCommandAndArgs(context.Background(), os.Args[1:])
 //
@@ -63,7 +63,7 @@
 // You can register a default command that runs when no command is specified:
 //
 //	dispatcher.MustAddDefaultCommand("Run the server",
-//	    function.MustReflectWrapper("RunServer", RunServer))
+//	    function.MustReflectWrapper(RunServer))
 //
 // Now running the program without arguments will execute the default command:
 //
@@ -96,10 +96,13 @@
 //	    dispatcher.DispatchCombinedCommandAndArgs(context.Background(), os.Args[1:])
 //	}
 //
-// Users can then install completion:
+// Users can then install completion for their shell
+// (see github.com/posener/complete/v2):
 //
-//	$ myapp --install-completion
+//	$ COMP_INSTALL=1 myapp
 //	$ myapp de<TAB>  # completes to "deploy"
+//
+// Use CompleteSuperStringArgsDispatcher for a SuperStringArgsDispatcher.
 //
 // # Logging
 //
@@ -132,11 +135,14 @@
 //
 // # Result Handlers
 //
-// Process function results before they're displayed:
+// Handle function results, for example print them:
 //
-//	resultHandler := function.ResultsHandlerFunc(func(results []any) ([]any, error) {
-//	    // Transform or validate results
-//	    return results, nil
+//	resultHandler := function.ResultsHandlerFunc(func(ctx context.Context, results []any, resultErr error) error {
+//	    if resultErr != nil {
+//	        return resultErr
+//	    }
+//	    fmt.Println(results...)
+//	    return nil
 //	})
 //
 //	dispatcher.MustAddCommand("query", "Query the database",

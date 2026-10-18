@@ -143,7 +143,9 @@ func (disp *SuperStringArgsDispatcher) DispatchCombinedCommandAndArgs(ctx contex
 	default:
 		superCommand = commandAndArgs[0]
 		sub, ok := disp.sub[superCommand]
-		if ok && sub.HasDefaultCommand() {
+		// A named sub command takes precedence over the default command,
+		// an empty argument is an argument and not the name of the default command
+		if ok && sub.HasDefaultCommand() && (commandAndArgs[1] == DefaultCommand || !sub.HasCommand(commandAndArgs[1])) {
 			command = DefaultCommand
 			args = commandAndArgs[1:]
 		} else {
@@ -215,11 +217,14 @@ func (disp *SuperStringArgsDispatcher) PrintCommandsUsageIntro() {
 	disp.PrintCommands()
 }
 
+// PrintCompletion prints the commands matching args for shell completion,
+// one per line prefixed with the base command.
+// A single argument is the prefix of a super command or command,
+// two arguments are a super command and the prefix of one of its sub commands.
 func (disp *SuperStringArgsDispatcher) PrintCompletion(args []string) {
-	prefix := ""
-	if len(args) > 0 {
-		prefix = args[0]
-	}
+	// Super command and sub command are joined with a space
+	// like the commands that are compared with the prefix
+	prefix := strings.Join(args[:min(len(args), 2)], " ")
 	type superCmd struct {
 		super string
 		cmd   *stringArgsCommand
@@ -243,9 +248,9 @@ func (disp *SuperStringArgsDispatcher) PrintCompletion(args []string) {
 		if cmd.command != DefaultCommand {
 			command += " " + cmd.command
 		}
-		// TODO subcommand completion
 		if strings.HasPrefix(command, prefix) {
-			fmt.Println(disp.baseCommand, command)
+			// No trailing space for the default command
+			fmt.Println(strings.TrimSpace(disp.baseCommand + " " + command))
 		}
 	}
 }
