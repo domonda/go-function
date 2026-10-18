@@ -1,10 +1,11 @@
 package main
 
-//go:generate gen-func-wrappers -replaceForJSON=fs.FileReader:fs.File $GOFILE
+//go:generate go run ../../cmd/gen-func-wrappers $GOFILE
 
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"net/http"
 	"reflect"
 	"time"
@@ -20,15 +21,6 @@ import (
 
 func main() {
 	httperr.DebugShowInternalErrorsInResponse = true
-
-	function.StringScanners = function.StringScanners.
-		WithTypeScanner(
-			reflect.TypeFor[fs.FileReader](),
-			function.StringScannerFunc(func(sourceStr string, destPtr any) error {
-				*destPtr.(*fs.FileReader) = fs.File(sourceStr)
-				return nil
-			}),
-		)
 
 	handler, err := htmlform.NewHandler(wrappedExample, "Example Form", httpfun.RespondStaticHTML("<h1>Success!</h1>"))
 	if err != nil {
@@ -77,12 +69,17 @@ const (
 //   - color:  Select a color
 //   - file:   Upload file
 func Example(ctx context.Context, aBool bool, anInt int, aFloat float64, color Color, file fs.FileReader /*, aDate date.Date, aTime time.Time*/) error {
+	// Without an uploaded file the argument is nil
+	fileName := "<no file>"
+	if file != nil {
+		fileName = file.Name()
+	}
 	log.InfoCtx(ctx, "Example").
 		Bool("aBool", aBool).
 		Int("anInt", anInt).
 		Float("aFloat", aFloat).
 		Any("color", color).
-		Str("file", file.Name()).
+		Str("file", fileName).
 		// Str("aDate", string(aDate)).
 		// Time("aTime", aTime).
 		Log()
@@ -102,11 +99,11 @@ var wrappedExample wrappedExampleT
 type wrappedExampleT struct{}
 
 func (wrappedExampleT) String() string {
-	return "Example(ctx context.Context, aBool bool, anInt int, aFloat float64, color Color, file fs.FileReader) error"
+	return "main.Example(ctx context.Context, aBool bool, anInt int, aFloat float64, color main.Color, file fs.FileReader) error"
 }
 
 func (wrappedExampleT) Name() string {
-	return "Example"
+	return "main.Example"
 }
 
 func (wrappedExampleT) NumArgs() int      { return 6 }
@@ -139,12 +136,66 @@ func (wrappedExampleT) ResultTypes() []reflect.Type {
 	}
 }
 
-func (wrappedExampleT) Call(ctx context.Context, args []any) (results []any, err error) {
-	err = Example(ctx, args[0].(bool), args[1].(int), args[2].(float64), args[3].(Color), args[4].(fs.FileReader)) // wrapped call
+func (f wrappedExampleT) Call(ctx context.Context, args []any) (results []any, err error) {
+	if len(args) > 5 {
+		return nil, fmt.Errorf("%d arguments passed, but function %s takes 5", len(args), f)
+	}
+	var a struct {
+		aBool  bool
+		anInt  int
+		aFloat float64
+		color  Color
+		file   fs.FileReader
+	}
+	if 0 < len(args) && args[0] != nil {
+		v, ok := args[0].(bool)
+		if !ok {
+			return nil, fmt.Errorf("can't use %T as type bool for argument 'aBool' of function %s", args[0], f)
+		}
+		a.aBool = v
+	}
+	if 1 < len(args) && args[1] != nil {
+		v, ok := args[1].(int)
+		if !ok {
+			return nil, fmt.Errorf("can't use %T as type int for argument 'anInt' of function %s", args[1], f)
+		}
+		a.anInt = v
+	}
+	if 2 < len(args) && args[2] != nil {
+		v, ok := args[2].(float64)
+		if !ok {
+			return nil, fmt.Errorf("can't use %T as type float64 for argument 'aFloat' of function %s", args[2], f)
+		}
+		a.aFloat = v
+	}
+	if 3 < len(args) && args[3] != nil {
+		v, ok := args[3].(Color)
+		if !ok && reflect.TypeOf(args[3]).AssignableTo(reflect.TypeFor[Color]()) {
+			v, ok = reflect.TypeAssert[Color](reflect.ValueOf(args[3]).Convert(reflect.TypeFor[Color]()))
+		}
+		if !ok {
+			return nil, fmt.Errorf("can't use %T as type Color for argument 'color' of function %s", args[3], f)
+		}
+		a.color = v
+	}
+	if 4 < len(args) && args[4] != nil {
+		v, ok := args[4].(fs.FileReader)
+		if !ok && reflect.TypeOf(args[4]).AssignableTo(reflect.TypeFor[fs.FileReader]()) {
+			v, ok = reflect.TypeAssert[fs.FileReader](reflect.ValueOf(args[4]).Convert(reflect.TypeFor[fs.FileReader]()))
+		}
+		if !ok {
+			return nil, fmt.Errorf("can't use %T as type fs.FileReader for argument 'file' of function %s", args[4], f)
+		}
+		a.file = v
+	}
+	err = Example(ctx, a.aBool, a.anInt, a.aFloat, a.color, a.file) // wrapped call
 	return results, err
 }
 
 func (f wrappedExampleT) CallWithStrings(ctx context.Context, strs ...string) (results []any, err error) {
+	if len(strs) > 5 {
+		return nil, fmt.Errorf("%d arguments passed, but function %s takes 5", len(strs), f)
+	}
 	var a struct {
 		aBool  bool
 		anInt  int
@@ -229,17 +280,48 @@ func (f wrappedExampleT) CallWithNamedStrings(ctx context.Context, strs map[stri
 }
 
 func (f wrappedExampleT) CallWithJSON(ctx context.Context, argsJSON []byte) (results []any, err error) {
-	var a struct {
-		ABool  bool
-		AnInt  int
-		AFloat float64
-		Color  Color
-		File   fs.File
-	}
-	err = json.Unmarshal(argsJSON, &a)
+	var args map[string]json.RawMessage
+	err = json.Unmarshal(argsJSON, &args)
 	if err != nil {
 		return nil, function.NewErrParseArgsJSON(err, f, argsJSON)
 	}
-	err = Example(ctx, a.ABool, a.AnInt, a.AFloat, a.Color, a.File) // wrapped call
+	var a struct {
+		aBool  bool
+		anInt  int
+		aFloat float64
+		color  Color
+		file   fs.FileReader
+	}
+	if raw, ok := args["aBool"]; ok {
+		err = json.Unmarshal(raw, &a.aBool)
+		if err != nil {
+			return nil, function.NewErrParseArgJSON(err, f, "aBool")
+		}
+	}
+	if raw, ok := args["anInt"]; ok {
+		err = json.Unmarshal(raw, &a.anInt)
+		if err != nil {
+			return nil, function.NewErrParseArgJSON(err, f, "anInt")
+		}
+	}
+	if raw, ok := args["aFloat"]; ok {
+		err = json.Unmarshal(raw, &a.aFloat)
+		if err != nil {
+			return nil, function.NewErrParseArgJSON(err, f, "aFloat")
+		}
+	}
+	if raw, ok := args["color"]; ok {
+		err = json.Unmarshal(raw, &a.color)
+		if err != nil {
+			return nil, function.NewErrParseArgJSON(err, f, "color")
+		}
+	}
+	if raw, ok := args["file"]; ok {
+		err = json.Unmarshal(raw, &a.file)
+		if err != nil {
+			return nil, function.NewErrParseArgJSON(err, f, "file")
+		}
+	}
+	err = Example(ctx, a.aBool, a.anInt, a.aFloat, a.color, a.file) // wrapped call
 	return results, err
 }

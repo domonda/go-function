@@ -5,11 +5,11 @@ package htmlform
 //
 // The template expects a struct with:
 //   - Title: Page title and heading
-//   - Fields: Slice of formField (Name, Label, Type, Value, Required, Options)
+//   - Fields: Slice of formField (Name, Label, Type, Value, Required, Multiple, Options)
 //   - SubmitButtonText: Text for the submit button
 //
-// You can customize this template by parsing your own HTML template
-// and assigning it to handler.template after creating the handler.
+// You can customize this template by assigning your own html/template text
+// before creating handlers, because NewHandler parses FormTemplate.
 //
 // The template handles these field types specially:
 //   - checkbox: Inline label, checked state support
@@ -19,8 +19,8 @@ package htmlform
 //
 // Example customization:
 //
-//	handler, _ := htmlform.NewHandler(wrapper, "My Form", resultWriter)
-//	handler.template, _ = template.New("form").Parse(myCustomTemplate)
+//	htmlform.FormTemplate = myCustomTemplate
+//	handler, err := htmlform.NewHandler(wrapper, "My Form", resultWriter)
 var FormTemplate = /*html*/ `
 <!DOCTYPE html>
 <html lang="en">
@@ -95,7 +95,7 @@ var FormTemplate = /*html*/ `
 				<textarea id="{{.Name}}" name="{{.Name}}" cols="40" rows="5" {{if .Required}}required{{end}}>{{.Value}}</textarea>
 			{{else}}
 				<label for="{{.Name}}">{{.Label}}:</label>
-				<input type="{{.Type}}" id="{{.Name}}" name="{{.Name}}" value="{{.Value}}" size="40" {{if .Required}}required{{end}}/>
+				<input type="{{.Type}}" id="{{.Name}}" name="{{.Name}}" value="{{.Value}}" size="40" {{if .Required}}required{{end}} {{if .Multiple}}multiple{{end}}/>
 			{{end}}
 		</div>
 	{{end}}

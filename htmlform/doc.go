@@ -17,7 +17,7 @@
 //	}
 //
 //	func main() {
-//	    wrapper := function.MustReflectWrapper("CreateUser", CreateUser)
+//	    wrapper := function.MustReflectWrapper(CreateUser, "ctx", "name", "email", "age", "active")
 //	    handler := htmlform.MustNewHandler(
 //	        wrapper,
 //	        "Create New User",           // Form title
@@ -40,8 +40,9 @@
 //	int, float     → <input type="number">
 //	bool           → <input type="checkbox">
 //	fs.FileReader  → <input type="file">
-//	time.Time      → <input type="datetime-local"> (commented out in current version)
-//	date.Date      → <input type="date"> (commented out in current version)
+//	other types    → <input type="text">
+//
+// Set input types like "datetime-local" for time.Time with SetArgInputType.
 //
 // # Customizing Fields
 //
@@ -73,9 +74,13 @@
 //
 // # Field Validation
 //
+// The SetArg* methods of Handler panic for names that are not
+// arguments of the wrapped function, so a typo or a renamed argument
+// can't silently remove a validator or another setting.
+//
 // Add custom validators for form fields:
 //
-//	handler.SetArgValidator("email", func(value any) error {
+//	handler.SetArgValidator("email", func(ctx context.Context, value any) error {
 //	    email, ok := value.(string)
 //	    if !ok || !strings.Contains(email, "@") {
 //	        return errors.New("invalid email address")
@@ -83,7 +88,7 @@
 //	    return nil
 //	})
 //
-//	handler.SetArgValidator("age", func(value any) error {
+//	handler.SetArgValidator("age", func(ctx context.Context, value any) error {
 //	    age, ok := value.(int)
 //	    if !ok || age < 18 {
 //	        return errors.New("must be 18 or older")
@@ -91,13 +96,24 @@
 //	    return nil
 //	})
 //
+// Validators are called with the context of the request and the argument values
+// parsed from the submitted form, or the zero value of an argument that was not submitted.
+// The function is called with exactly these values.
+// If a validator returns an error, then the function is not called
+// and a 400 Bad Request error naming the argument is passed to the result writer.
+// The text of the validator error is shown to the client in that response.
+//
 // # Required Fields
 //
 // Fields are automatically marked as required based on their type:
-//   - Non-pointer types (int, string, etc.) → Required by default
+//   - Non-pointer types like int → Required by default
 //   - Pointer types (*int, *string) → Optional
 //   - String type → Optional (empty string is valid)
 //   - Types implementing IsNull() → Optional
+//   - bool checkboxes are never marked as required, unchecked is false
+//
+// Required fields are enforced by browsers with the required attribute
+// of the form field, the server passes the zero value for a missing value.
 //
 // Override automatic detection:
 //
@@ -106,16 +122,16 @@
 //
 // # Custom Form Templates
 //
-// The default form template can be customized by modifying FormTemplate
-// or by creating a new template:
+// The default form template can be customized by assigning
+// a custom html/template text to FormTemplate before creating handlers,
+// because NewHandler parses FormTemplate:
 //
-//	handler, _ := htmlform.NewHandler(wrapper, "My Form", resultWriter)
-//	customTemplate := `<!DOCTYPE html>
+//	htmlform.FormTemplate = `<!DOCTYPE html>
 //	<html>
 //	<head><title>{{.Title}}</title></head>
 //	<body>
 //	    <h1>{{.Title}}</h1>
-//	    <form method="post">
+//	    <form method="post" enctype="multipart/form-data">
 //	        {{range .Fields}}
 //	            <label>{{.Label}}</label>
 //	            <input type="{{.Type}}" name="{{.Name}}" value="{{.Value}}">
@@ -124,11 +140,25 @@
 //	    </form>
 //	</body>
 //	</html>`
-//	handler.template, _ = template.New("form").Parse(customTemplate)
+//	handler, err := htmlform.NewHandler(wrapper, "My Form", resultWriter)
 //
 // # File Uploads
 //
-// Functions accepting fs.FileReader automatically get file upload fields:
+// Function arguments with a type implementing fs.FileReader,
+// like fs.File or fs.FileReader, automatically get file upload fields.
+// They are only taken from files uploaded with the form
+// and passed as fs.File of the multipart form file,
+// which is only readable while the request is handled.
+// Without an uploaded file the argument is the zero value,
+// which is nil for fs.FileReader.
+// Pointers, slices and arrays of such types are file arguments too:
+// a slice or array gets all files uploaded with the same field name,
+// and its form field allows selecting multiple files.
+// A non-empty text value submitted for a file argument is rejected
+// with 400 Bad Request without calling the function,
+// because it would be used as path of a file on the server.
+// An upload for an argument type that fs.File can't be assigned to,
+// like fs.MemFile, results in an error of the server.
 //
 //	func ProcessDocument(ctx context.Context, name string, document fs.FileReader) error {
 //	    data, err := document.ReadAll()
@@ -140,12 +170,24 @@
 //	}
 //
 //	handler := htmlform.MustNewHandler(
-//	    function.MustReflectWrapper("ProcessDocument", ProcessDocument),
+//	    function.MustReflectWrapper(ProcessDocument, "ctx", "name", "document"),
 //	    "Upload Document",
 //	    httpfun.RespondStaticHTML("<p>Document processed!</p>"),
 //	)
 //
 // The form will include a file input field for the document parameter.
+//
+// WARNING: Never expose functions with fs.File or fs.FileReader arguments
+// to untrusted input through string arguments of httpfun handlers or cli commands,
+// or through JSON (CallWithJSON, httpfun.RequestBodyJSONFieldsAsArgs,
+// or a -replaceForJSON of gen-func-wrappers to fs.File):
+// a string becomes the path of a file on the server
+// that the function then reads or writes on behalf of the client.
+// For the same reason don't register a process-global StringScanner
+// that converts strings to fs.FileReader, and don't use struct arguments
+// with fs.File fields for forms of untrusted users,
+// because only arguments that are files themselves
+// or pointers, slices or arrays of files are protected.
 //
 // # Complete Example
 //
@@ -168,7 +210,7 @@
 //	}
 //
 //	func main() {
-//	    wrapper := function.MustReflectWrapper("RegisterUser", RegisterUser)
+//	    wrapper := function.MustReflectWrapper(RegisterUser, "ctx", "username", "email", "password", "age", "newsletter")
 //	    handler := htmlform.MustNewHandler(
 //	        wrapper,
 //	        "User Registration",
@@ -209,6 +251,30 @@
 //	    return nil
 //	})
 //
+// # Request Size Limit
+//
+// The body of a form submission including uploaded files is limited to 100 MiB,
+// larger requests are answered with 413 Request Entity Too Large.
+// Uploaded files larger than httpfun.MaxMultipartFormMemory
+// are buffered in temporary files instead of memory:
+//
+//	handler.SetMaxRequestBodySize(10 << 20) // 10 MiB
+//
+// # Cross-Site Request Forgery Protection
+//
+// Form submissions are protected against cross-site request forgery (CSRF)
+// with http.CrossOriginProtection: POST requests that browsers send from other origins
+// are answered with 403 Forbidden without calling the function.
+// Requests of non-browser clients without the Sec-Fetch-Site and Origin headers are accepted.
+// Configure trusted origins or disable the protection with nil:
+//
+//	protection := http.NewCrossOriginProtection()
+//	err := protection.AddTrustedOrigin("https://example.com")
+//	if err != nil {
+//	    panic(err)
+//	}
+//	handler.SetCrossOriginProtection(protection)
+//
 // # Error Handling
 //
 // The handler automatically:
@@ -222,15 +288,16 @@
 //
 // # Styling
 //
-// The default template includes minimal CSS styling. Customize the template
-// to add your own styles, or inject CSS through the form title:
+// The default template includes minimal CSS styling.
+// Customize FormTemplate to add your own styles,
+// the title is HTML escaped and can't be used to inject CSS:
 //
-//	title := `My Form
-//	<style>
-//	    form { max-width: 600px; margin: 0 auto; }
-//	    input, select, textarea { width: 100%; padding: 8px; }
-//	</style>`
-//	handler := htmlform.MustNewHandler(wrapper, title, resultWriter)
+//	htmlform.FormTemplate = strings.Replace(htmlform.FormTemplate,
+//	    "</style>",
+//	    "form { max-width: 600px; margin: 0 auto; }\n</style>",
+//	    1,
+//	)
+//	handler := htmlform.MustNewHandler(wrapper, "My Form", resultWriter)
 //
 // # Best Practices
 //
@@ -247,10 +314,14 @@
 // # Limitations
 //
 //   - Context.Context parameters are automatically excluded from the form
-//   - Complex types (nested structs, maps) are not supported
-//   - Array/slice parameters need manual handling
-//   - Time.Time support is currently commented out (awaiting implementation)
-//   - Form validation happens server-side only
+//   - Maps other than map[string]any are not supported,
+//     struct and map[string]any arguments are entered as JSON in a text field
+//   - Slices and arrays of files get a multiple file upload field,
+//     other slices and arrays are entered as one text value like [1,2,3]
+//   - time.Time arguments get a text field unless their input type
+//     is set to "datetime-local" with SetArgInputType
+//   - The server only validates with the validators set by SetArgValidator
+//     and by parsing the values, required fields are only enforced by browsers
 //
 // # Thread Safety
 //
