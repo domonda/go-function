@@ -270,6 +270,7 @@ All wrappers provide metadata methods:
 wrapper.Name()              // "myapp.ProcessOrder"
 wrapper.NumArgs()           // 4
 wrapper.ContextArg()        // true (if first arg is context.Context)
+wrapper.Variadic()          // false (true if last arg is variadic like ...int)
 wrapper.ErrorResult()       // true (if last result is error)
 wrapper.NumResults()        // 1
 wrapper.ArgNames()          // ["ctx", "orderID", "quantity", "express"]

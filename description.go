@@ -3,6 +3,7 @@ package function
 import (
 	"fmt"
 	"reflect"
+	"slices"
 	"strconv"
 	"strings"
 )
@@ -12,8 +13,12 @@ import (
 // and generate documentation, help text, or user interfaces.
 type Description interface {
 	// Name returns the function name qualified with its package name like "pkg.Func".
-	// ReflectWrapper qualifies it with the last element of the package path
-	// as reported by the runtime, which can differ from the package name.
+	// ReflectWrapper only knows the import path of the package, so it qualifies
+	// the name with the package name that goimports assumes for the import path:
+	// its last element that is not a major version like v2, without a "go-" prefix,
+	// up to the first character that can't be in an identifier,
+	// like "function" for "github.com/domonda/go-function" and "yaml" for "gopkg.in/yaml.v3".
+	// This differs from the package name of packages not named that way.
 	// ReflectDescription returns the passed name unchanged,
 	// VoidFuncWrapper and ErrorFuncWrapper return their signature.
 	Name() string
@@ -30,6 +35,12 @@ type Description interface {
 	// ContextArg returns true if the first argument is context.Context.
 	ContextArg() bool
 
+	// Variadic returns true if the last argument is variadic like xs in func(xs ...int).
+	// ArgTypes returns the slice type of a variadic argument,
+	// so Variadic distinguishes func(xs ...int) from func(xs []int),
+	// which CallWithStringsWrapper.CallWithStrings calls differently.
+	Variadic() bool
+
 	// NumResults returns the total number of results (including error if present).
 	NumResults() int
 
@@ -38,6 +49,8 @@ type Description interface {
 
 	// ArgNames returns the names of all arguments,
 	// including a context.Context argument if present.
+	// The returned slices of ArgNames, ArgDescriptions, ArgTypes, and ResultTypes
+	// can be modified by the caller without changing the Description.
 	// For generated wrappers, these are the actual parameter names.
 	// For ReflectWrapper, these are the passed argNames.
 	// For ReflectDescription, these are generated as "a0", "a1", etc.
@@ -112,6 +125,8 @@ func (f *description) String() string {
 // like "pkg.Func(ctx context.Context, a int, xs ...string) (int, error)",
 // the format of Description.String for all Description implementations.
 // The last argument type of a variadic function is its slice type.
+// Empty interfaces are written as any like in the source code
+// of generated wrappers, also in types like map[string]any.
 func signatureString(name string, argNames []string, argTypes, resultTypes []reflect.Type, variadic bool) string {
 	var b strings.Builder
 	b.WriteString(name)
@@ -124,9 +139,9 @@ func signatureString(name string, argNames []string, argTypes, resultTypes []ref
 		b.WriteByte(' ')
 		if variadic && i == len(argNames)-1 {
 			b.WriteString("...")
-			b.WriteString(argTypes[i].Elem().String())
+			b.WriteString(typeString(argTypes[i].Elem()))
 		} else {
-			b.WriteString(argTypes[i].String())
+			b.WriteString(typeString(argTypes[i]))
 		}
 	}
 	b.WriteByte(')')
@@ -134,31 +149,38 @@ func signatureString(name string, argNames []string, argTypes, resultTypes []ref
 	case 0:
 	case 1:
 		b.WriteByte(' ')
-		b.WriteString(resultTypes[0].String())
+		b.WriteString(typeString(resultTypes[0]))
 	default:
 		b.WriteString(" (")
 		for i, resultType := range resultTypes {
 			if i > 0 {
 				b.WriteString(", ")
 			}
-			b.WriteString(resultType.String())
+			b.WriteString(typeString(resultType))
 		}
 		b.WriteByte(')')
 	}
 	return b.String()
 }
 
+// typeString returns t.String() with the empty interfaces,
+// which reflect writes as "interface {}", written as "any".
+func typeString(t reflect.Type) string {
+	return strings.ReplaceAll(t.String(), "interface {}", "any")
+}
+
 func (f *description) NumArgs() int { return len(f.argNames) }
 func (f *description) ContextArg() bool {
 	return len(f.argTypes) > 0 && f.argTypes[0] == typeOfContext
 }
+func (f *description) Variadic() bool  { return f.variadic }
 func (f *description) NumResults() int { return len(f.resultTypes) }
 func (f *description) ErrorResult() bool {
 	// Check if the LAST result (not first) implements error interface
 	// This follows Go convention where error is always the last return value
 	return len(f.resultTypes) > 0 && f.resultTypes[len(f.resultTypes)-1] == typeOfError
 }
-func (f *description) ArgNames() []string          { return f.argNames }
-func (f *description) ArgDescriptions() []string   { return f.argDescriptions }
-func (f *description) ArgTypes() []reflect.Type    { return f.argTypes }
-func (f *description) ResultTypes() []reflect.Type { return f.resultTypes }
+func (f *description) ArgNames() []string          { return slices.Clone(f.argNames) }
+func (f *description) ArgDescriptions() []string   { return slices.Clone(f.argDescriptions) }
+func (f *description) ArgTypes() []reflect.Type    { return slices.Clone(f.argTypes) }
+func (f *description) ResultTypes() []reflect.Type { return slices.Clone(f.resultTypes) }

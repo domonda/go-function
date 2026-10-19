@@ -529,10 +529,10 @@ func TestReflectWrapper_NameAndString(t *testing.T) {
 
 	// Generated wrappers and ReflectDescription use the same format
 	w = MustReflectWrapper(fmt.Fprintf, "w", "format", "a")
-	assert.Equal(t, "fmt.Fprintf(w io.Writer, format string, a ...interface {}) (int, error)", w.String())
+	assert.Equal(t, "fmt.Fprintf(w io.Writer, format string, a ...any) (int, error)", w.String())
 	d, err := ReflectDescription("fmt.Fprintf", fmt.Fprintf)
 	require.NoError(t, err)
-	assert.Equal(t, "fmt.Fprintf(a0 io.Writer, a1 string, a2 ...interface {}) (int, error)", d.String())
+	assert.Equal(t, "fmt.Fprintf(a0 io.Writer, a1 string, a2 ...any) (int, error)", d.String())
 }
 
 func TestReflectWrapper_CallWithStringsContextArg(t *testing.T) {
@@ -551,7 +551,7 @@ func TestReflectWrapper_CallWithStringsContextArg(t *testing.T) {
 
 func TestReflectWrapper_CallWithJSONArgError(t *testing.T) {
 	// An invalid value of one argument must name that argument
-	// like CallFunctionWithJSONArgs and generated wrappers do,
+	// like generated wrappers do,
 	// while malformed JSON is an error of the whole arguments object
 	w := MustReflectWrapper(func(amount int, e error) {}, "amount", "e")
 	ctx := context.Background()
@@ -559,11 +559,11 @@ func TestReflectWrapper_CallWithJSONArgError(t *testing.T) {
 	_, err := w.CallWithJSON(ctx, []byte(`{"amount":"x"}`))
 	var errArg ErrParseArgJSON
 	require.ErrorAs(t, err, &errArg)
-	assert.Equal(t, "amount", errArg.Arg)
+	assert.Equal(t, "amount", errArg.ArgName)
 
 	_, err = w.CallWithJSON(ctx, []byte(`{"e":1}`))
 	require.ErrorAs(t, err, &errArg)
-	assert.Equal(t, "e", errArg.Arg)
+	assert.Equal(t, "e", errArg.ArgName)
 
 	_, err = w.CallWithJSON(ctx, []byte(`{`))
 	assert.ErrorAs(t, err, new(ErrParseArgsJSON))
@@ -574,4 +574,65 @@ func TestReflectWrapper_NameOfPackageWithPath(t *testing.T) {
 	// Name keeps only its last element like a package qualifier
 	w := MustReflectWrapper(assert.True, "t", "value", "msgAndArgs")
 	assert.Equal(t, "assert.True", w.Name())
+}
+
+func TestReflectWrapper_VariadicDescription(t *testing.T) {
+	// ArgTypes returns the slice type for both functions,
+	// so only Variadic tells callers like the cli help
+	// that CallWithStrings takes the elements as separate strings
+	variadic := MustReflectWrapper(func(xs ...int) {}, "xs")
+	slice := MustReflectWrapper(func(xs []int) {}, "xs")
+	noArgs := MustReflectWrapper(func() {})
+	assert.Equal(t, variadic.ArgTypes(), slice.ArgTypes())
+	assert.True(t, variadic.Variadic())
+	assert.False(t, slice.Variadic())
+	assert.False(t, noArgs.Variadic())
+}
+
+func TestReflectWrapper_ArgNamesAreCopies(t *testing.T) {
+	// Modifying the argNames passed to ReflectWrapper
+	// or returned by ArgNames must not rename the arguments of the wrapper
+	argNames := []string{"a"}
+	w := MustReflectWrapper(func(a int) int { return a }, argNames...)
+	argNames[0] = "changed"
+	w.ArgNames()[0] = "changed"
+	assert.Equal(t, []string{"a"}, w.ArgNames())
+	assert.Contains(t, w.String(), "(a int)")
+}
+
+func Test_qualifiedFuncName(t *testing.T) {
+	// The runtime reports the import path, which is qualified
+	// with the package name that goimports assumes for it,
+	// like generated wrappers use the package name
+	tests := []struct {
+		runtimeName string
+		want        string
+	}{
+		{runtimeName: "strings.ToUpper", want: "strings.ToUpper"},
+		{runtimeName: "main.main", want: "main.main"},
+		{runtimeName: "github.com/domonda/go-function.ScanString", want: "function.ScanString"},
+		{runtimeName: "github.com/domonda/go-function_test.TestX", want: "function_test.TestX"},
+		{runtimeName: "example.com/demo/dashed-dir.F", want: "dashed.F"},
+		{runtimeName: "example.com/demo/v2.F", want: "demo.F"},
+		// The runtime escapes dots in the last element of the import path
+		{runtimeName: "gopkg.in/yaml%2ev3.Marshal", want: "yaml.Marshal"},
+		{runtimeName: "github.com/a/go-b.(*T).M", want: "b.(*T).M"},
+		{runtimeName: "github.com/a/go-b.T.M-fm", want: "b.T.M-fm"},
+		{runtimeName: "github.com/a/go-b.F.func1", want: "b.F.func1"},
+		{runtimeName: "github.com/a/go-b.F[...]", want: "b.F[...]"},
+		{runtimeName: "github.com/a/b.F[github.com/c/d.T]", want: "b.F[github.com/c/d.T]"},
+		// Not an identifier after removing the "go-" prefix
+		{runtimeName: "example.com/go-.F", want: "go-.F"},
+		{runtimeName: "noDot", want: "noDot"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.runtimeName, func(t *testing.T) {
+			assert.Equal(t, tt.want, qualifiedFuncName(tt.runtimeName))
+		})
+	}
+
+	// The package of this test is named function, its import path ends with go-function
+	w := MustReflectWrapper(isNilSource, "trimmedSrc")
+	assert.Equal(t, "function.isNilSource", w.Name())
+	assert.Equal(t, "function.isNilSource(trimmedSrc string) bool", w.String())
 }

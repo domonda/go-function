@@ -13,20 +13,42 @@ import (
 	"github.com/domonda/go-function"
 )
 
+// ErrorHandler writes the response for an error of a Handler.
+// HandleError returns true if it handled the error by writing a response,
+// or false to pass the error on to the next error handler,
+// like an ErrorHandler that only logs errors.
+// An ErrorHandler that wrote to the response must return true,
+// because the next error handler would write another response.
+//
+// The method is the one of the Handler interface of
+// github.com/ungerik/go-httpx/httperr, so its handlers
+// like httperr.DefaultHandler can be used as ErrorHandler.
+type ErrorHandler interface {
+	HandleError(err error, response http.ResponseWriter, request *http.Request) (handled bool)
+}
+
+// ErrorHandlerFunc is a function type that implements ErrorHandler.
+type ErrorHandlerFunc func(err error, response http.ResponseWriter, request *http.Request) (handled bool)
+
+func (f ErrorHandlerFunc) HandleError(err error, response http.ResponseWriter, request *http.Request) (handled bool) {
+	return f(err, response, request)
+}
+
 // Handler creates an http.HandlerFunc from a wrapped function.
 //
 // Parameters:
 //   - getArgs: Extracts function arguments from the HTTP request (can be nil for no args)
 //   - function: The wrapped function to execute
 //   - resultsWriter: Formats and writes results to the response (can be nil for no response)
-//   - errHandlers: Optional custom error handlers (uses global HandleError if empty)
+//   - errHandlers: Optional error handlers tried in order before the global HandleError
 //
 // The handler:
 //   - Recovers from panics if CatchHandlerPanics is true
 //   - Parses arguments from the request using getArgs
 //   - Executes the wrapped function with request.Context()
 //   - Writes results using resultsWriter
-//   - Handles errors via errHandlers or global HandleError
+//   - Passes errors to errHandlers in order until one handles them,
+//     and to the global HandleError if none does
 //
 // Errors of getArgs, like of an unreadable request body, and argument values
 // that the wrapped function can't parse are errors of the request,
@@ -53,7 +75,7 @@ import (
 //	http.Handle("/calculate", handler)
 //
 // Usage: GET /calculate?a=5&b=3 returns: 8
-func Handler(getArgs RequestArgsFunc, function function.CallWithNamedStringsWrapper, resultsWriter ResultsWriter, errHandlers ...httperr.Handler) http.HandlerFunc {
+func Handler(getArgs RequestArgsFunc, function function.CallWithNamedStringsWrapper, resultsWriter ResultsWriter, errHandlers ...ErrorHandler) http.HandlerFunc {
 	return func(response http.ResponseWriter, request *http.Request) {
 		if CatchHandlerPanics {
 			defer func() {
@@ -114,7 +136,7 @@ func Handler(getArgs RequestArgsFunc, function function.CallWithNamedStringsWrap
 // Parameters:
 //   - function: Function returning response bytes
 //   - resultsWriter: Formats and writes the bytes to the response
-//   - errHandlers: Optional custom error handlers
+//   - errHandlers: Optional error handlers tried in order before the global HandleError
 //
 // Example:
 //
@@ -126,7 +148,7 @@ func Handler(getArgs RequestArgsFunc, function function.CallWithNamedStringsWrap
 //	    GetStatus,
 //	    httpfun.RespondContentType("application/json"),
 //	))
-func HandlerNoWrapper(function func(context.Context) ([]byte, error), resultsWriter ResultsWriter, errHandlers ...httperr.Handler) http.HandlerFunc {
+func HandlerNoWrapper(function func(context.Context) ([]byte, error), resultsWriter ResultsWriter, errHandlers ...ErrorHandler) http.HandlerFunc {
 	return func(response http.ResponseWriter, request *http.Request) {
 		if CatchHandlerPanics {
 			defer func() {
@@ -151,20 +173,20 @@ func HandlerNoWrapper(function func(context.Context) ([]byte, error), resultsWri
 	}
 }
 
-// handleError routes errors to the appropriate error handler.
-// If custom errHandlers are provided, they're called in order.
-// Otherwise, the global HandleError function is used.
-func handleError(err error, errHandlers []httperr.Handler, response http.ResponseWriter, request *http.Request) {
+// handleError passes err to errHandlers in order until one handles it,
+// so that only one of them writes the response,
+// and to the global HandleError if none of them handles it,
+// so that an error is never answered with an empty 200 OK response.
+func handleError(err error, errHandlers []ErrorHandler, response http.ResponseWriter, request *http.Request) {
 	if err == nil {
 		return
 	}
-	if len(errHandlers) == 0 {
-		HandleError(err, response, request)
-		return
-	}
 	for _, errHandler := range errHandlers {
-		errHandler.HandleError(err, response, request)
+		if errHandler.HandleError(err, response, request) {
+			return
+		}
 	}
+	HandleError(err, response, request)
 }
 
 // requestError is an error caused by the request, not by the server,
@@ -224,7 +246,7 @@ func argParseRequestError(err error, wrapper any) (*requestError, bool) {
 		return &requestError{err: err, statusCode: http.StatusBadRequest, message: fmt.Sprintf("invalid value for argument %q", e.ArgName)}, true
 	}
 	if e, ok := errors.AsType[function.ErrParseArgJSON](err); ok && isWrapperOf(e.Func, wrapper) {
-		return &requestError{err: err, statusCode: http.StatusBadRequest, message: fmt.Sprintf("invalid JSON for argument %q", e.Arg)}, true
+		return &requestError{err: err, statusCode: http.StatusBadRequest, message: fmt.Sprintf("invalid JSON for argument %q", e.ArgName)}, true
 	}
 	if e, ok := errors.AsType[function.ErrParseArgsJSON](err); ok && isWrapperOf(e.Func, wrapper) {
 		return &requestError{err: err, statusCode: http.StatusBadRequest, message: "invalid JSON object for arguments"}, true

@@ -108,7 +108,6 @@ func TestStringArgsDispatcher_Dispatch(t *testing.T) {
 		err := disp.Dispatch(ctx, "deploy", "fail", "1", "false")
 		assert.EqualError(t, err, "deploy failed")
 		assert.EqualError(t, handledResultErr, "deploy failed", "results handlers see the error of the function")
-		assert.Panics(t, func() { disp.MustDispatch(ctx, "deploy", "fail", "1", "false") })
 	})
 
 	t.Run("unparseable argument", func(t *testing.T) {
@@ -164,13 +163,21 @@ func TestStringArgsDispatcher_DispatchCombinedCommandAndArgs(t *testing.T) {
 	command, err = disp.DispatchCombinedCommandAndArgs(ctx, []string{"unknown"})
 	assert.Equal(t, "unknown", command, "the command is returned for error messages")
 	assert.True(t, IsErrCommandNotFound(err))
-	assert.Panics(t, func() { disp.MustDispatchCombinedCommandAndArgs(ctx, []string{"unknown"}) })
 
 	t.Run("without default command", func(t *testing.T) {
 		disp := NewStringArgsDispatcher("myapp")
 		_, err := disp.DispatchCombinedCommandAndArgs(ctx, nil)
 		assert.True(t, IsErrCommandNotFound(err))
-		assert.Panics(t, func() { disp.MustDispatchDefaultCommand() })
+		assert.True(t, IsErrCommandNotFound(disp.DispatchDefaultCommand(ctx)))
+	})
+
+	t.Run("DispatchDefaultCommand", func(t *testing.T) {
+		calledDefault, defaultCtx = false, nil
+		require.NoError(t, disp.DispatchDefaultCommand(ctx))
+		assert.True(t, calledDefault)
+		// Like Dispatch, the default command gets the context of the caller
+		require.NotNil(t, defaultCtx)
+		assert.Equal(t, "value", defaultCtx.Value(ctxKey{}))
 	})
 }
 
@@ -216,4 +223,17 @@ func TestStringArgsDispatcher_PrintCommands(t *testing.T) {
 		"      Deploy a service\n" +
 		"\n"
 	assert.Equal(t, want, got)
+}
+
+func TestStringArgsDispatcher_PrintCommands_variadic(t *testing.T) {
+	// A variadic argument takes every string from its position on as element,
+	// so its usage shows the element type with "..." instead of the slice type,
+	// which a slice argument shows because it takes one slice literal like [1,2]
+	disp := NewStringArgsDispatcher("myapp")
+	disp.MustAddCommand("sum", "", function.MustReflectWrapper(func(label string, nums ...*int) {}, "label", "nums"))
+	disp.MustAddCommand("sumslice", "", function.MustReflectWrapper(func(nums []int) {}, "nums"))
+
+	got := captureStdout(t, disp.PrintCommands)
+
+	assert.Equal(t, "  myapp sum <label:string> <nums:...int>\n\n  myapp sumslice <nums:[]int>\n\n", got)
 }

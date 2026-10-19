@@ -186,12 +186,33 @@ func TestTypeStringScanners_With_DoesNotModifyReceiver(t *testing.T) {
 		WithKindScanner(reflect.String, scanner).
 		WithDefaultScanner(scanner)
 
-	assert.Len(t, base.Types, 1)
-	assert.Len(t, base.Interfaces, 1)
-	assert.Len(t, base.Kinds, 1)
-	assert.Nil(t, base.Default)
-	assert.Len(t, mod.Types, 2)
-	assert.Len(t, mod.Interfaces, 2)
-	assert.Len(t, mod.Kinds, 2)
-	assert.NotNil(t, mod.Default)
+	assert.Len(t, base.types, 1)
+	assert.Len(t, base.interfaces, 1)
+	assert.Len(t, base.kinds, 1)
+	assert.Nil(t, base.defaultScanner)
+	assert.Len(t, mod.types, 2)
+	assert.Len(t, mod.interfaces, 2)
+	assert.Len(t, mod.kinds, 2)
+	assert.NotNil(t, mod.defaultScanner)
+}
+
+func TestTypeStringScanners_With_PanicsForInvalidScanners(t *testing.T) {
+	// An invalid registration must fail where it is made,
+	// because a non-interface type would make every later ScanString
+	// panic in reflect.Type.Implements and a nil scanner would panic
+	// for every destination it matches
+	scanner := StringScannerFunc(DefaultScanString)
+	s := NewTypeStringScanners(scanner)
+	assert.PanicsWithValue(t, "TypeStringScanners.WithInterfaceTypeScanner(int): not an interface type", func() {
+		s.WithInterfaceTypeScanner(reflect.TypeFor[int](), scanner)
+	})
+	assert.Panics(t, func() { s.WithInterfaceTypeScanner(nil, scanner) })
+	assert.Panics(t, func() { s.WithInterfaceTypeScanner(reflect.TypeFor[fmt.Stringer](), nil) })
+	assert.Panics(t, func() { s.WithTypeScanner(nil, scanner) })
+	assert.Panics(t, func() { s.WithTypeScanner(reflect.TypeFor[int](), nil) })
+	assert.Panics(t, func() { s.WithKindScanner(reflect.Int, nil) })
+	assert.NotPanics(t, func() { s.WithDefaultScanner(nil) }, "nil default scanner returns ErrTypeNotSupported")
+
+	var x string
+	assert.ErrorIs(t, s.WithDefaultScanner(nil).ScanString("x", &x), ErrTypeNotSupported)
 }

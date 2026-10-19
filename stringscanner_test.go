@@ -1363,3 +1363,38 @@ func TestScanString_maxSliceLiteralElements(t *testing.T) {
 	err = ScanString("[1,2,3,4]", &ints)
 	require.NoError(t, err, "no limit")
 }
+
+func TestScanStrings(t *testing.T) {
+	var (
+		a int
+		b string
+	)
+	require.NoError(t, ScanStrings([]string{"42", "hello"}, &a, &b))
+	assert.Equal(t, 42, a)
+	assert.Equal(t, "hello", b)
+
+	// Different numbers of strings and destinations are an error
+	// instead of silently leaving destinations or strings unscanned
+	a, b = 0, ""
+	assert.EqualError(t, ScanStrings([]string{"1"}, &a, &b), "can't scan 1 strings into 2 destinations")
+	assert.EqualError(t, ScanStrings([]string{"1", "x", "y"}, &a, &b), "can't scan 3 strings into 2 destinations")
+	assert.Zero(t, a, "nothing is scanned for different numbers")
+}
+
+func TestScanString_numberErrorsQuoteStringOnce(t *testing.T) {
+	// The strconv errors contain the parsed string,
+	// which the error of ScanString already quotes
+	var n int
+	err := ScanString("abc", &n)
+	assert.EqualError(t, err, `can't parse "abc" as int because of: invalid syntax`)
+	assert.ErrorIs(t, err, strconv.ErrSyntax)
+
+	var u uint8
+	err = ScanString("300", &u)
+	assert.EqualError(t, err, `can't parse "300" as uint because of: value out of range`)
+	assert.ErrorIs(t, err, strconv.ErrRange)
+
+	var d time.Duration
+	err = ScanString("abc", &d)
+	assert.EqualError(t, err, `can't parse time.Duration: time: invalid duration "abc"`)
+}

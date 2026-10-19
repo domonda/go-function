@@ -17,7 +17,8 @@ var (
 	PrettyPrintIndent = "  "
 
 	// CatchHandlerPanics controls whether panics in HTTP handlers are recovered.
-	// When true, panics are caught and converted to HTTP errors via HandleError.
+	// When true, panics are caught and converted to errors
+	// for the error handlers of the Handler and HandleError.
 	// When false, panics will crash the server (useful for debugging).
 	// Default: true
 	//
@@ -25,22 +26,24 @@ var (
 	// Not thread-safe to modify after handlers start running.
 	CatchHandlerPanics = true
 
-	// HandleError is called when an error occurs during request handling.
-	// It writes the error to the HTTP response.
+	// HandleError writes the response for an error during request handling
+	// that none of the error handlers passed to Handler or HandlerNoWrapper
+	// handled, and for an error of RespondRedirectFunc as http.Handler.
+	// Its result is ignored, because no other error handler is left.
 	// Default: DefaultHandleError
 	//
 	// Customize this to implement your own error handling strategy.
 	// Delegate to DefaultHandleError to keep its responses,
 	// like 400 Bad Request for invalid argument values:
 	//
-	//	httpfun.HandleError = func(err error, w http.ResponseWriter, r *http.Request) {
+	//	httpfun.HandleError = func(err error, w http.ResponseWriter, r *http.Request) bool {
 	//	    log.Printf("HTTP error: %v", err)
-	//	    httpfun.DefaultHandleError(err, w, r)
+	//	    return httpfun.DefaultHandleError(err, w, r)
 	//	}
 	//
 	// WARNING: This is a global setting. Set it once during initialization.
 	// Not thread-safe to modify after handlers start running.
-	HandleError = DefaultHandleError
+	HandleError ErrorHandlerFunc = DefaultHandleError
 
 	// MaxRequestBodySize caps the request body size read by
 	// RequestBodyAsArg and RequestBodyJSONFieldsAsArgs.
@@ -79,11 +82,12 @@ var (
 // This includes errors from parsing arguments of other functions
 // that the wrapped function called, which are errors of the server.
 //
-// A nil error is ignored.
-func DefaultHandleError(err error, response http.ResponseWriter, request *http.Request) {
+// It returns true if it wrote a response, which it does for every error.
+// A nil error is ignored and returns false.
+func DefaultHandleError(err error, response http.ResponseWriter, request *http.Request) (handled bool) {
 	if err == nil {
-		return
+		return false
 	}
 	// A requestError responds as http.Handler found by httperr
-	httperr.DefaultHandler.HandleError(err, response, request)
+	return httperr.DefaultHandler.HandleError(err, response, request)
 }

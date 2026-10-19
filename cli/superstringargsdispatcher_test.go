@@ -2,6 +2,7 @@ package cli
 
 import (
 	"context"
+	"fmt"
 	"strings"
 	"testing"
 
@@ -73,7 +74,6 @@ func TestSuperStringArgsDispatcher_Dispatch(t *testing.T) {
 	err = disp.Dispatch(ctx, "deploy", "unknown")
 	assert.Equal(t, ErrCommandNotFound("unknown"), err)
 	assert.True(t, IsErrCommandNotFound(err))
-	assert.Panics(t, func() { disp.MustDispatch(ctx, "deploy", "unknown") })
 }
 
 func TestSuperStringArgsDispatcher_DispatchCombinedCommandAndArgs(t *testing.T) {
@@ -106,7 +106,39 @@ func TestSuperStringArgsDispatcher_DispatchCombinedCommandAndArgs(t *testing.T) 
 	_, _, err := disp.DispatchCombinedCommandAndArgs(context.Background(), []string{"unknown", "x"})
 	assert.True(t, IsErrCommandNotFound(err))
 	assert.Empty(t, calls)
-	assert.Panics(t, func() { disp.MustDispatchCombinedCommandAndArgs(context.Background(), []string{"deploy", "unknown"}) })
+}
+
+func TestSuperStringArgsDispatcher_DispatchDefaultCommand(t *testing.T) {
+	var gotCtx context.Context
+	disp := NewSuperStringArgsDispatcher("myapp")
+	ctx := context.WithValue(context.Background(), ctxKey{}, "value")
+	assert.True(t, IsErrCommandNotFound(disp.DispatchDefaultCommand(ctx)))
+
+	disp.MustAddDefaultCommand("", function.MustReflectWrapper(func(ctx context.Context) { gotCtx = ctx }))
+	require.NoError(t, disp.DispatchDefaultCommand(ctx))
+	require.NotNil(t, gotCtx)
+	assert.Equal(t, "value", gotCtx.Value(ctxKey{}), "the context of the caller is passed to the function")
+}
+
+func TestSuperStringArgsDispatcher_loggers(t *testing.T) {
+	// Loggers get the full command, the super command and the command
+	// joined with a space, not only the command of the sub dispatcher
+	var logged []string
+	logger := StringArgsCommandLoggerFunc(func(command string, args []string) {
+		logged = append(logged, fmt.Sprintf("%q %v", command, args))
+	})
+	disp := NewSuperStringArgsDispatcher("app", logger)
+	noop := function.MustReflectWrapper(func(string) {}, "s")
+	disp.MustAddDefaultCommand("", function.MustReflectWrapper(func() {}))
+	disp.MustAddCommand("deploy", "", noop)
+	disp.MustAddSuperCommand("user").MustAddCommand("create", "", noop)
+	ctx := context.Background()
+
+	for _, commandAndArgs := range [][]string{nil, {"deploy", "x"}, {"user", "create", "bob"}, {"user", "unknown"}} {
+		_, _, _ = disp.DispatchCombinedCommandAndArgs(ctx, commandAndArgs)
+	}
+
+	assert.Equal(t, []string{`"" []`, `"deploy" [x]`, `"user create" [bob]`}, logged, "unknown commands are not logged")
 }
 
 func TestSuperStringArgsDispatcher_PrintCompletion(t *testing.T) {

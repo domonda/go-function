@@ -8,6 +8,7 @@ import (
 	"mime/multipart"
 	"net/http"
 	"net/http/httptest"
+	"net/url"
 	"os"
 	"strconv"
 	"strings"
@@ -60,10 +61,10 @@ func TestRequestArgsFuncs(t *testing.T) {
 			want:    map[string]string{"userName": "Alice"},
 		},
 		{
-			// Multiple values of a query param are joined with ";"
+			// Multiple values of a query param are passed as slice literal
 			name:    "RequestQueryArgs",
 			getArgs: httpfun.RequestQueryArgs,
-			want:    map[string]string{"name": "Alice", "tag": "a;b"},
+			want:    map[string]string{"name": "Alice", "tag": `["a","b"]`},
 		},
 		{
 			name:    "RequestHeaderArg",
@@ -153,10 +154,10 @@ func TestRequestBodyJSONFieldsAsArgs(t *testing.T) {
 		// JSON strings are unescaped to be used as string arguments
 		"name": `Alice "A"`,
 		// Other JSON values are passed as JSON to be scanned into the argument types
-		"age":      "42",
-		"tags":     `["a", "b"]`,
-		"address":  `{"city": "Vienna"}`,
-		"nickname": "null",
+		"age":     "42",
+		"tags":    `["a", "b"]`,
+		"address": `{"city": "Vienna"}`,
+		// null is left out like a missing field instead of the string "null"
 	}, got)
 
 	_, err = httpfun.RequestBodyJSONFieldsAsArgs(httptest.NewRequest(http.MethodPost, "/", strings.NewReader(`["not", "an", "object"]`)))
@@ -192,8 +193,26 @@ func TestRequestMultipartFormArgs(t *testing.T) {
 	got, err := httpfun.RequestMultipartFormArgs(newRequest(t, 0))
 
 	require.NoError(t, err)
-	// Multiple values of a form field are joined with ";"
-	assert.Equal(t, map[string]string{"name": "Alice", "tag": "a;b", "padding": ""}, got)
+	// Multiple values of a form field are passed as slice literal
+	assert.Equal(t, map[string]string{"name": "Alice", "tag": `["a","b"]`, "padding": ""}, got)
+
+	t.Run("slice argument", func(t *testing.T) {
+		// Multiple values of a form field are the elements of a slice argument
+		var gotTags []string
+		wrapper := function.MustReflectWrapper(func(name string, tags []string) { gotTags = tags }, "name", "tags")
+		var body bytes.Buffer
+		writer := multipart.NewWriter(&body)
+		require.NoError(t, writer.WriteField("tags", "a, b"))
+		require.NoError(t, writer.WriteField("tags", ""))
+		require.NoError(t, writer.Close())
+		request := httptest.NewRequest(http.MethodPost, "/", &body)
+		request.Header.Set("Content-Type", writer.FormDataContentType())
+
+		response := serve(httpfun.Handler(httpfun.RequestMultipartFormArgs, wrapper, nil), request)
+
+		require.Equal(t, http.StatusOK, response.Code, response.Body.String())
+		assert.Equal(t, []string{"a, b", ""}, gotTags)
+	})
 
 	t.Run("MaxMultipartFormSize", func(t *testing.T) {
 		orig := httpfun.MaxMultipartFormSize
@@ -306,4 +325,48 @@ func TestRequestMultipartFormArgs_uploadsStayReadable(t *testing.T) {
 		require.NoError(t, err)
 		assert.Equal(t, "4096", args["size"])
 	})
+}
+
+func TestRequestQueryArgs_sliceArguments(t *testing.T) {
+	// Multiple values of a query param are the elements of a slice argument,
+	// also values that would be zero values or contain JSON syntax,
+	// and a single value is passed unchanged
+	var (
+		gotInts    []int
+		gotStrings []string
+		gotName    string
+	)
+	wrapper := function.MustReflectWrapper(func(ints []int, strs []string, name string) {
+		gotInts, gotStrings, gotName = ints, strs, name
+	}, "ints", "strs", "name")
+	handler := httpfun.Handler(httpfun.RequestQueryArgs, wrapper, nil)
+	query := url.Values{
+		"ints": {"1", "2"},
+		"strs": {"", "null", `a "quoted", <b>`, "[x]"},
+		"name": {`["single"]`},
+	}
+
+	response := serve(handler, httptest.NewRequest(http.MethodGet, "/?"+query.Encode(), nil))
+
+	require.Equal(t, http.StatusOK, response.Code, response.Body.String())
+	assert.Equal(t, []int{1, 2}, gotInts)
+	assert.Equal(t, []string{"", "null", `a "quoted", <b>`, "[x]"}, gotStrings)
+	assert.Equal(t, `["single"]`, gotName)
+}
+
+func TestRequestBodyJSONFieldsAsArgs_null(t *testing.T) {
+	// A null field is a missing argument like with CallWithJSON,
+	// so a string argument is "" and not "null"
+	var (
+		gotStr string
+		gotPtr *string
+	)
+	wrapper := function.MustReflectWrapper(func(s string, p *string) { gotStr, gotPtr = s, p }, "s", "p")
+	handler := httpfun.Handler(httpfun.RequestBodyJSONFieldsAsArgs, wrapper, nil)
+
+	response := serve(handler, httptest.NewRequest(http.MethodPost, "/", strings.NewReader(`{"s": null, "p": null}`)))
+
+	require.Equal(t, http.StatusOK, response.Code)
+	assert.Equal(t, "", gotStr)
+	assert.Nil(t, gotPtr)
 }

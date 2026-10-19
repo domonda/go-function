@@ -326,9 +326,9 @@ httpfun.PrettyPrintIndent = "  "
 
 // Custom error handler, delegating to the default
 // that answers invalid arguments with 400 Bad Request
-httpfun.HandleError = func(err error, w http.ResponseWriter, r *http.Request) {
+httpfun.HandleError = func(err error, w http.ResponseWriter, r *http.Request) bool {
     log.Printf("HTTP error: %v", err)
-    httpfun.DefaultHandleError(err, w, r)
+    return httpfun.DefaultHandleError(err, w, r)
 }
 
 // Panic recovery
@@ -379,7 +379,11 @@ dbDispatcher := dispatcher.MustAddSuperCommand("db")
 dbDispatcher.MustAddCommand("migrate", "Migrate the database", function.MustReflectWrapper(Migrate))
 dbDispatcher.MustAddCommand("seed", "Seed the database", function.MustReflectWrapper(Seed))
 
-dispatcher.MustDispatchCombinedCommandAndArgs(context.Background(), os.Args[1:])
+superCommand, command, err := dispatcher.DispatchCombinedCommandAndArgs(context.Background(), os.Args[1:])
+if err != nil {
+    fmt.Fprintf(os.Stderr, "%s %s: %v\n", superCommand, command, err)
+    os.Exit(1)
+}
 ```
 
 ## Testing

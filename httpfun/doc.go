@@ -138,19 +138,24 @@
 // and delegate to DefaultHandleError to keep its responses
 // like 400 Bad Request for invalid argument values:
 //
-//	httpfun.HandleError = func(err error, w http.ResponseWriter, r *http.Request) {
+//	httpfun.HandleError = func(err error, w http.ResponseWriter, r *http.Request) bool {
 //	    log.Printf("Error: %v", err)
-//	    httpfun.DefaultHandleError(err, w, r)
+//	    return httpfun.DefaultHandleError(err, w, r)
 //	}
 //
-// Or provide custom error handlers per endpoint:
+// Or provide error handlers per endpoint, which are tried in order
+// until one returns true because it handled the error.
+// HandleError answers errors that none of them handled:
 //
 //	handler := httpfun.Handler(
 //	    httpfun.RequestQueryArgs,
 //	    wrapper,
 //	    httpfun.RespondJSON,
-//	    customErrorHandler, // Handles errors for this endpoint only
+//	    customErrorHandler, // An ErrorHandler for this endpoint only
 //	)
+//
+// The handlers of github.com/ungerik/go-httpx/httperr,
+// like httperr.DefaultHandler, are ErrorHandlers.
 //
 // # Configuration
 //
@@ -164,8 +169,9 @@
 //	httpfun.CatchHandlerPanics = true
 //
 //	// Custom error handler (default: httpfun.DefaultHandleError)
-//	httpfun.HandleError = func(err error, w http.ResponseWriter, r *http.Request) {
+//	httpfun.HandleError = func(err error, w http.ResponseWriter, r *http.Request) bool {
 //	    // Custom error handling
+//	    return true
 //	}
 //
 //	// Maximum request body size read by RequestBodyAsArg

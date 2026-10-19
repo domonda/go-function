@@ -339,6 +339,7 @@ func (impl Impl) WriteFunctionWrapper(w io.Writer, funcFile *ast.File, funcDir s
 
 		fmt.Fprintf(w, "func (%s) NumArgs() int      { return %d }\n", implType, numArgs)
 		fmt.Fprintf(w, "func (%s) ContextArg() bool  { return %t }\n", implType, hasContextArg)
+		fmt.Fprintf(w, "func (%s) Variadic() bool    { return %t }\n", implType, isVariadic)
 		fmt.Fprintf(w, "func (%s) NumResults() int   { return %d }\n", implType, numResults)
 		fmt.Fprintf(w, "func (%s) ErrorResult() bool { return %t }\n\n", implType, hasErrorResult)
 
@@ -558,7 +559,7 @@ func (impl Impl) WriteFunctionWrapper(w io.Writer, funcFile *ast.File, funcDir s
 			fmt.Fprintf(w, "\terr = json.Unmarshal(argsJSON, %s)\n", argsDest)
 			fmt.Fprintf(w, "\tif err != nil {\n")
 			{
-				fmt.Fprintf(w, "\t\treturn nil, %sNewErrParseArgsJSON(err, f, argsJSON)\n", functionSel())
+				fmt.Fprintf(w, "\t\treturn nil, %sNewErrParseArgsJSON(err, f)\n", functionSel())
 			}
 			fmt.Fprintf(w, "\t}\n")
 			callParams := writeArgsStruct(argFields, valueTypes)
@@ -672,7 +673,9 @@ func (target *targetFile) addImportsOfType(typeName string, funcFile *ast.File, 
 // "pkg.Func(a int, b int, more ...string) (int, error)",
 // with one argument per name and the results without names.
 // The types are formatted like in the file of the function
-// with the exported names of its package qualified with the package name.
+// with the exported names of its package qualified with the package name,
+// except empty interfaces, which are written as any like by function.ReflectWrapper,
+// which can't know if the source code wrote interface{} or any.
 func signatureString(qualifiedFuncName string, argNames, argTypes, resultTypes []string) string {
 	var b strings.Builder
 	b.WriteString(qualifiedFuncName)
@@ -683,20 +686,31 @@ func signatureString(qualifiedFuncName string, argNames, argTypes, resultTypes [
 		}
 		b.WriteString(argName)
 		b.WriteByte(' ')
-		b.WriteString(argTypes[i])
+		b.WriteString(emptyInterfaceAsAny(argTypes[i]))
 	}
 	b.WriteByte(')')
 	switch len(resultTypes) {
 	case 0:
 	case 1:
 		b.WriteByte(' ')
-		b.WriteString(resultTypes[0])
+		b.WriteString(emptyInterfaceAsAny(resultTypes[0]))
 	default:
 		b.WriteString(" (")
-		b.WriteString(strings.Join(resultTypes, ", "))
+		for i, resultType := range resultTypes {
+			if i > 0 {
+				b.WriteString(", ")
+			}
+			b.WriteString(emptyInterfaceAsAny(resultType))
+		}
 		b.WriteByte(')')
 	}
 	return b.String()
+}
+
+// emptyInterfaceAsAny returns typeName with empty interfaces written as any,
+// also in types like map[string]interface{}.
+func emptyInterfaceAsAny(typeName string) string {
+	return strings.ReplaceAll(typeName, "interface{}", "any")
 }
 
 // checkNoDotImportedTypes returns an error if the file of a function of another package

@@ -54,20 +54,6 @@ Problems found by the reviews of the v1.0.0 release that predate it.
 **Priority:** P2
 **Depends on:** go-fs
 
-## Root package (function)
-
-### VoidFuncWrapper and ErrorFuncWrapper ignore their arguments
-
-**What:** Return errors for too many arguments, too many strings and JSON that is no object, like `ReflectWrapper` and generated wrappers.
-
-**Why:** The interface documentation of v1.0.0 describes these errors only for `ReflectWrapper` and generated wrappers, because `VoidFuncWrapper` and `ErrorFuncWrapper` call the function whatever they get, also with `argsJSON` that isn't valid JSON.
-
-**Context:** A behavior change of exported types, documented in `wrapper.go` and `description.go` for v1.0.0. Changing it needs a minor release with a CHANGELOG note.
-
-**Effort:** S
-**Priority:** P3
-**Depends on:** None
-
 ## Infrastructure
 
 ### tag-release.sh doesn't check that the version is new
@@ -95,3 +81,9 @@ Problems found by the reviews of the v1.0.0 release that predate it.
 **Depends on:** None
 
 ## Completed
+
+### VoidFuncWrapper and ErrorFuncWrapper ignore their arguments
+
+They return errors for passed arguments or strings and for JSON that is no object, like `ReflectWrapper`.
+
+**Completed:** v1.0.0 (2026-10-19)

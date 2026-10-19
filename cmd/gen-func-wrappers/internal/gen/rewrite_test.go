@@ -270,6 +270,7 @@ var addWrapper = function.WrapperTODO(Add)
 	//
 	// func (addWrapperT) NumArgs() int      { return 2 }
 	// func (addWrapperT) ContextArg() bool  { return false }
+	// func (addWrapperT) Variadic() bool    { return false }
 	// func (addWrapperT) NumResults() int   { return 1 }
 	// func (addWrapperT) ErrorResult() bool { return false }
 	//
@@ -372,7 +373,7 @@ var addWrapper = function.WrapperTODO(Add)
 	// 	var args map[string]json.RawMessage
 	// 	err = json.Unmarshal(argsJSON, &args)
 	// 	if err != nil {
-	// 		return nil, function.NewErrParseArgsJSON(err, f, argsJSON)
+	// 		return nil, function.NewErrParseArgsJSON(err, f)
 	// 	}
 	// 	var a struct {
 	// 		a int
@@ -745,7 +746,7 @@ var (
 	withCtxWrapper = function.WrapperTODO(WithCtx)
 )
 `},
-			wantContains: []string{"err = json.Unmarshal(argsJSON, new(map[string]json.RawMessage))", "function.NewErrParseArgsJSON(err, f, argsJSON)"},
+			wantContains: []string{"err = json.Unmarshal(argsJSON, new(map[string]json.RawMessage))", "function.NewErrParseArgsJSON(err, f)"},
 		},
 		{
 			name: "CallWrapper",
@@ -1562,7 +1563,7 @@ func main() {
 		case errors.As(err, &errString):
 			fmt.Printf("%s: ErrParseArgString of argument %s\n", name, errString.ArgName)
 		case errors.As(err, &errArg):
-			fmt.Printf("%s: ErrParseArgJSON of argument %s\n", name, errArg.Arg)
+			fmt.Printf("%s: ErrParseArgJSON of argument %s\n", name, errArg.ArgName)
 		case errors.As(err, &errArgs):
 			fmt.Printf("%s: ErrParseArgsJSON\n", name)
 		default:
@@ -1621,6 +1622,13 @@ func main() {
 	call("JSON object without arguments", func() ([]any, error) { return noArgsWrapper.CallWithJSON(ctx, []byte(` + "`" + `{}` + "`" + `)) })
 	callErr("JSON malformed without arguments", func() ([]any, error) { return noArgsWrapper.CallWithJSON(ctx, []byte(` + "`" + `{` + "`" + `)) })
 	callErr("JSON malformed with only context argument", func() ([]any, error) { return ctxOnlyWrapper.CallWithJSON(ctx, []byte(` + "`" + `{"ctx":` + "`" + `)) })
+	// Variadic distinguishes ...int from []int, which have the same ArgTypes
+	var variadic, slice, noArgs function.Wrapper = variadicWrapper, sumSliceWrapper, noArgsWrapper
+	fmt.Printf("Variadic: %t %t %t\n", variadic.Variadic(), slice.Variadic(), noArgs.Variadic())
+	// Name and String are the same as of ReflectWrapper,
+	// also for empty interfaces written as interface{} in the source code
+	reflected := function.MustReflectWrapper(Pointers, "ctx", "p", "m", "e", "x", "y")
+	fmt.Printf("%s %t %t\n", pointersWrapper, pointersWrapper.Name() == reflected.Name(), pointersWrapper.String() == reflected.String())
 }
 `
 	output := runPackage(t, files)
@@ -1663,6 +1671,8 @@ JSON bad error argument: ErrParseArgJSON of argument e
 JSON object without arguments: [no args] error=false
 JSON malformed without arguments: ErrParseArgsJSON
 JSON malformed with only context argument: ErrParseArgsJSON
+Variadic: true false false
+main.Pointers(ctx context.Context, p *int, m map[string]int, e error, x any, y any) string true true
 `, output)
 }
 

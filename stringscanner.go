@@ -46,8 +46,8 @@ func ScanString(sourceStr string, destPtr any) error {
 
 // ScanStrings converts multiple strings to their respective destination types.
 // It scans sourceStrings[i] into destPtrs[i] for each index.
-// If the slices have different lengths, only the minimum number of elements are scanned.
-// Returns an error on the first conversion failure.
+// Returns an error without scanning if the numbers of sourceStrings
+// and destPtrs differ, or the error of the first conversion failure.
 //
 // Example:
 //
@@ -56,12 +56,11 @@ func ScanString(sourceStr string, destPtr any) error {
 //	var c bool
 //	err := ScanStrings([]string{"42", "hello", "true"}, &a, &b, &c)
 func ScanStrings(sourceStrings []string, destPtrs ...any) error {
-	l := len(sourceStrings)
-	if ll := len(destPtrs); ll < l {
-		l = ll
+	if len(sourceStrings) != len(destPtrs) {
+		return fmt.Errorf("can't scan %d strings into %d destinations", len(sourceStrings), len(destPtrs))
 	}
-	for i := 0; i < l; i++ {
-		err := ScanString(sourceStrings[i], destPtrs[i])
+	for i, sourceStr := range sourceStrings {
+		err := ScanString(sourceStr, destPtrs[i])
 		if err != nil {
 			return err
 		}
@@ -125,10 +124,10 @@ func (f StringScannerFunc) ScanString(sourceStr string, destPtr any) error {
 // package-level StringScanners, also if DefaultScanString is called directly
 // or by another TypeStringScanners, so that scanners registered there apply
 // to them like to the top-level destination. Values without a matching
-// registered scanner are scanned by StringScanners.Default, which is
-// DefaultScanString if not changed, except quoted elements:
+// registered scanner are scanned by the default scanner of StringScanners,
+// which is DefaultScanString if not changed, except quoted elements:
 // only DefaultScanString knows that they are explicit strings,
-// so it scans them instead of StringScanners.Default.
+// so it scans them instead of the default scanner of StringScanners.
 //
 // Returns an error if destPtr is nil, not a pointer, or conversion fails.
 func DefaultScanString(sourceStr string, destPtr any) (err error) {
@@ -226,7 +225,8 @@ func scanString(sourceStr string, destVal reflect.Value, explicitStr bool) (err 
 		}
 		duration, err := time.ParseDuration(trimmedSrc)
 		if err != nil {
-			return fmt.Errorf("can't parse %q as time.Duration because of: %w", trimmedSrc, err)
+			// The error of time.ParseDuration quotes the string
+			return fmt.Errorf("can't parse time.Duration: %w", err)
 		}
 		*dest = duration
 		return nil
@@ -312,7 +312,7 @@ func scanString(sourceStr string, destVal reflect.Value, explicitStr bool) (err 
 		}
 		b, err := strconv.ParseBool(trimmedSrc)
 		if err != nil {
-			return fmt.Errorf("can't parse %q as bool because of: %w", trimmedSrc, err)
+			return fmt.Errorf("can't parse %q as bool because of: %w", trimmedSrc, numErrorReason(err))
 		}
 		destVal.SetBool(b)
 		return nil
@@ -324,7 +324,7 @@ func scanString(sourceStr string, destVal reflect.Value, explicitStr bool) (err 
 		}
 		i, err := strconv.ParseInt(trimmedSrc, 10, destVal.Type().Bits())
 		if err != nil {
-			return fmt.Errorf("can't parse %q as int because of: %w", trimmedSrc, err)
+			return fmt.Errorf("can't parse %q as int because of: %w", trimmedSrc, numErrorReason(err))
 		}
 		destVal.SetInt(i)
 		return nil
@@ -336,7 +336,7 @@ func scanString(sourceStr string, destVal reflect.Value, explicitStr bool) (err 
 		}
 		u, err := strconv.ParseUint(trimmedSrc, 10, destVal.Type().Bits())
 		if err != nil {
-			return fmt.Errorf("can't parse %q as uint because of: %w", trimmedSrc, err)
+			return fmt.Errorf("can't parse %q as uint because of: %w", trimmedSrc, numErrorReason(err))
 		}
 		destVal.SetUint(u)
 		return nil
@@ -348,7 +348,7 @@ func scanString(sourceStr string, destVal reflect.Value, explicitStr bool) (err 
 		}
 		f, err := strconv.ParseFloat(trimmedSrc, destVal.Type().Bits())
 		if err != nil {
-			return fmt.Errorf("can't parse %q as float because of: %w", trimmedSrc, err)
+			return fmt.Errorf("can't parse %q as float because of: %w", trimmedSrc, numErrorReason(err))
 		}
 		destVal.SetFloat(f)
 		return nil
@@ -419,6 +419,16 @@ func scanString(sourceStr string, destVal reflect.Value, explicitStr bool) (err 
 	return nil
 }
 
+// numErrorReason returns the reason like strconv.ErrSyntax
+// of a *strconv.NumError, which also contains the parsed string,
+// so that errors quoting the string don't repeat it, else err.
+func numErrorReason(err error) error {
+	if numErr, ok := errors.AsType[*strconv.NumError](err); ok {
+		return numErr.Err
+	}
+	return err
+}
+
 // isNilSource returns true if the trimmed source string
 // is interpreted as nil/zero value: "", "nil", or "null".
 func isNilSource(trimmedSrc string) bool {
@@ -451,9 +461,9 @@ func unmarshalTrimmedJSON(sourceStr, trimmedSrc string, explicitStr bool, destPt
 // of the destination and never the same destination again.
 // Without StringScanners it recurses into scanString.
 //
-// An explicitStr is scanned with the Types, Interfaces, and Kinds scanners
+// An explicitStr is scanned with the type, interface, and kind scanners
 // of StringScanners, and else as explicit string by scanString
-// instead of StringScanners.Default.
+// instead of the default scanner of StringScanners.
 func scanNestedString(sourceStr string, destVal reflect.Value, explicitStr bool) error {
 	scanners := StringScanners
 	if scanners == nil {
@@ -464,7 +474,7 @@ func scanNestedString(sourceStr string, destVal reflect.Value, explicitStr bool)
 		// Registered scanners get the explicit string first,
 		// the default scanner keeps it a string value
 		explicitScanners := *scanners
-		explicitScanners.Default = StringScannerFunc(scanExplicitString)
+		explicitScanners.defaultScanner = StringScannerFunc(scanExplicitString)
 		return explicitScanners.ScanString(sourceStr, destPtr)
 	}
 	return scanners.ScanString(sourceStr, destPtr)

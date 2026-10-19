@@ -39,8 +39,9 @@ func TestDefaultHandleError(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			response := httptest.NewRecorder()
 
-			httpfun.DefaultHandleError(tt.err, response, httptest.NewRequest(http.MethodPost, "/", nil))
+			handled := httpfun.DefaultHandleError(tt.err, response, httptest.NewRequest(http.MethodPost, "/", nil))
 
+			assert.True(t, handled, "every error is answered")
 			assert.Equal(t, tt.wantCode, response.Code, response.Body.String())
 			assert.NotContains(t, response.Body.String(), "secret", "internal error details must not be leaked")
 			assert.NotContains(t, response.Body.String(), "s3cr3t", "values of the server must not be leaked")
@@ -50,9 +51,10 @@ func TestDefaultHandleError(t *testing.T) {
 	t.Run("nil error", func(t *testing.T) {
 		response := httptest.NewRecorder()
 
-		httpfun.DefaultHandleError(nil, response, httptest.NewRequest(http.MethodPost, "/", nil))
+		handled := httpfun.DefaultHandleError(nil, response, httptest.NewRequest(http.MethodPost, "/", nil))
 
 		// Nothing is written, so the handler can still write a response
+		assert.False(t, handled)
 		assert.Equal(t, http.StatusOK, response.Code)
 		assert.Empty(t, response.Body.String())
 	})
@@ -64,9 +66,9 @@ func TestDefaultHandleError_delegation(t *testing.T) {
 	// like the documentation recommends
 	var logged []error
 	orig := httpfun.HandleError
-	httpfun.HandleError = func(err error, response http.ResponseWriter, request *http.Request) {
+	httpfun.HandleError = func(err error, response http.ResponseWriter, request *http.Request) bool {
 		logged = append(logged, err)
-		httpfun.DefaultHandleError(err, response, request)
+		return httpfun.DefaultHandleError(err, response, request)
 	}
 	t.Cleanup(func() { httpfun.HandleError = orig })
 	handler := httpfun.Handler(httpfun.RequestQueryArgs, function.MustReflectWrapper(func(a int) {}, "a"), nil)
@@ -84,8 +86,8 @@ func TestDefaultHandleError_requestBodyTooLarge(t *testing.T) {
 	// answer request bodies over the limit with 413 like httpfun.Handler does
 	setMaxRequestBodySize(t, 10)
 	orig := httpfun.HandleError
-	httpfun.HandleError = func(err error, response http.ResponseWriter, request *http.Request) {
-		httpfun.DefaultHandleError(err, response, request)
+	httpfun.HandleError = func(err error, response http.ResponseWriter, request *http.Request) bool {
+		return httpfun.DefaultHandleError(err, response, request)
 	}
 	t.Cleanup(func() { httpfun.HandleError = orig })
 	handler := httpfun.Handler(httpfun.RequestBodyAsArg("a"), function.MustReflectWrapper(func(a string) {}, "a"), nil)

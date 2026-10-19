@@ -1,13 +1,20 @@
 package function
 
 import (
+	"cmp"
 	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
+	"net/url"
+	"path"
 	"reflect"
 	"runtime"
+	"slices"
+	"strconv"
 	"strings"
+	"unicode"
+	"unicode/utf8"
 )
 
 // ReflectWrapper returns a Wrapper for the passed function
@@ -44,7 +51,8 @@ func newReflectWrapper(function any, argNames []string) (*reflectWrapper, error)
 	case len(argNames) != funcType.NumIn():
 		return nil, fmt.Errorf("%d argNames passed, but %s has %d arguments", len(argNames), funcType, funcType.NumIn())
 	}
-	return &reflectWrapper{funcVal, funcType, argNames}, nil
+	// Clone so that a slice passed as argNames... can be modified by the caller
+	return &reflectWrapper{funcVal, funcType, slices.Clone(argNames)}, nil
 }
 
 type reflectWrapper struct {
@@ -67,14 +75,62 @@ func (f *reflectWrapper) String() string {
 }
 
 // Name returns the name of the wrapped function like "pkg.Func"
-// with the last element of the package path as qualifier,
+// qualified with the package name guessed from its import path,
 // or "func" if the name can't be determined.
 func (f *reflectWrapper) Name() string {
 	if fn := runtime.FuncForPC(f.funcVal.Pointer()); fn != nil {
-		name := fn.Name()
-		return name[strings.LastIndexByte(name, '/')+1:]
+		return qualifiedFuncName(fn.Name())
 	}
 	return "func"
+}
+
+// qualifiedFuncName returns the name of a function as reported by the runtime,
+// like "github.com/domonda/go-function.ScanString", qualified with the
+// package name that goimports assumes for the import path, like "function.ScanString",
+// because the runtime only knows the import path and not the package name.
+func qualifiedFuncName(runtimeName string) string {
+	// The import path ends at the first dot after its last slash,
+	// because the runtime escapes dots in the last element of the import path.
+	// Type arguments like in "pkg.F[...]" follow the import path.
+	pathAndName := runtimeName
+	if bracket := strings.IndexByte(runtimeName, '['); bracket >= 0 {
+		pathAndName = runtimeName[:bracket]
+	}
+	slash := strings.LastIndexByte(pathAndName, '/')
+	dot := strings.IndexByte(runtimeName[slash+1:], '.')
+	if dot < 0 {
+		return runtimeName
+	}
+	importPath, name := runtimeName[:slash+1+dot], runtimeName[slash+1+dot:]
+	if unescaped, err := url.PathUnescape(importPath); err == nil {
+		importPath = unescaped
+	}
+	return cmp.Or(assumedPackageName(importPath), path.Base(importPath)) + name
+}
+
+// assumedPackageName returns the package name that goimports assumes
+// for an import path: the last element that is not a major version like v2,
+// without a "go-" prefix, up to the first character that can't be in an identifier.
+// So "github.com/domonda/go-function" is "function" and "gopkg.in/yaml.v3" is "yaml".
+func assumedPackageName(importPath string) string {
+	base := path.Base(importPath)
+	if strings.HasPrefix(base, "v") {
+		if _, err := strconv.Atoi(base[1:]); err == nil {
+			if dir := path.Dir(importPath); dir != "." {
+				base = path.Base(dir)
+			}
+		}
+	}
+	base = strings.TrimPrefix(base, "go-")
+	if i := strings.IndexFunc(base, notIdentifier); i >= 0 {
+		base = base[:i]
+	}
+	return base
+}
+
+func notIdentifier(r rune) bool {
+	return !('a' <= r && r <= 'z' || 'A' <= r && r <= 'Z' || '0' <= r && r <= '9' || r == '_' ||
+		r >= utf8.RuneSelf && (unicode.IsLetter(r) || unicode.IsDigit(r)))
 }
 
 func (f *reflectWrapper) NumArgs() int {
@@ -83,6 +139,10 @@ func (f *reflectWrapper) NumArgs() int {
 
 func (f *reflectWrapper) ContextArg() bool {
 	return f.funcType.NumIn() > 0 && f.funcType.In(0) == typeOfContext
+}
+
+func (f *reflectWrapper) Variadic() bool {
+	return f.funcType.IsVariadic()
 }
 
 func (f *reflectWrapper) NumResults() int {
@@ -95,7 +155,7 @@ func (f *reflectWrapper) ErrorResult() bool {
 }
 
 func (f *reflectWrapper) ArgNames() []string {
-	return f.argNames
+	return slices.Clone(f.argNames)
 }
 
 func (f *reflectWrapper) ArgDescriptions() []string {
@@ -260,7 +320,7 @@ func (f *reflectWrapper) CallWithJSON(ctx context.Context, argsJSON []byte) (res
 	args := make(map[string]json.RawMessage)
 	err = json.Unmarshal(argsJSON, &args)
 	if err != nil {
-		return nil, NewErrParseArgsJSON(err, f, argsJSON)
+		return nil, NewErrParseArgsJSON(err, f)
 	}
 	in := make([]reflect.Value, f.NumArgs())
 	offs := 0

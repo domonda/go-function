@@ -108,6 +108,7 @@ func (wrappedExampleT) Name() string {
 
 func (wrappedExampleT) NumArgs() int      { return 6 }
 func (wrappedExampleT) ContextArg() bool  { return true }
+func (wrappedExampleT) Variadic() bool    { return false }
 func (wrappedExampleT) NumResults() int   { return 1 }
 func (wrappedExampleT) ErrorResult() bool { return true }
 
@@ -283,7 +284,7 @@ func (f wrappedExampleT) CallWithJSON(ctx context.Context, argsJSON []byte) (res
 	var args map[string]json.RawMessage
 	err = json.Unmarshal(argsJSON, &args)
 	if err != nil {
-		return nil, function.NewErrParseArgsJSON(err, f, argsJSON)
+		return nil, function.NewErrParseArgsJSON(err, f)
 	}
 	var a struct {
 		aBool  bool

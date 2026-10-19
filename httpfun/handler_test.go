@@ -185,10 +185,49 @@ func TestHandler(t *testing.T) {
 
 		response := serve(handler, httptest.NewRequest(http.MethodGet, "/calculate?op=div", nil))
 
-		// Custom error handlers replace HandleError
+		// An error handler that handles the error replaces HandleError
 		assert.Equal(t, http.StatusTeapot, response.Code)
 		require.Len(t, errHandler.errs, 1)
 		assert.EqualError(t, errHandler.errs[0], "secret error details")
+	})
+
+	t.Run("errHandlers stop at the first handled error", func(t *testing.T) {
+		// Only the first error handler that handles the error writes the response,
+		// handlers that don't handle it like loggers pass it on
+		var logged []error
+		logger := httpfun.ErrorHandlerFunc(func(err error, _ http.ResponseWriter, _ *http.Request) bool {
+			logged = append(logged, err)
+			return false
+		})
+		first, second := new(recordingErrHandler), new(recordingErrHandler)
+		handler := httpfun.Handler(httpfun.RequestQueryArgs, wrapper, httpfun.RespondJSON, logger, first, second)
+
+		response := serve(handler, httptest.NewRequest(http.MethodGet, "/calculate?op=div", nil))
+
+		assert.Equal(t, http.StatusTeapot, response.Code)
+		assert.Len(t, logged, 1)
+		assert.Len(t, first.errs, 1)
+		assert.Empty(t, second.errs, "error was already handled")
+	})
+
+	t.Run("unhandled errors go to HandleError", func(t *testing.T) {
+		// If no error handler handles the error, HandleError answers it,
+		// so the error is not dropped with an empty 200 OK response
+		logger := httpfun.ErrorHandlerFunc(func(error, http.ResponseWriter, *http.Request) bool { return false })
+		handler := httpfun.Handler(httpfun.RequestQueryArgs, wrapper, httpfun.RespondJSON, logger)
+
+		response := serve(handler, httptest.NewRequest(http.MethodGet, "/calculate?op=div", nil))
+
+		assert.Equal(t, http.StatusInternalServerError, response.Code)
+		assert.NotContains(t, response.Body.String(), "secret")
+	})
+
+	t.Run("httperr handlers are ErrorHandlers", func(t *testing.T) {
+		handler := httpfun.Handler(httpfun.RequestQueryArgs, wrapper, httpfun.RespondJSON, httperr.DefaultHandler)
+
+		response := serve(handler, httptest.NewRequest(http.MethodGet, "/calculate?op=div", nil))
+
+		assert.Equal(t, http.StatusInternalServerError, response.Code)
 	})
 
 	t.Run("nil getArgs and resultsWriter", func(t *testing.T) {
@@ -238,6 +277,28 @@ func TestHandlerNoWrapper(t *testing.T) {
 
 	assert.Equal(t, http.StatusInternalServerError, response.Code)
 	assert.NotContains(t, response.Body.String(), "secret")
+
+	t.Run("errHandlers", func(t *testing.T) {
+		// Like Handler, an error that no error handler handled goes to HandleError,
+		// and the first error handler that handles it writes the response
+		failing := func(context.Context) ([]byte, error) { return nil, errors.New("secret error details") }
+		var logged int
+		logger := httpfun.ErrorHandlerFunc(func(error, http.ResponseWriter, *http.Request) bool {
+			logged++
+			return false
+		})
+
+		response := serve(httpfun.HandlerNoWrapper(failing, nil, logger), httptest.NewRequest(http.MethodGet, "/", nil))
+
+		assert.Equal(t, http.StatusInternalServerError, response.Code)
+		assert.Equal(t, 1, logged)
+
+		recording := new(recordingErrHandler)
+		response = serve(httpfun.HandlerNoWrapper(failing, nil, logger, recording), httptest.NewRequest(http.MethodGet, "/", nil))
+
+		assert.Equal(t, http.StatusTeapot, response.Code)
+		assert.Len(t, recording.errs, 1)
+	})
 }
 
 // decoratedWrapper is a function.Wrapper that embeds another wrapper,

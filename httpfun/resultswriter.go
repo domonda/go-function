@@ -18,10 +18,12 @@ import (
 type ResultsWriter interface {
 	// WriteResults writes the results and optionally the resultErr to the response.
 	// If the method does not handle the resultErr then it should return it
-	// so it can be handled by the next writer in the chain.
+	// so it can be handled by the error handlers of the Handler.
+	// An error returned for a failed write is also passed to the error handlers.
 	WriteResults(results []any, resultErr error, response http.ResponseWriter, request *http.Request) error
 }
 
+// ResultsWriterFunc is a function type that implements ResultsWriter.
 type ResultsWriterFunc func(results []any, resultErr error, response http.ResponseWriter, request *http.Request) error
 
 func (f ResultsWriterFunc) WriteResults(results []any, resultErr error, response http.ResponseWriter, request *http.Request) error {
@@ -140,6 +142,9 @@ func RespondBinary(contentType string) ResultsWriterFunc {
 	}
 }
 
+// RespondXML writes the results of a function call as XML to the response,
+// multiple results separated by a newline.
+// Any resultErr is not handled and will be returned by this method.
 var RespondXML ResultsWriterFunc = func(results []any, resultErr error, response http.ResponseWriter, request *http.Request) error {
 	// Don't handle resultErr or context cancellation
 	if resultErr != nil || request.Context().Err() != nil {
@@ -177,6 +182,11 @@ var RespondPlaintext ResultsWriterFunc = func(results []any, resultErr error, re
 	return err
 }
 
+// RespondHTML writes the results of a function call as HTML to the response,
+// []byte results as they are and other results formatted with fmt.Fprint.
+// The results are not escaped, so the function has to return valid
+// and safe HTML, without unescaped user input.
+// Any resultErr is not handled and will be returned by this method.
 var RespondHTML ResultsWriterFunc = func(results []any, resultErr error, response http.ResponseWriter, request *http.Request) error {
 	// Don't handle resultErr or context cancellation
 	if resultErr != nil || request.Context().Err() != nil {
@@ -195,6 +205,10 @@ var RespondHTML ResultsWriterFunc = func(results []any, resultErr error, respons
 	return err
 }
 
+// RespondDetectContentType writes the single []byte result of a function call
+// to the response with the content type detected by DetectContentType.
+// An error is returned for other results.
+// Any resultErr is not handled and will be returned by this method.
 var RespondDetectContentType ResultsWriterFunc = func(results []any, resultErr error, response http.ResponseWriter, request *http.Request) error {
 	// Don't handle resultErr or context cancellation
 	if resultErr != nil || request.Context().Err() != nil {
@@ -213,7 +227,12 @@ var RespondDetectContentType ResultsWriterFunc = func(results []any, resultErr e
 	return err
 }
 
-func RespondContentType(contentType string) ResultsWriter {
+// RespondContentType returns a ResultsWriter that writes the single []byte result
+// of a function call to the response with contentType.
+// An error is returned for other results, see RespondBinary
+// for multiple results and results of type string or io.Reader.
+// Any resultErr is not handled and will be returned by the writer.
+func RespondContentType(contentType string) ResultsWriterFunc {
 	return ResultsWriterFunc(func(results []any, resultErr error, response http.ResponseWriter, request *http.Request) error {
 		// Don't handle resultErr or context cancellation
 		if resultErr != nil || request.Context().Err() != nil {
@@ -263,7 +282,7 @@ func encodeXML(response any) ([]byte, error) {
 	return xml.Marshal(response)
 }
 
-// Static content HTTPResultsWriter also implement http.Handler
+// Static content ResultsWriters also implement http.Handler
 var (
 	_ ResultsWriter = RespondNothing
 	_ ResultsWriter = RespondStaticHTML("")
@@ -282,6 +301,9 @@ var (
 	_ http.Handler = RespondRedirectFunc(nil)
 )
 
+// RespondNothing is a ResultsWriter and http.Handler that writes nothing,
+// so the response is 200 OK without body if nothing else is written.
+// Any resultErr is not handled and will be returned by WriteResults.
 var RespondNothing respondNothing
 
 type respondNothing struct{}
@@ -292,6 +314,9 @@ func (respondNothing) WriteResults(results []any, resultErr error, response http
 
 func (respondNothing) ServeHTTP(writer http.ResponseWriter, _ *http.Request) {}
 
+// RespondStaticHTML is a ResultsWriter and http.Handler
+// that responds with its HTML string, ignoring the results.
+// Any resultErr is not handled and will be returned by WriteResults.
 type RespondStaticHTML string
 
 func (html RespondStaticHTML) WriteResults(results []any, resultErr error, response http.ResponseWriter, request *http.Request) error {
@@ -308,6 +333,9 @@ func (html RespondStaticHTML) ServeHTTP(response http.ResponseWriter, _ *http.Re
 	response.Write([]byte(html)) //#nosec G104,G705
 }
 
+// RespondStaticXML is a ResultsWriter and http.Handler
+// that responds with its XML string, ignoring the results.
+// Any resultErr is not handled and will be returned by WriteResults.
 type RespondStaticXML string
 
 func (xml RespondStaticXML) WriteResults(results []any, resultErr error, response http.ResponseWriter, request *http.Request) error {
@@ -324,6 +352,9 @@ func (xml RespondStaticXML) ServeHTTP(response http.ResponseWriter, _ *http.Requ
 	response.Write([]byte(xml)) //#nosec G104,G705
 }
 
+// RespondStaticJSON is a ResultsWriter and http.Handler
+// that responds with its JSON string, ignoring the results.
+// Any resultErr is not handled and will be returned by WriteResults.
 type RespondStaticJSON string
 
 func (json RespondStaticJSON) WriteResults(results []any, resultErr error, response http.ResponseWriter, request *http.Request) error {
@@ -340,6 +371,9 @@ func (json RespondStaticJSON) ServeHTTP(response http.ResponseWriter, _ *http.Re
 	response.Write([]byte(json)) //#nosec G104,G705
 }
 
+// RespondStaticPlaintext is a ResultsWriter and http.Handler
+// that responds with its plain text string, ignoring the results.
+// Any resultErr is not handled and will be returned by WriteResults.
 type RespondStaticPlaintext string
 
 func (text RespondStaticPlaintext) WriteResults(results []any, resultErr error, response http.ResponseWriter, request *http.Request) error {
@@ -356,9 +390,10 @@ func (text RespondStaticPlaintext) ServeHTTP(response http.ResponseWriter, _ *ht
 	response.Write([]byte(text)) //#nosec G104,G705
 }
 
-// RespondRedirect implements HTTPResultsWriter and http.Handler
-// with for a redirect URL string.
+// RespondRedirect is a ResultsWriter and http.Handler
+// that redirects to its URL string, ignoring the results.
 // The redirect will be done with HTTP status code 302: Found.
+// Any resultErr is not handled and will be returned by WriteResults.
 type RespondRedirect string
 
 func (re RespondRedirect) WriteResults(results []any, resultErr error, response http.ResponseWriter, request *http.Request) error {
@@ -374,9 +409,11 @@ func (re RespondRedirect) ServeHTTP(response http.ResponseWriter, request *http.
 	http.Redirect(response, request, string(re), http.StatusFound)
 }
 
-// RespondRedirectFunc implements HTTPResultsWriter and http.Handler
-// with a function that returns the redirect URL.
+// RespondRedirectFunc is a ResultsWriter and http.Handler
+// that redirects to the URL returned by the function, ignoring the results.
 // The redirect will be done with HTTP status code 302: Found.
+// Any resultErr and an error of the function are returned by WriteResults,
+// as http.Handler the error of the function is handled by HandleError.
 type RespondRedirectFunc func(request *http.Request) (url string, err error)
 
 func (f RespondRedirectFunc) WriteResults(results []any, resultErr error, response http.ResponseWriter, request *http.Request) error {

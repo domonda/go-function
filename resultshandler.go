@@ -13,10 +13,24 @@ import (
 	"unicode/utf8"
 )
 
+// ResultsHandler handles the results of a function call,
+// like printing them, for NewStringArgsFunc, NewNamedStringArgsFunc,
+// NewJSONArgsFunc, and the commands of the cli package.
+//
+// HandleResults gets the results without the error result
+// and the error result as resultErr, which is nil if the function returned no error.
+// A ResultsHandler can't handle resultErr for the caller:
+// the functions calling handlers return resultErr after all handlers,
+// also if a handler returned nil.
+// A handler that has nothing to do for a non-nil resultErr returns it.
+// A handler that fails, like when the results can't be written,
+// returns its own error, which is returned instead of resultErr
+// without calling the handlers after it.
 type ResultsHandler interface {
 	HandleResults(ctx context.Context, results []any, resultErr error) error
 }
 
+// ResultsHandlerFunc is a function type that implements ResultsHandler.
 type ResultsHandlerFunc func(ctx context.Context, results []any, resultErr error) error
 
 func (f ResultsHandlerFunc) HandleResults(ctx context.Context, results []any, resultErr error) error {
@@ -127,7 +141,7 @@ func makeResultsPrintable(results []any) error {
 	return nil
 }
 
-// PrintTo calls fmt.Fprint on writer with the result values as varidic arguments
+// PrintTo calls fmt.Fprint on writer with the result values as variadic arguments
 func PrintTo(writer io.Writer) ResultsHandlerFunc {
 	return func(ctx context.Context, results []any, resultErr error) error {
 		if resultErr != nil {
@@ -220,7 +234,8 @@ func PrintlnWithPrefix(prefix string) ResultsHandlerFunc {
 	}
 }
 
-// Logger interface
+// Logger is the interface of loggers for LogTo and LogWithPrefixTo,
+// which *log.Logger implements.
 type Logger interface {
 	Printf(format string, args ...any)
 }

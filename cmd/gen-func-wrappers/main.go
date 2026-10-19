@@ -159,6 +159,7 @@ The tool will replace your declaration with:
 
 	func (greetUserWrapperT) NumArgs() int      { return 3 }
 	func (greetUserWrapperT) ContextArg() bool  { return true }
+	func (greetUserWrapperT) Variadic() bool    { return false }
 	func (greetUserWrapperT) NumResults() int   { return 2 }
 	func (greetUserWrapperT) ErrorResult() bool { return true }
 
@@ -225,6 +226,7 @@ Description methods:
   - Name() string
   - NumArgs() int
   - ContextArg() bool
+  - Variadic() bool
   - NumResults() int
   - ErrorResult() bool
   - ArgNames() []string

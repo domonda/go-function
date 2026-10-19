@@ -74,7 +74,7 @@
 // # Security
 //
 // Strings and JSON passed to CallWithStrings, CallWithNamedStrings,
-// CallWithJSON, or CallFunctionWithJSONArgs become argument values as they are.
+// or CallWithJSON become argument values as they are.
 // Don't expose functions with arguments of types that name files or other
 // resources to untrusted input like HTTP requests, for example fs.File
 // of github.com/ungerik/go-fs, which is a path string,

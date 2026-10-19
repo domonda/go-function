@@ -112,3 +112,41 @@ func TestArgsFuncs_HandlerErrorStopsHandlers(t *testing.T) {
 	})
 	assert.Equal(t, handlerErr, err)
 }
+
+func TestNewJSONArgsFunc(t *testing.T) {
+	// NewJSONArgsFunc calls CallWithJSON of the wrapper with the ctx
+	// and passes the results to the handlers
+	type ctxKey struct{}
+	ctx := context.WithValue(context.Background(), ctxKey{}, "ctx value")
+	var gotJSON string
+	f := CallWithJSONWrapperFunc(func(ctx context.Context, argsJSON []byte) ([]any, error) {
+		gotJSON = string(argsJSON)
+		return []any{ctx.Value(ctxKey{})}, nil
+	})
+	var gotResults []any
+	handler := ResultsHandlerFunc(func(_ context.Context, results []any, resultErr error) error {
+		gotResults = results
+		return resultErr
+	})
+	err := NewJSONArgsFunc(f, handler)(ctx, []byte(`{"a":1}`))
+	require.NoError(t, err)
+	assert.Equal(t, `{"a":1}`, gotJSON)
+	assert.Equal(t, []any{"ctx value"}, gotResults)
+}
+
+func TestArgsFuncs_HandlerCantHandleResultErr(t *testing.T) {
+	// A handler returning nil doesn't handle the result error for the caller,
+	// as documented by ResultsHandler
+	resultErr := errors.New("result")
+	failingFunc := MustReflectWrapper(func() error { return resultErr })
+	nilHandler := ResultsHandlerFunc(func(context.Context, []any, error) error { return nil })
+	var called bool
+	nextHandler := ResultsHandlerFunc(func(_ context.Context, _ []any, err error) error {
+		called = true
+		assert.Equal(t, resultErr, err, "next handler gets the result error")
+		return err
+	})
+	err := NewStringArgsFunc(failingFunc, nilHandler, nextHandler)(context.Background())
+	assert.Equal(t, resultErr, err)
+	assert.True(t, called)
+}

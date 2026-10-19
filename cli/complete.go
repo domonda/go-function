@@ -10,6 +10,12 @@ import (
 	"github.com/posener/complete/v2"
 )
 
+// CompleteStringArgsDispatcher provides shell completion of the commands of disp
+// using github.com/posener/complete/v2 for the program named like
+// the base name of os.Args[0]. Call it at the start of main:
+// it completes the commands and exits if the shell requests a completion
+// with the COMP_LINE and COMP_POINT environment variables,
+// and else returns so the program can dispatch the command.
 func CompleteStringArgsDispatcher(disp *StringArgsDispatcher) {
 	commandName := filepath.Base(os.Args[0])
 	complete.Complete(commandName, completer{disp})
@@ -36,6 +42,8 @@ func (c completer) Predict(prefix string) (commands []string) {
 	return commands
 }
 
+// CompleteSuperStringArgsDispatcher provides shell completion of the super commands
+// and their sub commands of disp like CompleteStringArgsDispatcher.
 func CompleteSuperStringArgsDispatcher(disp *SuperStringArgsDispatcher) {
 	commandName := filepath.Base(os.Args[0])
 	complete.Complete(commandName, superCompleter{disp})

@@ -41,6 +41,13 @@ func checkCommandChars(command string) error {
 
 // StringArgsCommandLogger provides a way to log or track command executions.
 // Implementations can write to log files, send metrics, or perform auditing.
+//
+// LogStringArgsCommand is called before a found command is executed
+// with the name of the command and its arguments.
+// The command is DefaultCommand ("") for the default command of a StringArgsDispatcher.
+// For a SuperStringArgsDispatcher the command is the super command
+// and the command joined with a space, like "user create",
+// or only the super command for its default command, like "deploy".
 type StringArgsCommandLogger interface {
 	LogStringArgsCommand(command string, args []string)
 }
@@ -193,25 +200,11 @@ func (disp *StringArgsDispatcher) Dispatch(ctx context.Context, command string, 
 	return cmd.stringArgsFunc(ctx, args...)
 }
 
-// MustDispatch is like Dispatch but panics on error.
-func (disp *StringArgsDispatcher) MustDispatch(ctx context.Context, command string, args ...string) {
-	err := disp.Dispatch(ctx, command, args...)
-	if err != nil {
-		panic(fmt.Errorf("command '%s' returned: %w", command, err))
-	}
-}
-
-// DispatchDefaultCommand executes the default command with a background context.
-func (disp *StringArgsDispatcher) DispatchDefaultCommand() error {
-	return disp.Dispatch(context.Background(), DefaultCommand)
-}
-
-// MustDispatchDefaultCommand is like DispatchDefaultCommand but panics on error.
-func (disp *StringArgsDispatcher) MustDispatchDefaultCommand() {
-	err := disp.DispatchDefaultCommand()
-	if err != nil {
-		panic(fmt.Errorf("default command: %w", err))
-	}
+// DispatchDefaultCommand executes the default command without arguments.
+// Returns ErrCommandNotFound if there is no default command,
+// or any error returned by the wrapped function.
+func (disp *StringArgsDispatcher) DispatchDefaultCommand(ctx context.Context) error {
+	return disp.Dispatch(ctx, DefaultCommand)
 }
 
 // DispatchCombinedCommandAndArgs parses and dispatches from os.Args style input.
@@ -232,15 +225,6 @@ func (disp *StringArgsDispatcher) DispatchCombinedCommandAndArgs(ctx context.Con
 	command = commandAndArgs[0]
 	args := commandAndArgs[1:]
 	return command, disp.Dispatch(ctx, command, args...)
-}
-
-// MustDispatchCombinedCommandAndArgs is like DispatchCombinedCommandAndArgs but panics on error.
-func (disp *StringArgsDispatcher) MustDispatchCombinedCommandAndArgs(ctx context.Context, commandAndArgs []string) (command string) {
-	command, err := disp.DispatchCombinedCommandAndArgs(ctx, commandAndArgs)
-	if err != nil {
-		panic(fmt.Errorf("MustDispatchCombinedCommandAndArgs(%v): %w", commandAndArgs, err))
-	}
-	return command
 }
 
 // PrintCommands prints all registered commands with their descriptions and argument types.
@@ -264,8 +248,9 @@ func (disp *StringArgsDispatcher) PrintCommands() {
 			}
 		}
 		if hasAnyArgDesc {
+			argNames := cmd.commandFunc.ArgNames()
 			for i, desc := range cmd.commandFunc.ArgDescriptions() {
-				DescriptionColor.Printf("          <%s:%s> %s\n", cmd.commandFunc.ArgNames()[i], derefType(cmd.commandFunc.ArgTypes()[i]), desc) //#nosec G104
+				DescriptionColor.Printf("          <%s:%s> %s\n", argNames[i], argTypeString(cmd.commandFunc, i), desc) //#nosec G104
 			}
 		}
 		DescriptionColor.Println() //#nosec G104
@@ -306,18 +291,28 @@ func (disp *StringArgsDispatcher) PrintCompletion(args []string) {
 }
 
 // functionArgsString formats function arguments as a string for help text.
-// Returns a space-separated list like: "<name:string> <age:int> <active:bool>"
+// Returns a space-separated list like: "<name:string> <age:int> <tags:...string>"
 func functionArgsString(f function.Wrapper) string {
 	b := strings.Builder{}
 	argNames := f.ArgNames()
-	argTypes := f.ArgTypes()
 	for i := range argNames {
 		if i > 0 {
 			b.WriteByte(' ')
 		}
-		fmt.Fprintf(&b, "<%s:%s>", argNames[i], derefType(argTypes[i]))
+		fmt.Fprintf(&b, "<%s:%s>", argNames[i], argTypeString(f, i))
 	}
 	return b.String()
+}
+
+// argTypeString returns the type of the argument with index i for help text,
+// with "..." and the element type for a variadic argument like "...int",
+// because every string from its position on is one element of it.
+func argTypeString(f function.Description, i int) string {
+	argType := f.ArgTypes()[i]
+	if f.Variadic() && i == f.NumArgs()-1 {
+		return "..." + derefType(argType.Elem()).String()
+	}
+	return derefType(argType).String()
 }
 
 // derefType returns the element type if t is a pointer type, otherwise returns t.
