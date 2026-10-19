@@ -133,6 +133,12 @@ func TestHandler_GET(t *testing.T) {
 		})
 	}
 	assert.Contains(t, formField(t, body, "active"), `type="checkbox"`)
+
+	// Number inputs only accept integers with the default step of 1,
+	// so float arguments allow any decimal value
+	assert.Contains(t, formField(t, body, "ratio"), `step="any"`)
+	assert.NotContains(t, formField(t, body, "age"), `step=`)
+	assert.NotContains(t, formField(t, body, "count"), `step=`)
 }
 
 func TestHandler_GET_customized(t *testing.T) {

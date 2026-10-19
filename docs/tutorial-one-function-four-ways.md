@@ -152,14 +152,14 @@ Run it without arguments to see the help, built from the argument names and type
 
 ```
 Commands:
-  tempconv  
+  tempconv
       Print the commands
 
-  tempconv convert <ctx:context.Context> <degrees:float64> <to:string>
+  tempconv convert <degrees:float64> <to:string>
       Convert a temperature to C or F
 ```
 
-The help lists the `ctx` argument too, but you don't type it: the dispatcher passes the context.
+The `ctx` argument isn't listed, because you don't type it: the dispatcher passes the context.
 
 ## Step 4: Serve it over HTTP
 

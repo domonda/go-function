@@ -37,7 +37,8 @@
 // The package automatically selects appropriate HTML input types based on Go types:
 //
 //	string         → <input type="text">
-//	int, float     → <input type="number">
+//	int, uint      → <input type="number">
+//	float          → <input type="number" step="any">
 //	bool           → <input type="checkbox">
 //	fs.FileReader  → <input type="file">
 //	other types    → <input type="text">

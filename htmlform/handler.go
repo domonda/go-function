@@ -53,7 +53,10 @@ type formField struct {
 	Value    string
 	Required bool
 	Multiple bool
-	Options  []Option
+	// Step is the step attribute of number inputs,
+	// "any" for floats, because the default step of 1 only allows integers
+	Step    string
+	Options []Option
 }
 
 // Handler is an http.Handler that generates and processes HTML forms for a wrapped function.
@@ -363,6 +366,7 @@ func (handler *Handler) get(response http.ResponseWriter, request *http.Request)
 				field.Type = "checkbox"
 			case reflect.Float32, reflect.Float64:
 				field.Type = "number"
+				field.Step = "any"
 			case reflect.Int, reflect.Int8, reflect.Int16, reflect.Int32, reflect.Int64:
 				field.Type = "number"
 			case reflect.Uint, reflect.Uint8, reflect.Uint16, reflect.Uint32, reflect.Uint64:

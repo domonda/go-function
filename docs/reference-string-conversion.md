@@ -6,7 +6,7 @@
 
 | Caller | Uses `ScanString` |
 |---|---|
-| `CallWithStrings`, `CallWithNamedStrings` of `ReflectWrapper` and generated wrappers | yes, for every argument except type `any`, which gets the string unparsed. Generated wrappers also pass arguments of type `string` unchanged, so scanners registered for `string` or kind `reflect.String` only apply to them in `ReflectWrapper` |
+| `CallWithStrings`, `CallWithNamedStrings` of `ReflectWrapper` and generated wrappers | yes, for every argument except type `any`, which gets the string unparsed |
 | `cli` dispatchers | yes, through `CallWithStrings` |
 | `httpfun.Handler` | yes, through `CallWithNamedStrings`, also for `RequestBodyJSONFieldsAsArgs`, which turns JSON strings into their text and other JSON values into their JSON text like `42` or `[1,2]` |
 | `htmlform.Handler` | yes, for every text field except arguments of type `any`, which get the text unparsed |

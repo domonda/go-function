@@ -108,12 +108,11 @@ go build -o tempconv . && ./tempconv
 
 ```
 Commands:
-  tempconv  
+  tempconv
       Print the commands
 
-  tempconv convert <ctx:context.Context> <degrees:float64> <to:string>
+  tempconv convert <degrees:float64> <to:string>
       Convert a temperature to C or F
-          <ctx:context.Context> 
           <degrees:float64> The temperature to convert
           <to:string> The unit to convert to, C (Celsius) or F (Fahrenheit)
 

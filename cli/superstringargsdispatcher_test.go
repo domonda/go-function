@@ -217,6 +217,25 @@ func TestSuperStringArgsDispatcher_PrintCommands(t *testing.T) {
 	assert.Contains(t, got, "      Print the version\n")
 }
 
+func TestSuperStringArgsDispatcher_PrintCommands_contextArg(t *testing.T) {
+	// The dispatcher passes the context argument,
+	// so the usage doesn't show it as command line argument
+	disp := NewSuperStringArgsDispatcher("myapp")
+	db := disp.MustAddSuperCommand("db")
+	db.MustAddCommand("migrate", "Migrate the database", function.MustReflectWrapper(func(ctx context.Context, steps int) {}, "ctx", "steps"))
+	disp.MustAddCommand("version", "Print the version", function.MustReflectWrapper(func(ctx context.Context) {}))
+
+	got := captureStdout(t, disp.PrintCommands)
+
+	want := "  myapp db migrate <steps:int>\n" +
+		"      Migrate the database\n" +
+		"\n" +
+		"  myapp version\n" +
+		"      Print the version\n" +
+		"\n"
+	assert.Equal(t, want, got)
+}
+
 func TestSuperStringArgsDispatcher_DispatchCombinedCommandAndArgs_defaultAndSubCommands(t *testing.T) {
 	// A super command with a default command must still dispatch its named sub commands,
 	// which PrintCompletion advertises, only other arguments go to the default command

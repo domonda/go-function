@@ -223,25 +223,7 @@ func (disp *SuperStringArgsDispatcher) PrintCommands() {
 		if cmd.command != DefaultCommand {
 			command += " " + cmd.command
 		}
-
-		UsageColor.Printf("  %s %s %s\n", disp.baseCommand, command, functionArgsString(cmd.commandFunc)) //#nosec G104
-		if cmd.description != "" {
-			DescriptionColor.Printf("      %s\n", cmd.description) //#nosec G104
-		}
-		hasAnyArgDesc := false
-		for _, desc := range cmd.commandFunc.ArgDescriptions() {
-			if desc != "" {
-				hasAnyArgDesc = true
-				break
-			}
-		}
-		if hasAnyArgDesc {
-			argNames := cmd.commandFunc.ArgNames()
-			for i, desc := range cmd.commandFunc.ArgDescriptions() {
-				DescriptionColor.Printf("          <%s:%s> %s\n", argNames[i], argTypeString(cmd.commandFunc, i), desc) //#nosec G104
-			}
-		}
-		DescriptionColor.Println() //#nosec G104
+		printCommandUsage(disp.baseCommand, command, cmd)
 	}
 }
 

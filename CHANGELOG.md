@@ -154,7 +154,9 @@ by `gen-func-wrappers` are now covered by semantic versioning.
   and with 2 for all other errors, and reports every file with missing or outdated wrappers
   instead of stopping at the first one.
 - Generated `CallWithStrings` and `CallWithNamedStrings` methods pass the unparsed string
-  to arguments of type `any`, like `ReflectWrapper`.
+  to arguments of type `any`, and scan `string` arguments and variadic `...string` elements
+  with `ScanString` instead of assigning them, like `ReflectWrapper`,
+  so that scanners registered for `string` or kind `reflect.String` apply to both.
 - `gen-func-wrappers` selects the files of a package like the go command.
   Files with build constraints that need custom build tags, like `//go:build integration`,
   and files with names starting with `_` or `.` are skipped in directory mode,
@@ -268,6 +270,10 @@ by `gen-func-wrappers` are now covered by semantic versioning.
   and are only recovered by `httpfun.Handler` and `htmlform.Handler`.
 - The `htmlform` documentation states that required fields are only enforced by browsers,
   and the README runs the tests of all modules with `./test-workspace.sh`.
+- The help of the `cli` dispatchers no longer lists a `context.Context` argument like `<ctx:context.Context>`,
+  which the dispatcher passes, and has no trailing space after commands without arguments.
+- `htmlform` number fields of float arguments have `step="any"`, so browsers accept decimal values like `98.6`
+  instead of only integers.
 
 ### Security
 

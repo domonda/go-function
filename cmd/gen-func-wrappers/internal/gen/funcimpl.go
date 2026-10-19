@@ -247,9 +247,11 @@ func (impl Impl) WriteFunctionWrapper(w io.Writer, funcFile *ast.File, funcDir s
 
 	// isScanned reports if the argument with the index of the type typeName,
 	// its type or for CallWithStrings the element type of a variadic argument,
-	// is parsed from a string by CallWithStrings and CallWithNamedStrings
+	// is parsed from a string by CallWithStrings and CallWithNamedStrings.
+	// Like ReflectWrapper, only arguments of type any get the unparsed string,
+	// strings are scanned so that scanners registered for them apply
 	isScanned := func(i int, typeName string) bool {
-		return i >= firstArg && argNames[i] != "_" && typeName != "string" && !isAnyType(typeName)
+		return i >= firstArg && argNames[i] != "_" && !isAnyType(typeName)
 	}
 
 	// writeArgsStruct writes the declaration of the variable a
@@ -493,7 +495,7 @@ func (impl Impl) WriteFunctionWrapper(w io.Writer, funcFile *ast.File, funcDir s
 					}
 					fmt.Fprintf(w, "\t\t}\n")
 				} else {
-					// Strings and the unparsed string for any
+					// The unparsed string for any
 					fmt.Fprintf(w, "\t\t%s = strs[%d]\n", callParams[i], strsIndex)
 				}
 				fmt.Fprintf(w, "\t}\n")
@@ -529,7 +531,7 @@ func (impl Impl) WriteFunctionWrapper(w io.Writer, funcFile *ast.File, funcDir s
 					}
 					fmt.Fprintf(w, "\t\t}\n")
 				} else {
-					// Strings and the unparsed string for any
+					// The unparsed string for any
 					fmt.Fprintf(w, "\t\t%s = str\n", callParams[i])
 				}
 				fmt.Fprintf(w, "\t}\n")

@@ -225,6 +225,43 @@ func TestStringArgsDispatcher_PrintCommands(t *testing.T) {
 	assert.Equal(t, want, got)
 }
 
+// argDescriptionsWrapper is a Wrapper with argument descriptions
+// like the ones generated wrappers take from the doc comment.
+type argDescriptionsWrapper struct {
+	function.Wrapper
+	descriptions []string
+}
+
+func (w argDescriptionsWrapper) ArgDescriptions() []string { return w.descriptions }
+
+func TestStringArgsDispatcher_PrintCommands_contextArg(t *testing.T) {
+	// The dispatcher passes the context argument,
+	// so the usage doesn't show it as command line argument
+	disp := NewStringArgsDispatcher("myapp")
+	disp.MustAddCommand("convert", "Convert a temperature", argDescriptionsWrapper{
+		Wrapper:      function.MustReflectWrapper(func(ctx context.Context, degrees float64, to string) {}, "ctx", "degrees", "to"),
+		descriptions: []string{"", "The temperature", "The unit"},
+	})
+	disp.MustAddCommand("migrate", "Migrate the database", function.MustReflectWrapper(func(ctx context.Context) {}))
+	disp.MustAddDefaultCommand("Print the commands", function.VoidFuncWrapper(func() {}))
+
+	got := captureStdout(t, disp.PrintCommands)
+
+	// No trailing space after the default command and commands without arguments
+	want := "  myapp\n" +
+		"      Print the commands\n" +
+		"\n" +
+		"  myapp convert <degrees:float64> <to:string>\n" +
+		"      Convert a temperature\n" +
+		"          <degrees:float64> The temperature\n" +
+		"          <to:string> The unit\n" +
+		"\n" +
+		"  myapp migrate\n" +
+		"      Migrate the database\n" +
+		"\n"
+	assert.Equal(t, want, got)
+}
+
 func TestStringArgsDispatcher_PrintCommands_variadic(t *testing.T) {
 	// A variadic argument takes every string from its position on as element,
 	// so its usage shows the element type with "..." instead of the slice type,

@@ -703,6 +703,8 @@ func Add(a, b int) int { return a + b }
 
 func Join(a, b string) string { return a + b }
 
+func Pair(a, b any) [2]any { return [2]any{a, b} }
+
 func Now() {}
 
 func WithCtx(ctx context.Context) error { return ctx.Err() }
@@ -776,7 +778,22 @@ var sumCall = function.CallWrapperTODO(Sum)
 			wantNotContains: []string{"reflect.TypeFor[int]()"},
 		},
 		{
-			// Strings are not scanned, so go-function is not used
+			// Arguments of type any get the unparsed string,
+			// so go-function is not used and its import is removed
+			name: "any arguments",
+			files: map[string]string{"test.go": `package testpkg
+
+import "github.com/domonda/go-function"
+
+var pairStrings = function.CallWithStringsWrapperTODO(Pair)
+
+var pairNamedStrings = function.CallWithNamedStringsWrapperTODO(Pair)
+`},
+			wantNotContains: []string{"github.com/domonda/go-function"},
+		},
+		{
+			// Like ReflectWrapper, strings are scanned,
+			// so that scanners registered for strings apply
 			name: "string arguments",
 			files: map[string]string{"test.go": `package testpkg
 
@@ -786,7 +803,7 @@ var joinStrings = function.CallWithStringsWrapperTODO(Join)
 
 var joinNamedStrings = function.CallWithNamedStringsWrapperTODO(Join)
 `},
-			wantNotContains: []string{"github.com/domonda/go-function"},
+			wantContains: []string{"function.ScanString(strs[0], &a.a)", "function.ScanString(str, &a.a)"},
 		},
 		{
 			// CallWithJSON was only generated together with CallWithNamedStrings
@@ -1435,6 +1452,10 @@ func VariadicStrings(strs ...string) string {
 	return fmt.Sprintf("%q", strs)
 }
 
+func Echo(s string, more ...string) string {
+	return fmt.Sprint(s, more)
+}
+
 func Printf(format string, args ...any) string {
 	return fmt.Sprintf(format, args...)
 }
@@ -1511,6 +1532,8 @@ var variadicWrapper = function.WrapperTODO(Variadic)
 
 var variadicStringsWrapper = function.WrapperTODO(VariadicStrings)
 
+var echoWrapper = function.WrapperTODO(Echo)
+
 var printfWrapper = function.WrapperTODO(Printf)
 
 var sumWrapper = function.WrapperTODO(Sum)
@@ -1538,6 +1561,8 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"reflect"
+	"strings"
 
 	"github.com/domonda/go-function"
 )
@@ -1629,6 +1654,24 @@ func main() {
 	// also for empty interfaces written as interface{} in the source code
 	reflected := function.MustReflectWrapper(Pointers, "ctx", "p", "m", "e", "x", "y")
 	fmt.Printf("%s %t %t\n", pointersWrapper, pointersWrapper.Name() == reflected.Name(), pointersWrapper.String() == reflected.String())
+	// Like ReflectWrapper, generated wrappers scan string arguments
+	// and variadic elements, so that scanners registered for strings apply
+	function.StringScanners = function.StringScanners.WithTypeScanner(
+		reflect.TypeFor[string](),
+		function.StringScannerFunc(func(sourceStr string, destPtr any) error {
+			*destPtr.(*string) = strings.ToUpper(sourceStr)
+			return nil
+		}),
+	)
+	reflectedEcho := function.MustReflectWrapper(Echo, "s", "more")
+	call("scanned strings", func() ([]any, error) { return echoWrapper.CallWithStrings(ctx, "a", "b") })
+	call("reflected scanned strings", func() ([]any, error) { return reflectedEcho.CallWithStrings(ctx, "a", "b") })
+	call("scanned named strings", func() ([]any, error) {
+		return echoWrapper.CallWithNamedStrings(ctx, map[string]string{"s": "a", "more": "[b]"})
+	})
+	call("reflected scanned named strings", func() ([]any, error) {
+		return reflectedEcho.CallWithNamedStrings(ctx, map[string]string{"s": "a", "more": "[b]"})
+	})
 }
 `
 	output := runPackage(t, files)
@@ -1673,6 +1716,10 @@ JSON malformed without arguments: ErrParseArgsJSON
 JSON malformed with only context argument: ErrParseArgsJSON
 Variadic: true false false
 main.Pointers(ctx context.Context, p *int, m map[string]int, e error, x any, y any) string true true
+scanned strings: [A[B]] error=false
+reflected scanned strings: [A[B]] error=false
+scanned named strings: [A[B]] error=false
+reflected scanned named strings: [A[B]] error=false
 `, output)
 }
 

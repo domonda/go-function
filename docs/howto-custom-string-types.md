@@ -176,7 +176,6 @@ Scanners registered in `init` of the package under test are active in its tests.
 - The result of `WithTypeScanner` wasn't assigned to `function.StringScanners`. The method returns a copy and leaves the original unchanged.
 - The type scanner is registered for a different type than the argument. Type scanners match the exact type: one for `url.URL` also covers `*url.URL` and `[]url.URL` arguments, but one for `*url.URL` doesn't cover `url.URL`.
 - A kind scanner is never called for a type that a type or interface scanner already handled, unless that scanner returned `ErrTypeNotSupported`.
-- The argument has the type `string` and the wrapper is generated. Generated wrappers assign strings to `string` arguments without calling `ScanString`. Use a named type like `type Name string` for arguments that need a scanner.
 
 **A kind scanner changed how a type with `UnmarshalText` parses.**
 Kind scanners run before the default scanner, and the default scanner is what calls `UnmarshalText`. A kind scanner for `reflect.Int` therefore also gets `Level` from step 1. Skip such types in the kind scanner:

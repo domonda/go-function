@@ -236,25 +236,31 @@ func (disp *StringArgsDispatcher) PrintCommands() {
 	})
 
 	for _, cmd := range commands {
-		UsageColor.Printf("  %s %s %s\n", disp.baseCommand, cmd.command, functionArgsString(cmd.commandFunc)) //#nosec G104
-		if cmd.description != "" {
-			DescriptionColor.Printf("      %s\n", cmd.description) //#nosec G104
-		}
-		hasAnyArgDesc := false
-		for _, desc := range cmd.commandFunc.ArgDescriptions() {
-			if desc != "" {
-				hasAnyArgDesc = true
-				break
-			}
-		}
-		if hasAnyArgDesc {
-			argNames := cmd.commandFunc.ArgNames()
-			for i, desc := range cmd.commandFunc.ArgDescriptions() {
-				DescriptionColor.Printf("          <%s:%s> %s\n", argNames[i], argTypeString(cmd.commandFunc, i), desc) //#nosec G104
-			}
-		}
-		DescriptionColor.Println() //#nosec G104
+		printCommandUsage(disp.baseCommand, cmd.command, cmd)
 	}
+}
+
+// printCommandUsage prints the usage of cmd, called as command of baseCommand,
+// with its description and the descriptions of its arguments, if any.
+// The context argument is left out, because the dispatcher passes it.
+func printCommandUsage(baseCommand, command string, cmd *stringArgsCommand) {
+	// Without the empty name of the default command or an empty argument list,
+	// so that the line has no trailing space
+	usage := slices.DeleteFunc([]string{baseCommand, command, functionArgsString(cmd.commandFunc)}, func(s string) bool { return s == "" })
+	UsageColor.Printf("  %s\n", strings.Join(usage, " ")) //#nosec G104
+	if cmd.description != "" {
+		DescriptionColor.Printf("      %s\n", cmd.description) //#nosec G104
+	}
+	argDescriptions := cmd.commandFunc.ArgDescriptions()
+	// Other Description implementations can return no descriptions
+	firstArg := min(firstCommandArg(cmd.commandFunc), len(argDescriptions))
+	if slices.ContainsFunc(argDescriptions[firstArg:], func(desc string) bool { return desc != "" }) {
+		argNames := cmd.commandFunc.ArgNames()
+		for i := firstArg; i < len(argDescriptions); i++ {
+			DescriptionColor.Printf("          <%s:%s> %s\n", argNames[i], argTypeString(cmd.commandFunc, i), argDescriptions[i]) //#nosec G104
+		}
+	}
+	DescriptionColor.Println() //#nosec G104
 }
 
 // PrintCommandsUsageIntro prints a "Commands:" header followed by all commands.
@@ -290,18 +296,29 @@ func (disp *StringArgsDispatcher) PrintCompletion(args []string) {
 	}
 }
 
-// functionArgsString formats function arguments as a string for help text.
+// functionArgsString formats the command line arguments of f as a string for help text,
+// without a context argument, which the dispatcher passes.
 // Returns a space-separated list like: "<name:string> <age:int> <tags:...string>"
 func functionArgsString(f function.Wrapper) string {
 	b := strings.Builder{}
 	argNames := f.ArgNames()
-	for i := range argNames {
-		if i > 0 {
+	for i := firstCommandArg(f); i < len(argNames); i++ {
+		if b.Len() > 0 {
 			b.WriteByte(' ')
 		}
 		fmt.Fprintf(&b, "<%s:%s>", argNames[i], argTypeString(f, i))
 	}
 	return b.String()
+}
+
+// firstCommandArg returns the index of the first argument of f
+// that is passed as command line argument:
+// 1 if the first argument is a context.Context, which the dispatcher passes, else 0.
+func firstCommandArg(f function.Description) int {
+	if f.ContextArg() {
+		return 1
+	}
+	return 0
 }
 
 // argTypeString returns the type of the argument with index i for help text,

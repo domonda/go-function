@@ -5,7 +5,7 @@ package htmlform
 //
 // The template expects a struct with:
 //   - Title: Page title and heading
-//   - Fields: Slice of formField (Name, Label, Type, Value, Required, Multiple, Options)
+//   - Fields: Slice of formField (Name, Label, Type, Value, Required, Multiple, Step, Options)
 //   - SubmitButtonText: Text for the submit button
 //
 // You can customize this template by assigning your own html/template text
@@ -95,7 +95,7 @@ var FormTemplate = /*html*/ `
 				<textarea id="{{.Name}}" name="{{.Name}}" cols="40" rows="5" {{if .Required}}required{{end}}>{{.Value}}</textarea>
 			{{else}}
 				<label for="{{.Name}}">{{.Label}}:</label>
-				<input type="{{.Type}}" id="{{.Name}}" name="{{.Name}}" value="{{.Value}}" size="40" {{if .Required}}required{{end}} {{if .Multiple}}multiple{{end}}/>
+				<input type="{{.Type}}" id="{{.Name}}" name="{{.Name}}" value="{{.Value}}" size="40"{{if .Step}} step="{{.Step}}"{{end}} {{if .Required}}required{{end}} {{if .Multiple}}multiple{{end}}/>
 			{{end}}
 		</div>
 	{{end}}
