@@ -27,6 +27,24 @@ go get github.com/domonda/go-function
 
 The changes of every release are listed in [CHANGELOG.md](CHANGELOG.md).
 
+## Documentation
+
+- **Tutorial:** [One function, four interfaces](docs/tutorial-one-function-four-ways.md): build a program whose one function runs as Go call, CLI command, JSON API, and HTML form
+- **How-to guides:**
+  [switch to generated wrappers](docs/howto-generated-wrappers.md),
+  [make your own types scannable](docs/howto-custom-string-types.md),
+  [customize HTTP error responses](docs/howto-http-errors.md)
+- **Reference:**
+  [calling conventions](docs/reference-calling-conventions.md),
+  [string conversion](docs/reference-string-conversion.md),
+  [HTTP status codes](docs/reference-http-status-codes.md)
+- **Explanation:**
+  [architecture](docs/explanation-architecture.md),
+  [security model](docs/explanation-security-model.md)
+- **API:** [pkg.go.dev](https://pkg.go.dev/github.com/domonda/go-function), and the [gen-func-wrappers README](cmd/gen-func-wrappers/README.md)
+
+All documents are listed in [docs/README.md](docs/README.md).
+
 ## Quick Start
 
 ### Basic Function Wrapping
