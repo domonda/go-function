@@ -25,7 +25,8 @@ by `gen-func-wrappers` are now covered by semantic versioning.
   of `httpfun.Handler`, `HandlerNoWrapper` and `HandleError`.
   The handlers of `httperr` like `httperr.DefaultHandler` implement `ErrorHandler`.
 - `MaxSliceLiteralElements` (default 1 << 20, a value <= 0 disables it) limits the elements
-  of every slice and array literal scanned from a string.
+  of every slice and array literal scanned from a string, except for `[]any` destinations
+  and arrays in JSON objects, which `encoding/json` decodes.
 - `httpfun.MaxRequestBodySize` (default 32 MiB, a value <= 0 disables it) limits the request bodies
   read by `RequestBodyAsArg` and `RequestBodyJSONFieldsAsArgs`.
 
@@ -289,9 +290,14 @@ by `gen-func-wrappers` are now covered by semantic versioning.
 - Slice and array literals with more than `MaxSliceLiteralElements` elements are rejected
   with a parse error, answered with 400 Bad Request by `httpfun.Handler`,
   because scanning a 32 MiB literal of a request body allocated about 1.5 GiB.
-- Errors of `ScanString` quote at most the first 100 bytes of the scanned string
-  followed by its length, because quoting all of an invalid 32 MiB request body
-  allocated about 1 GiB per request.
+  `[]any` destinations, like the slice of a `...any` argument, are decoded by `encoding/json`
+  without this limit.
+- The errors of `ScanString` for numbers, booleans, times, durations, and slice and array literals
+  quote at most the first 100 bytes of the scanned string followed by its length,
+  and strings longer than 256 bytes are rejected as `time.Time` or `time.Duration`
+  before parsing, because quoting all of an invalid 32 MiB request body allocated
+  about 1 GiB per request, and about 4 GiB for a `time.Duration` argument.
+  The errors of `encoding/json` for struct, map and `[]any` destinations are unchanged.
 - The documentation warns against exposing arguments of types that name files,
   like `fs.File` of go-fs, to untrusted input of `CallWithStrings`, `CallWithNamedStrings`
   or `CallWithJSON`, and the `-replaceForJSON` examples of `gen-func-wrappers`

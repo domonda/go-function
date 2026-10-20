@@ -36,8 +36,9 @@ var (
 	// because scanning allocates memory for every element and untrusted input
 	// like an HTTP request body must not make it allocate without limit.
 	// The limit applies to every slice literal, also to nested ones,
-	// but not to the arrays in JSON objects of struct or map destinations,
-	// which encoding/json decodes.
+	// but not to arrays that encoding/json decodes:
+	// the arrays in JSON objects of struct or map destinations,
+	// and []any destinations like the slice of a ...any argument.
 	// A value <= 0 disables the limit.
 	MaxSliceLiteralElements = 1 << 20
 )

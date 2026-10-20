@@ -37,9 +37,9 @@ Elements of slices and arrays and targets of pointers are scanned with the packa
 | 1 | type with a `SetNull()` method | | | calls `SetNull()` |
 | 2 | `string` | anything, unchanged | kept | kept as text |
 | 3 | `error` | anything | trimmed | `nil` |
-| 4 | `time.Time` | layouts in `TimeFormats`, tried in order | trimmed | zero time |
+| 4 | `time.Time` | layouts in `TimeFormats`, tried in order, at most 256 bytes | trimmed | zero time |
 | 5 | type with a `Set(time.Time)` method | like `time.Time`, then calls `Set` | trimmed | `Set(time.Time{})` |
-| 6 | `time.Duration` | `time.ParseDuration`: `1h30m`, `250ms`; `90` without unit is an error | trimmed | `0` |
+| 6 | `time.Duration` | `time.ParseDuration`: `1h30m`, `250ms`; `90` without unit is an error, at most 256 bytes | trimmed | `0` |
 | 7 | `encoding.TextUnmarshaler` | anything, passed unchanged to `UnmarshalText` | kept | passed to `UnmarshalText` |
 | 8 | `json.Unmarshaler` | valid JSON as is, else the string encoded as a JSON string; valid non-string JSON that is rejected is retried as a JSON string | trimmed if valid JSON, kept if encoded as a JSON string | `null` as JSON `null`, `""` and `nil` as JSON strings |
 | 9 | `map[string]any` | a JSON object | trimmed | `nil` |
@@ -115,7 +115,7 @@ For `[]*string`, `[null, "null"]` scans as a nil pointer followed by a pointer t
 
 `httpfun.RequestQueryArgs`, `RequestQueryArg`, `RequestQueryAsArg`, and `RequestMultipartFormArgs` pass a parameter with multiple values, like `?x=1&x=2`, as the literal `["1","2"]`. Because the elements are quoted, they are explicit strings: an empty value in `?x=1&x=` is an error for a `[]int` argument instead of a `0`, and `?x=null&x=a` gives a `[]*string` argument a pointer to `"null"` instead of a nil pointer.
 
-A literal may hold at most `MaxSliceLiteralElements` elements. Longer literals fail with `slice value has more than 1048576 elements (MaxSliceLiteralElements)` before memory for the elements is allocated.
+A literal may hold at most `MaxSliceLiteralElements` elements. Longer literals fail with `slice value has more than 1048576 elements (MaxSliceLiteralElements)` before memory for the elements is allocated. The limit doesn't apply to `[]any` destinations, like the slice of a `...any` argument, and to arrays in JSON objects of struct or map destinations, which `encoding/json` decodes.
 
 ## Configuration
 

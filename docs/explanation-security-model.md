@@ -65,7 +65,7 @@ Untrusted input can be large on purpose. go-function caps the input it reads:
 | body read by `RequestMultipartFormArgs` | `httpfun.MaxMultipartFormSize` | 32 MiB | 413 |
 | form submission of `htmlform.Handler`, including uploads | `Handler.SetMaxRequestBodySize` | 100 MiB | 413 |
 | upload data kept in memory, the rest goes to temporary files | `httpfun.MaxMultipartFormMemory` | 1 MiB | |
-| elements of one slice or array literal in `ScanString` | `function.MaxSliceLiteralElements` | 1,048,576 | error before allocating |
+| elements of one slice or array literal in `ScanString`, except `[]any` destinations, which `encoding/json` decodes | `function.MaxSliceLiteralElements` | 1,048,576 | error before allocating |
 
 Temporary upload files are removed after the response, also for requests that a middleware cloned, which `net/http` alone doesn't clean up.
 
@@ -91,7 +91,7 @@ Error text often contains details an attacker can use: file paths, SQL, internal
 
 - 400 responses for invalid arguments name the argument but not its value or the parse error: `invalid value for argument "degrees"`.
 - 500 responses say `Internal Server Error` and nothing else, unless `httperr.DebugShowInternalErrorsInResponse` is true. Leave it false in production.
-- `ErrParseArgString`, `ErrParseArgJSON`, and `ErrParseArgsJSON` don't add the value or the JSON input to their `Error()` text. The scanner error they wrap usually quotes the value once, like `can't parse "hot" as float`, at most its first 100 bytes for large values like request bodies, so their text belongs in logs, not in responses.
+- `ErrParseArgString`, `ErrParseArgJSON`, and `ErrParseArgsJSON` don't add the value or the JSON input to their `Error()` text. The scanner error they wrap usually quotes the value once, like `can't parse "hot" as float`, for numbers, times, and slice literals at most its first 100 bytes of large values like request bodies, so their text belongs in logs, not in responses.
 - `htmlform` answers a broken multipart body with `invalid multipart form`, because the parser's error can contain the server's network address.
 
 Exceptions you control:

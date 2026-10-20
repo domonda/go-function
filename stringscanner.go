@@ -206,6 +206,9 @@ func scanString(sourceStr string, destVal reflect.Value, explicitStr bool) (err 
 			*dest = time.Time{}
 			return nil
 		}
+		if err := checkTimeLen(trimmedSrc, "time.Time"); err != nil {
+			return err
+		}
 		for _, format := range TimeFormats {
 			t, err := time.ParseInLocation(format, trimmedSrc, TimeLocation)
 			if err == nil {
@@ -220,6 +223,9 @@ func scanString(sourceStr string, destVal reflect.Value, explicitStr bool) (err 
 			dest.Set(time.Time{})
 			return nil
 		}
+		if err := checkTimeLen(trimmedSrc, "time.Time"); err != nil {
+			return err
+		}
 		for _, format := range TimeFormats {
 			t, err := time.ParseInLocation(format, trimmedSrc, TimeLocation)
 			if err == nil {
@@ -233,6 +239,9 @@ func scanString(sourceStr string, destVal reflect.Value, explicitStr bool) (err 
 		if nilSrc {
 			*dest = 0
 			return nil
+		}
+		if err := checkTimeLen(trimmedSrc, "time.Duration"); err != nil {
+			return err
 		}
 		duration, err := time.ParseDuration(trimmedSrc)
 		if err != nil {
@@ -340,7 +349,7 @@ func scanString(sourceStr string, destVal reflect.Value, explicitStr bool) (err 
 		destVal.SetInt(i)
 		return nil
 
-	case reflect.Uint, reflect.Uint8, reflect.Uint16, reflect.Uint32, reflect.Uint64:
+	case reflect.Uint, reflect.Uint8, reflect.Uint16, reflect.Uint32, reflect.Uint64, reflect.Uintptr:
 		if nilSrc {
 			destVal.SetUint(0)
 			return nil
@@ -451,6 +460,22 @@ func quoteForError(s string) string {
 		end--
 	}
 	return fmt.Sprintf("%s... (%d bytes)", strconv.Quote(s[:end]), len(s))
+}
+
+// maxTimeLen is the maximum length of a string parsed as time.Time or time.Duration.
+// Valid values of the TimeFormats layouts and durations are much shorter,
+// and the errors of the time package copy and quote the whole string,
+// for every layout of TimeFormats, which would multiply a large untrusted input
+// like an HTTP request body.
+const maxTimeLen = 256
+
+// checkTimeLen returns an error if trimmedSrc is too long
+// to be parsed as the time type typeName, see maxTimeLen.
+func checkTimeLen(trimmedSrc, typeName string) error {
+	if len(trimmedSrc) > maxTimeLen {
+		return fmt.Errorf("can't parse %s as %s: longer than %d bytes", quoteForError(trimmedSrc), typeName, maxTimeLen)
+	}
+	return nil
 }
 
 // numErrorReason returns the reason like strconv.ErrSyntax

@@ -69,7 +69,8 @@ func (f ErrorHandlerFunc) HandleError(err error, response http.ResponseWriter, r
 // So a parse error of another wrapper that the wrapped function called
 // and returned is an error of the server, also if it was returned unwrapped.
 // A wrapper behind a function adapter like function.CallWithNamedStringsWrapperFunc,
-// in a named struct field, embedded more than maxWrapperEmbeddingDepth levels deep,
+// in a named struct field, behind more than maxWrapperEmbeddingDepth pointers,
+// interfaces, and embedded fields in total,
 // or a value of a type that can't be compared with ==, like a struct with a slice field,
 // can't be recognized, so its invalid argument values are answered as errors
 // of the server: embed the wrapper or pass a pointer to keep 400 Bad Request.

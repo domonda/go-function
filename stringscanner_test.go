@@ -1454,6 +1454,12 @@ func TestScanString_errorsQuoteBoundedValue(t *testing.T) {
 		{name: "int", src: long, dest: new(int)},
 		{name: "float", src: long, dest: new(float64)},
 		{name: "time", src: long, dest: new(time.Time)},
+		// The errors of the time package quote the whole string
+		{name: "Set(time.Time)", src: long, dest: new(settableTime)},
+		{name: "duration", src: long, dest: new(time.Duration)},
+		{name: "duration with number", src: "1" + long, dest: new(time.Duration)},
+		// Scanned like the other unsigned integers instead of with fmt.Sscan
+		{name: "uintptr", src: long, dest: new(uintptr)},
 		{name: "malformed slice literal", src: "[" + long, dest: new([]int)},
 		{name: "empty element", src: "[," + long + "]", dest: new([]int)},
 		{name: "content after closing bracket", src: "[1]" + long + "]", dest: new([]int)},
@@ -1472,6 +1478,13 @@ func TestScanString_errorsQuoteBoundedValue(t *testing.T) {
 	// Short values are quoted completely
 	err := ScanString("[1,,2]", new([]int))
 	assert.EqualError(t, err, `slice value "[1,,2]" has an empty element`)
+}
+
+func TestScanString_uintptr(t *testing.T) {
+	var u uintptr
+	require.NoError(t, ScanString(" 42 ", &u))
+	assert.Equal(t, uintptr(42), u)
+	assert.EqualError(t, ScanString("-1", &u), `can't parse "-1" as uint because of: invalid syntax`)
 }
 
 func Test_quoteForError(t *testing.T) {
