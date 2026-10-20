@@ -392,7 +392,10 @@ func (text RespondStaticPlaintext) ServeHTTP(response http.ResponseWriter, _ *ht
 
 // RespondRedirect is a ResultsWriter and http.Handler
 // that redirects to its URL string, ignoring the results.
-// The redirect will be done with HTTP status code 302: Found.
+// As ResultsWriter it redirects requests with other methods than GET and HEAD
+// with HTTP status code 303: See Other, so that clients get the URL with GET
+// like after a form POST (Post/Redirect/Get),
+// and as http.Handler, or for GET and HEAD, with 302: Found.
 // Any resultErr is not handled and will be returned by WriteResults.
 type RespondRedirect string
 
@@ -401,7 +404,7 @@ func (re RespondRedirect) WriteResults(results []any, resultErr error, response 
 	if resultErr != nil || request.Context().Err() != nil {
 		return resultErr
 	}
-	re.ServeHTTP(response, request)
+	http.Redirect(response, request, string(re), redirectStatusAfterCall(request))
 	return nil
 }
 
@@ -411,7 +414,10 @@ func (re RespondRedirect) ServeHTTP(response http.ResponseWriter, request *http.
 
 // RespondRedirectFunc is a ResultsWriter and http.Handler
 // that redirects to the URL returned by the function, ignoring the results.
-// The redirect will be done with HTTP status code 302: Found.
+// As ResultsWriter it redirects requests with other methods than GET and HEAD
+// with HTTP status code 303: See Other, so that clients get the URL with GET
+// like after a form POST (Post/Redirect/Get),
+// and as http.Handler, or for GET and HEAD, with 302: Found.
 // Any resultErr and an error of the function are returned by WriteResults,
 // as http.Handler the error of the function is handled by HandleError.
 type RespondRedirectFunc func(request *http.Request) (url string, err error)
@@ -425,7 +431,7 @@ func (f RespondRedirectFunc) WriteResults(results []any, resultErr error, respon
 	if err != nil {
 		return err
 	}
-	http.Redirect(response, request, url, http.StatusFound)
+	http.Redirect(response, request, url, redirectStatusAfterCall(request))
 	return nil
 }
 
@@ -436,4 +442,16 @@ func (f RespondRedirectFunc) ServeHTTP(response http.ResponseWriter, request *ht
 		return
 	}
 	http.Redirect(response, request, url, http.StatusFound)
+}
+
+// redirectStatusAfterCall returns the HTTP status code of RespondRedirect
+// and RespondRedirectFunc to redirect after the function was called:
+// 303 See Other for requests with other methods than GET and HEAD,
+// because browsers repeat PUT, PATCH, and DELETE requests
+// at the URL of a 302 Found redirect, which is used for GET and HEAD.
+func redirectStatusAfterCall(request *http.Request) int {
+	if request.Method == http.MethodGet || request.Method == http.MethodHead {
+		return http.StatusFound
+	}
+	return http.StatusSeeOther
 }

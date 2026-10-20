@@ -78,6 +78,17 @@ by `gen-func-wrappers` are now covered by semantic versioning.
 - **Breaking:** `ReflectWrapper` returns an error for a nil value of a function type,
   which panicked when called, and for empty or duplicate argument names except `_`,
   which can't be passed by name or got the same value by name.
+- **Breaking:** `httpfun.RespondRedirect` and `RespondRedirectFunc` redirect requests with other methods
+  than GET and HEAD after the function call with 303 See Other instead of 302 Found,
+  because browsers repeat PUT, PATCH and DELETE requests at the URL of a 302 redirect.
+  Form POSTs and Go clients already followed a 302 with GET, so they behave the same.
+  As `http.Handler` both keep redirecting with 302.
+- **Breaking:** `htmlform.NewHandler` returns an error for arguments with a file type in a struct field
+  or map, which uploads can't fill and a text value like `{"F":"/etc/hosts"}` set to a path on the server,
+  and for file arguments that an uploaded `fs.File` can't be assigned to, like `fs.MemFile`
+  or `*[]fs.File`, whose uploads failed with 500 Internal Server Error.
+- **Breaking:** `htmlform.Handler.SetArgInputType` panics for `"file"` on an argument
+  that doesn't take uploaded files, because the upload was ignored.
 - **Breaking:** cli command names with a non-graphic character like a terminal escape sequence
   are rejected, instead of only names without any graphic character.
 - **Breaking:** the loggers of a `cli.SuperStringArgsDispatcher` get the super command and the command
@@ -203,6 +214,24 @@ by `gen-func-wrappers` are now covered by semantic versioning.
   when a results handler returns a non-comparable error such as a slice of errors.
 - The printing and logging results handlers like `PrintTo` and `LogTo` no longer replace
   the results with their strings for the results handlers after them.
+- `htmlform.Handler` fixes:
+  - argument types that are recursive, like `type T []T`, no longer make every request loop forever;
+  - `time.Duration` and other number types implementing `encoding.TextUnmarshaler`, like `slog.Level`,
+    get a text field instead of a number field that can't submit values like `5s` or `INFO`;
+  - default values are formatted so that a submitted form passes them again: pointers are dereferenced,
+    nil is empty, `[]byte` is text, slices, maps and structs are JSON, types implementing
+    `encoding.TextMarshaler` use it, and `time.Time` fits `date` and `datetime-local` inputs;
+  - a nil `ResultsWriter` writes nothing like `httpfun.RespondNothing` instead of panicking after the call;
+  - HEAD requests are answered like GET, and 405 responses have an `Allow` header;
+  - the input type `"radio"` renders one radio button per option of `SetArgOptions`;
+  - the form is buffered, so a template error is answered without a partly written form,
+    and it has the content type `text/html; charset=utf-8` also for custom templates;
+  - arguments named `_` get no form field and their zero value;
+  - multiple values of a field are the elements of a slice or array argument;
+  - a file array of length 1 doesn't allow selecting multiple files;
+  - a variadic argument is not required;
+  - `SetArgValidator` with a nil validator removes the validator instead of failing every submission.
+- The default `TimeFormats` parse `datetime-local` values with seconds like `2026-10-20T14:30:05`.
 - `httpfun.Handler`, `HandlerNoWrapper` and `htmlform.Handler` panic again with `http.ErrAbortHandler`,
   so that net/http aborts the response, instead of answering it with 500 Internal Server Error.
 - `ScanString` and `TypeStringScanners.ScanString` return an error for non-pointer

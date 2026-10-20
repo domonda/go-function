@@ -30,7 +30,8 @@ The body of a 500 response is `Internal Server Error`. It includes the error tex
 |---|---|---|
 | 200 OK | written by the `ResultsWriter` | the function returned without error |
 | 200 OK | empty | the `ResultsWriter` is nil, writes nothing (`RespondNothing`), or the function has no results and the writer is `RespondJSON` |
-| 302 Found | redirect | `RespondRedirect` or `RespondRedirectFunc` after a call without error |
+| 302 Found | redirect | `RespondRedirect` or `RespondRedirectFunc` after a call without error, for a GET or HEAD request |
+| 303 See Other | redirect | `RespondRedirect` or `RespondRedirectFunc` after a call without error, for other methods like POST, PUT, or DELETE, so that the client gets the redirect URL with GET |
 | 400 Bad Request | `invalid value for argument "a"` | `CallWithNamedStrings` couldn't parse the value of argument `a` of this function |
 | 400 Bad Request | `invalid JSON for argument "a"` | an `ErrParseArgJSON` of this function, from a custom wrapper |
 | 400 Bad Request | `invalid JSON object for arguments` | an `ErrParseArgsJSON` of this function, from a custom wrapper |
@@ -61,7 +62,7 @@ Notes:
 
 | Status | Body | Cause |
 |---|---|---|
-| 200 OK | the HTML form | GET |
+| 200 OK | the HTML form | GET or HEAD |
 | 200 OK | written by the `ResultsWriter` | POST, the function returned without error |
 | 400 Bad Request | `invalid multipart form` | the POST body is not a valid `multipart/form-data` form, including URL-encoded forms |
 | 400 Bad Request | `invalid value for argument "a"` | the value of field `a` couldn't be parsed |
@@ -70,11 +71,11 @@ Notes:
 | 400 Bad Request | `files uploaded for argument "a" must have different names` | two files with the same name were uploaded for one file argument |
 | 400 Bad Request | `argument "a" takes at most N files` | more files than an array argument `[N]fs.File` holds |
 | 403 Forbidden | `Forbidden` | a browser sent the POST from another origin, see `SetCrossOriginProtection` |
-| 405 Method Not Allowed | `Method Not Allowed` | any method other than GET and POST |
+| 200 OK | empty | POST, the function returned without error and the `ResultsWriter` is nil |
+| 405 Method Not Allowed | `Method Not Allowed` | any method other than GET, HEAD, and POST, with the header `Allow: GET, HEAD, POST` |
 | 413 Request Entity Too Large | `Request Entity Too Large` | the body exceeded the limit set by `SetMaxRequestBodySize`, default 100 MiB |
 | any, 404, 500 | as for `httpfun.Handler` | the function returned an error, mapped like the `httpfun.Handler` rows above |
 | 500 Internal Server Error | `Internal Server Error` | the function panicked, always recovered |
-| 500 Internal Server Error | `Internal Server Error` | an uploaded file can't be assigned to the argument type, like `fs.MemFile` |
 | 500 Internal Server Error | `Internal Server Error` | a temporary file for an upload couldn't be written, or the form template failed |
 
 Notes:
@@ -82,6 +83,7 @@ Notes:
 - The 400 errors for parsing, validation, and files, and the errors of the function, go to the `ResultsWriter` first, as its `resultErr` argument. A custom writer can render them, for example by showing the form again with the message. The built-in writers return them, and `httpfun.HandleError` writes the response.
 - The 400, 403, 405, and 413 responses for the form body itself (`invalid multipart form`, cross-origin, method, size) are written directly and skip the `ResultsWriter` and `HandleError`.
 - The function is not called for the 400, 403, 405, and 413 responses in the table. It can still cause a 4xx response itself by returning an error like `httperr.NotFound` or one wrapping `os.ErrNotExist`.
+- File arguments that uploads can't fill, like `fs.MemFile` or a file type in a struct field, are rejected by `NewHandler` before any request.
 
 ## Related
 

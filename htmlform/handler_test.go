@@ -5,9 +5,12 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"html"
+	"log/slog"
 	"mime/multipart"
 	"net/http"
 	"net/http/httptest"
+	"net/netip"
 	"os"
 	"path/filepath"
 	"reflect"
@@ -15,6 +18,7 @@ import (
 	"strings"
 	"sync"
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -344,9 +348,17 @@ func TestHandler_methodNotAllowed(t *testing.T) {
 		response := httptest.NewRecorder()
 		handler.ServeHTTP(response, httptest.NewRequest(method, "/", nil))
 
-		// Only GET shows and POST submits the form
+		// Only GET shows and POST submits the form,
+		// a 405 response lists the allowed methods like RFC 9110 requires
 		assert.Equal(t, http.StatusMethodNotAllowed, response.Code, method)
+		assert.Equal(t, "GET, HEAD, POST", response.Header().Get("Allow"), method)
 	}
+
+	// HEAD is answered like GET, which http.ServeMux routes to a "GET /path" handler
+	response := httptest.NewRecorder()
+	handler.ServeHTTP(response, httptest.NewRequest(http.MethodHead, "/", nil))
+	assert.Equal(t, http.StatusOK, response.Code)
+	assert.Equal(t, "text/html; charset=utf-8", response.Header().Get("Content-Type"))
 }
 
 func TestHandler_concurrentGET(t *testing.T) {
@@ -544,19 +556,70 @@ func TestHandler_POST_fileArg(t *testing.T) {
 // TestHandler_POST_fileArgNotAssignable checks that an upload for a file argument type
 // that an fs.File can't be assigned to is answered as error of the server
 // without calling the function, instead of passing a zero or unrelated value.
-func TestHandler_POST_fileArgNotAssignable(t *testing.T) {
-	called := false
-	f := func(ctx context.Context, document fs.MemFile) error {
-		called = true
-		return nil
+func TestNewHandler_fileArgNotUploadable(t *testing.T) {
+	// File arguments that an uploaded fs.File can't be assigned to
+	// would show an upload field whose uploads always fail,
+	// so they are an error of NewHandler instead of every request
+	for name, f := range map[string]any{
+		"fs.MemFile":         func(ctx context.Context, document fs.MemFile) error { return nil },
+		"pointer to slice":   func(ctx context.Context, document *[]fs.File) error { return nil },
+		"slice of pointers":  func(ctx context.Context, document []*fs.File) error { return nil },
+		"pointer to pointer": func(ctx context.Context, document **fs.File) error { return nil },
+		"slice of slices":    func(ctx context.Context, document [][]fs.File) error { return nil },
+	} {
+		_, err := htmlform.NewHandler(function.MustReflectWrapper(f, "ctx", "document"), "Form", httpfun.RespondNothing)
+		assert.ErrorContains(t, err, `can't pass uploaded files as argument "document"`, name)
 	}
-	handler := htmlform.MustNewHandler(function.MustReflectWrapper(f, "ctx", "document"), "Form", httpfun.RespondNothing)
+}
 
-	response := postForm(t, handler, nil, map[string]string{"document": "uploaded content"})
+type (
+	// recursiveSlice and recursivePointer are valid Go types
+	// whose element types never end
+	recursiveSlice   []recursiveSlice
+	recursivePointer *recursivePointer
+)
 
-	assert.False(t, called)
-	// The request is valid, the server can't pass the upload to the function
-	assert.Equal(t, http.StatusInternalServerError, response.Code)
+func TestHandler_recursiveArgTypes(t *testing.T) {
+	// Following the element types of recursive types must not loop forever,
+	// which would block every request
+	f := func(tree recursiveSlice, ptr recursivePointer) {}
+	handler, err := htmlform.NewHandler(function.MustReflectWrapper(f, "tree", "ptr"), "Form", httpfun.RespondNothing)
+	require.NoError(t, err)
+
+	done := make(chan struct{})
+	go func() {
+		defer close(done)
+		assert.Contains(t, get(t, handler), `name="tree"`)
+		postForm(t, handler, map[string]string{"tree": "[]"}, nil)
+	}()
+	select {
+	case <-done:
+	case <-time.After(10 * time.Second):
+		t.Fatal("handler doesn't return for recursive argument types")
+	}
+}
+
+func TestNewHandler_nestedFileTypes(t *testing.T) {
+	// A text value like {"F":"/etc/hosts"} for a struct with a file field
+	// would be the path of a file on the server, and uploads can't fill it
+	type withFile struct{ F fs.File }
+	type embedding struct{ withFile }
+	for name, f := range map[string]any{
+		"struct field":          func(arg withFile) {},
+		"pointer to struct":     func(arg *withFile) {},
+		"slice of structs":      func(arg []withFile) {},
+		"embedded struct":       func(arg embedding) {},
+		"map value":             func(arg map[string]fs.File) {},
+		"map key":               func(arg map[fs.File]int) {},
+		"struct field of slice": func(arg struct{ Files []*fs.File }) {},
+	} {
+		_, err := htmlform.NewHandler(function.MustReflectWrapper(f, "arg"), "Form", httpfun.RespondNothing)
+		assert.ErrorContains(t, err, "contains the file type", name)
+	}
+
+	// Unexported fields can't be set from a text value
+	_, err := htmlform.NewHandler(function.MustReflectWrapper(func(arg struct{ f fs.File }) {}, "arg"), "Form", httpfun.RespondNothing)
+	assert.NoError(t, err)
 }
 
 func TestHandler_SetArgValidator_parsedOnce(t *testing.T) {
@@ -869,8 +932,9 @@ func TestHandler_POST_fileArgEdgeCases(t *testing.T) {
 	t.Run("nested file types reject text values", func(t *testing.T) {
 		// Any nesting of file types must not take a server path from a text value
 		for name, f := range map[string]any{
-			"pointer to slice":     func(files *[]fs.File) { called = true },
+			"pointer":              func(file *fs.File) { called = true },
 			"pointer to interface": func(file *fs.FileReader) { called = true },
+			"array":                func(files [2]fs.File) { called = true },
 		} {
 			called = false
 			handler := htmlform.MustNewHandler(function.MustReflectWrapper(f, "files"), "Form", httpfun.RespondNothing)
@@ -919,4 +983,206 @@ func TestHandler_POST_fileArgEdgeCases(t *testing.T) {
 		assert.Equal(t, http.StatusBadRequest, response.Code)
 		assert.False(t, called)
 	})
+}
+
+func TestHandler_GET_inputTypesOfTypesWithOwnParsing(t *testing.T) {
+	// Number inputs can't submit strings like "5s" or "INFO",
+	// so types that parse their own strings get text fields
+	var (
+		gotTimeout time.Duration
+		gotLevel   slog.Level
+	)
+	f := func(timeout time.Duration, level slog.Level, count int) {
+		gotTimeout, gotLevel = timeout, level
+	}
+	handler := htmlform.MustNewHandler(function.MustReflectWrapper(f, "timeout", "level", "count"), "Form", httpfun.RespondNothing)
+
+	body := get(t, handler)
+	assert.Contains(t, formField(t, body, "timeout"), `type="text"`)
+	assert.Contains(t, formField(t, body, "level"), `type="text"`)
+	assert.Contains(t, formField(t, body, "count"), `type="number"`)
+
+	response := postForm(t, handler, map[string]string{"timeout": "5s", "level": "WARN", "count": "1"}, nil)
+	require.Equal(t, http.StatusOK, response.Code, response.Body.String())
+	assert.Equal(t, 5*time.Second, gotTimeout)
+	assert.Equal(t, slog.LevelWarn, gotLevel)
+}
+
+func TestHandler_SetArgDefaultValue_roundTrip(t *testing.T) {
+	// Default values are formatted so that submitting the form unchanged,
+	// like a browser does, calls the function with the default values
+	type point struct{ X, Y int }
+	nickname := "bob"
+	when := time.Date(2026, 10, 20, 14, 30, 0, 0, function.TimeLocation)
+	whenWithSeconds := time.Date(2026, 10, 20, 14, 30, 5, 0, function.TimeLocation)
+	var got []any
+	f := func(when, whenSec, day time.Time, nickname, none *string, tags []string, nums []int, data []byte, p point, addr netip.Addr) {
+		got = []any{when, whenSec, day, nickname, none, tags, nums, data, p, addr}
+	}
+	handler := htmlform.MustNewHandler(function.MustReflectWrapper(f, "when", "whenSec", "day", "nickname", "none", "tags", "nums", "data", "p", "addr"), "Form", httpfun.RespondNothing)
+	handler.SetArgInputType("when", "datetime-local")
+	handler.SetArgInputType("whenSec", "datetime-local")
+	handler.SetArgInputType("day", "date")
+	defaults := map[string]any{
+		"when":     when,
+		"whenSec":  whenWithSeconds,
+		"day":      when,
+		"nickname": &nickname,
+		"none":     (*string)(nil),
+		"tags":     []string{"a b", "c"},
+		"nums":     []int{1, 2, 3},
+		"data":     []byte("hi"),
+		"p":        point{X: 1, Y: 2},
+		"addr":     netip.MustParseAddr("192.0.2.1"),
+	}
+	for arg, value := range defaults {
+		handler.SetArgDefaultValue(arg, value)
+	}
+
+	body := get(t, handler)
+	assert.Contains(t, formField(t, body, "when"), `value="2026-10-20T14:30"`)
+	assert.Contains(t, formField(t, body, "whenSec"), `value="2026-10-20T14:30:05"`)
+	assert.Contains(t, formField(t, body, "whenSec"), `step="1"`, "the default step of 60s rejects seconds")
+	assert.Contains(t, formField(t, body, "day"), `value="2026-10-20"`)
+	assert.Contains(t, formField(t, body, "none"), `value=""`)
+
+	// Submit the values of the form like a browser
+	values := make(map[string]string)
+	for arg := range defaults {
+		tag := formField(t, body, arg)
+		value := regexp.MustCompile(`value="([^"]*)"`).FindStringSubmatch(tag)[1]
+		values[arg] = html.UnescapeString(value)
+	}
+	response := postForm(t, handler, values, nil)
+	require.Equal(t, http.StatusOK, response.Code, response.Body.String())
+	day := time.Date(2026, 10, 20, 0, 0, 0, 0, function.TimeLocation)
+	assert.Equal(t, []any{when, whenWithSeconds, day, &nickname, (*string)(nil), []string{"a b", "c"}, []int{1, 2, 3}, []byte("hi"), point{X: 1, Y: 2}, netip.MustParseAddr("192.0.2.1")}, got)
+}
+
+func TestNewHandler_nilResultsWriter(t *testing.T) {
+	// Like httpfun.Handler, a nil ResultsWriter writes nothing
+	// for a successful call instead of panicking after the call
+	var called bool
+	handler := htmlform.MustNewHandler(function.MustReflectWrapper(func(fail bool) error {
+		called = true
+		if fail {
+			return errors.New("secret error")
+		}
+		return nil
+	}, "fail"), "Form", nil)
+
+	response := postForm(t, handler, map[string]string{"fail": "false"}, nil)
+	assert.True(t, called)
+	assert.Equal(t, http.StatusOK, response.Code)
+	assert.Empty(t, response.Body.String())
+
+	response = postForm(t, handler, map[string]string{"fail": "true"}, nil)
+	assert.Equal(t, http.StatusInternalServerError, response.Code)
+	assert.NotContains(t, response.Body.String(), "secret")
+}
+
+func TestHandler_SetArgInputType_radio(t *testing.T) {
+	var got string
+	handler := htmlform.MustNewHandler(function.MustReflectWrapper(func(size string) { got = size }, "size"), "Form", httpfun.RespondNothing)
+	handler.SetArgOptions("size", []htmlform.Option{{Label: "Small", Value: "S"}, {Label: "Large", Value: "L"}})
+	handler.SetArgInputType("size", "radio")
+	handler.SetArgDefaultValue("size", "L")
+
+	body := get(t, handler)
+	assert.Regexp(t, `<input type="radio" id="size-0" name="size" value="S"\s*/>`, body)
+	assert.Regexp(t, `<input type="radio" id="size-1" name="size" value="L" checked\s*/>`, body)
+	assert.Contains(t, body, `<label style="display: inline" for="size-1">Large</label>`)
+
+	response := postForm(t, handler, map[string]string{"size": "S"}, nil)
+	require.Equal(t, http.StatusOK, response.Code)
+	assert.Equal(t, "S", got)
+}
+
+func TestHandler_SetArgInputType_fileForNonFileArg(t *testing.T) {
+	// An upload field for an argument that doesn't take files
+	// would silently ignore the uploaded file
+	handler := htmlform.MustNewHandler(function.MustReflectWrapper(func(data []byte, file fs.File) {}, "data", "file"), "Form", httpfun.RespondNothing)
+	assert.Panics(t, func() { handler.SetArgInputType("data", "file") })
+	assert.NotPanics(t, func() { handler.SetArgInputType("file", "file") })
+}
+
+func TestHandler_GET_customTemplateContentType(t *testing.T) {
+	// The form is HTML also if the template doesn't start with a tag
+	// that http.DetectContentType recognizes
+	orig := htmlform.FormTemplate
+	htmlform.FormTemplate = `<form method="post">{{range .Fields}}<input name="{{.Name}}">{{end}}</form>`
+	t.Cleanup(func() { htmlform.FormTemplate = orig })
+	handler := htmlform.MustNewHandler(function.MustReflectWrapper(func(a string) {}, "a"), "Form", httpfun.RespondNothing)
+
+	response := httptest.NewRecorder()
+	handler.ServeHTTP(response, httptest.NewRequest(http.MethodGet, "/", nil))
+
+	assert.Equal(t, "text/html; charset=utf-8", response.Header().Get("Content-Type"))
+	assert.Equal(t, `<form method="post"><input name="a"></form>`, response.Body.String())
+}
+
+func TestHandler_blankArgs(t *testing.T) {
+	// Arguments named _ are not used by the function,
+	// so they get no form field and their zero value
+	var gotA string
+	var gotB int
+	f := func(a string, _ string, b int, _ int) { gotA, gotB = a, b }
+	handler := htmlform.MustNewHandler(function.MustReflectWrapper(f, "a", "_", "b", "_"), "Form", httpfun.RespondNothing)
+
+	assert.NotContains(t, get(t, handler), `name="_"`)
+	response := postForm(t, handler, map[string]string{"a": "x", "b": "2"}, nil)
+	require.Equal(t, http.StatusOK, response.Code, response.Body.String())
+	assert.Equal(t, "x", gotA)
+	assert.Equal(t, 2, gotB)
+	assert.Panics(t, func() { handler.SetArgRequired("_", true) })
+}
+
+func TestHandler_POST_multipleValuesForSlice(t *testing.T) {
+	// Multiple values of a field, like of a select with the multiple attribute
+	// in a custom template, are the elements of a slice argument
+	var gotTags []string
+	var gotNums [2]int
+	f := func(tags []string, nums [2]int) { gotTags, gotNums = tags, nums }
+	handler := htmlform.MustNewHandler(function.MustReflectWrapper(f, "tags", "nums"), "Form", httpfun.RespondNothing)
+
+	var body bytes.Buffer
+	writer := multipart.NewWriter(&body)
+	for _, field := range [][2]string{{"tags", "a, b"}, {"tags", "c"}, {"nums", "1"}, {"nums", "2"}} {
+		require.NoError(t, writer.WriteField(field[0], field[1]))
+	}
+	require.NoError(t, writer.Close())
+	request := httptest.NewRequest(http.MethodPost, "/", &body)
+	request.Header.Set("Content-Type", writer.FormDataContentType())
+
+	response := serve(handler, request)
+
+	require.Equal(t, http.StatusOK, response.Code, response.Body.String())
+	assert.Equal(t, []string{"a, b", "c"}, gotTags)
+	assert.Equal(t, [2]int{1, 2}, gotNums)
+}
+
+func TestHandler_GET_fileArrayMultiple(t *testing.T) {
+	// A file array of length 1 takes one file, so its field doesn't allow selecting more
+	handler := htmlform.MustNewHandler(function.MustReflectWrapper(func(one [1]fs.File, two [2]fs.File) {}, "one", "two"), "Form", httpfun.RespondNothing)
+	body := get(t, handler)
+	assert.NotContains(t, formField(t, body, "one"), "multiple")
+	assert.Contains(t, formField(t, body, "two"), "multiple")
+}
+
+func TestHandler_GET_variadicNotRequired(t *testing.T) {
+	// Like in Go, a variadic argument can have no values
+	handler := htmlform.MustNewHandler(function.MustReflectWrapper(func(count int, names ...int) {}, "count", "names"), "Form", httpfun.RespondNothing)
+	body := get(t, handler)
+	assert.True(t, isRequired(formField(t, body, "count")))
+	assert.False(t, isRequired(formField(t, body, "names")))
+}
+
+func TestHandler_SetArgValidator_nil(t *testing.T) {
+	// A nil validator removes the validator instead of failing every submission
+	handler := htmlform.MustNewHandler(function.MustReflectWrapper(func(a int) {}, "a"), "Form", httpfun.RespondNothing)
+	handler.SetArgValidator("a", func(context.Context, any) error { return errors.New("rejected") })
+	handler.SetArgValidator("a", nil)
+
+	response := postForm(t, handler, map[string]string{"a": "1"}, nil)
+	assert.Equal(t, http.StatusOK, response.Code, response.Body.String())
 }

@@ -1,7 +1,10 @@
 package htmlform
 
 import (
+	"bytes"
 	"context"
+	"encoding"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"html/template"
@@ -9,6 +12,8 @@ import (
 	"os"
 	"reflect"
 	"slices"
+	"strings"
+	"time"
 
 	"github.com/ungerik/go-fs"
 	"github.com/ungerik/go-fs/multipartfs"
@@ -19,9 +24,12 @@ import (
 )
 
 var (
-	typeOfFileReader = reflect.TypeFor[fs.FileReader]()
-	typeOfFile       = reflect.TypeFor[fs.File]()
-	typeOfAny        = reflect.TypeFor[any]()
+	typeOfFileReader      = reflect.TypeFor[fs.FileReader]()
+	typeOfFile            = reflect.TypeFor[fs.File]()
+	typeOfAny             = reflect.TypeFor[any]()
+	typeOfBytes           = reflect.TypeFor[[]byte]()
+	typeOfDuration        = reflect.TypeFor[time.Duration]()
+	typeOfTextUnmarshaler = reflect.TypeFor[encoding.TextUnmarshaler]()
 )
 
 // ArgValidator validates the value of a function argument
@@ -107,7 +115,15 @@ type Handler struct {
 //   - title: The HTML page title and form heading
 //   - resultWriter: Handler for the function's results after form submission
 //
-// Returns an error if the form template fails to parse.
+// A nil resultWriter writes nothing for a successful submission
+// like httpfun.RespondNothing, errors are answered by httpfun.HandleError.
+//
+// Returns an error if the form template fails to parse,
+// or if an argument can't be passed with a form: a file argument
+// of a type that an uploaded fs.File can't be assigned to, like fs.MemFile
+// or a pointer to a slice of files, or an argument with a file type
+// in a struct field or map, which an upload can't fill
+// and a text value would set to the path of a file on the server.
 //
 // Example:
 //
@@ -117,6 +133,25 @@ type Handler struct {
 //	    httpfun.RespondJSON,
 //	)
 func NewHandler(wrappedFunc function.Wrapper, title string, resultWriter httpfun.ResultsWriter) (handler *Handler, err error) {
+	argNames := wrappedFunc.ArgNames()
+	for i, argType := range wrappedFunc.ArgTypes() {
+		if i == 0 && wrappedFunc.ContextArg() || argNames[i] == "_" {
+			continue
+		}
+		switch {
+		case isFileArgType(argType):
+			if !isUploadableFileArgType(argType) {
+				return nil, fmt.Errorf("htmlform: can't pass uploaded files as argument %q of type %s of function %s, use a type that fs.File can be assigned to, or a pointer, slice, or array of it", argNames[i], argType, wrappedFunc)
+			}
+		default:
+			if fileType := nestedFileType(argType); fileType != nil {
+				return nil, fmt.Errorf("htmlform: argument %q of type %s of function %s contains the file type %s, which can't be uploaded, a text value would be the path of a file on the server", argNames[i], argType, wrappedFunc, fileType)
+			}
+		}
+	}
+	if resultWriter == nil {
+		resultWriter = httpfun.RespondNothing
+	}
 	handler = &Handler{
 		wrappedFunc:     wrappedFunc,
 		argValidator:    make(map[string]ArgValidator),
@@ -170,10 +205,16 @@ func MustNewHandler(fun function.Wrapper, title string, successHandler httpfun.R
 //	    return nil
 //	})
 //
+// A nil validator removes the validator of the argument.
+//
 // Panics if arg is not the name of an argument of the wrapped function,
 // so that a typo or renamed argument doesn't silently remove the setting.
 func (handler *Handler) SetArgValidator(arg string, validator ArgValidator) {
 	handler.mustBeArg("SetArgValidator", arg)
+	if validator == nil {
+		delete(handler.argValidator, arg)
+		return
+	}
 	handler.argValidator[arg] = validator
 }
 
@@ -233,8 +274,9 @@ func (handler *Handler) SetArgDefaultValue(arg string, value any) {
 //   - "text", "email", "password", "url", "tel", "search"
 //   - "number", "range"
 //   - "date", "datetime-local", "time", "month", "week"
-//   - "checkbox", "radio"
-//   - "file"
+//   - "checkbox"
+//   - "radio" with the options set by SetArgOptions
+//   - "file", only for file arguments
 //   - "textarea"
 //   - "color"
 //
@@ -246,9 +288,16 @@ func (handler *Handler) SetArgDefaultValue(arg string, value any) {
 //	handler.SetArgInputType("age", "range")
 //
 // Panics if arg is not the name of an argument of the wrapped function,
-// so that a typo or renamed argument doesn't silently remove the setting.
+// so that a typo or renamed argument doesn't silently remove the setting,
+// and for "file" if the argument doesn't take uploaded files,
+// because the upload would be ignored.
 func (handler *Handler) SetArgInputType(arg string, value string) {
 	handler.mustBeArg("SetArgInputType", arg)
+	if value == "file" {
+		if argType := handler.argType(arg); !isFileArgType(argType) {
+			panic(fmt.Sprintf("htmlform.Handler.SetArgInputType: argument %q of type %s of function %s doesn't take uploaded files", arg, argType, handler.wrappedFunc.Name()))
+		}
+	}
 	handler.argInputType[arg] = value
 }
 
@@ -311,11 +360,12 @@ func (handler *Handler) ServeHTTP(response http.ResponseWriter, request *http.Re
 	}()
 
 	switch request.Method {
-	case "GET":
+	case http.MethodGet, http.MethodHead:
 		handler.get(response, request)
-	case "POST":
+	case http.MethodPost:
 		handler.post(response, request)
 	default:
+		response.Header().Set("Allow", "GET, HEAD, POST")
 		http.Error(response, http.StatusText(http.StatusMethodNotAllowed), http.StatusMethodNotAllowed)
 	}
 }
@@ -327,23 +377,27 @@ func (handler *Handler) get(response http.ResponseWriter, request *http.Request)
 	// is shared by concurrent requests and must not be modified
 	form := handler.form
 	form.Fields = nil
-	for i, argName := range handler.wrappedFunc.ArgNames() {
-		if i == 0 && handler.wrappedFunc.ContextArg() {
+	argNames := handler.wrappedFunc.ArgNames()
+	argDescriptions := handler.wrappedFunc.ArgDescriptions()
+	argTypes := handler.wrappedFunc.ArgTypes()
+	for i, argName := range argNames {
+		if i == 0 && handler.wrappedFunc.ContextArg() || argName == "_" {
+			// Arguments named _ are not used by the function
 			continue
 		}
-		argDescription := handler.wrappedFunc.ArgDescriptions()[i]
-		argType := handler.wrappedFunc.ArgTypes()[i]
+		argType := argTypes[i]
 		field := formField{
 			Name:     argName,
-			Label:    argDescription,
+			Label:    argDescriptions[i],
 			Type:     "text",
 			Required: requiredBasedOnType(argType),
 		}
 		if field.Label == "" {
 			field.Label = argName
 		}
-		if defaultValue, ok := handler.argDefaultValue[argName]; ok {
-			field.Value = fmt.Sprint(defaultValue)
+		if handler.wrappedFunc.Variadic() && i == len(argNames)-1 {
+			// Like in Go, a variadic argument can have no values
+			field.Required = false
 		}
 		if required, ok := handler.argRequired[argName]; ok {
 			field.Required = required
@@ -356,13 +410,10 @@ func (handler *Handler) get(response http.ResponseWriter, request *http.Request)
 
 		case isFileArgType(argType):
 			field.Type = "file"
-			field.Multiple = argType.Kind() == reflect.Slice || argType.Kind() == reflect.Array
+			field.Multiple = argType.Kind() == reflect.Slice || argType.Kind() == reflect.Array && argType.Len() > 1
 
-		// case argType == reflect.TypeOf(date.Date("")) || argType == reflect.TypeOf(date.NullableDate("")):
-		// 	field.Type = "date"
-
-		// case argType == reflect.TypeOf(time.Time{}):
-		// 	field.Type = "datetime-local"
+		case parsesOwnStrings(argType):
+			// Number inputs can't submit strings like "5s" of a time.Duration
 
 		default:
 			switch argType.Kind() {
@@ -382,13 +433,84 @@ func (handler *Handler) get(response http.ResponseWriter, request *http.Request)
 			field.Type = inputType
 		}
 
+		if defaultValue, ok := handler.argDefaultValue[argName]; ok {
+			if isSelect {
+				// Formatted like the option values by the template
+				field.Value = fmt.Sprint(defaultValue)
+			} else {
+				field.Value, field.Step = formValue(defaultValue, field.Type, field.Step)
+			}
+		}
+
 		form.Fields = append(form.Fields, field)
 	}
 
-	err := handler.template.Execute(response, &form)
+	// Executed into a buffer, so that a template error
+	// is answered without a partly written form
+	var page bytes.Buffer
+	err := handler.template.Execute(&page, &form)
 	if err != nil {
 		httpfun.HandleError(err, response, request)
+		return
 	}
+	response.Header().Set("Content-Type", "text/html; charset=utf-8")
+	_, _ = response.Write(page.Bytes())
+}
+
+// formValue returns value formatted as value of a form field
+// of inputType, so that submitting the form passes value again,
+// and the step of the field, which is changed from step for
+// a datetime-local field to accept the seconds of value.
+func formValue(value any, inputType, step string) (string, string) {
+	v := reflect.ValueOf(value)
+	for v.Kind() == reflect.Pointer || v.Kind() == reflect.Interface {
+		if v.IsNil() {
+			return "", step
+		}
+		v = v.Elem()
+	}
+	if !v.IsValid() {
+		return "", step
+	}
+	value = v.Interface()
+	if t, ok := value.(time.Time); ok {
+		// The formats of the browser inputs, which the default TimeFormats parse
+		t = t.In(function.TimeLocation)
+		switch inputType {
+		case "date":
+			return t.Format(time.DateOnly), step
+		case "datetime-local":
+			if t.Second() == 0 && t.Nanosecond() == 0 {
+				return t.Format(time.DateOnly + "T15:04"), step
+			}
+			// The default step of 60 seconds would reject the seconds
+			return t.Format(time.DateOnly + "T15:04:05"), "1"
+		}
+	}
+	if marshaler, ok := value.(encoding.TextMarshaler); ok {
+		// The inverse of UnmarshalText, which ScanString uses
+		if text, err := marshaler.MarshalText(); err == nil {
+			return string(text), step
+		}
+	}
+	if v.Type() == typeOfBytes {
+		return string(v.Bytes()), step
+	}
+	switch v.Kind() {
+	case reflect.Slice, reflect.Array, reflect.Map, reflect.Struct:
+		// ScanString scans slice literals and JSON
+		if j, err := json.Marshal(value); err == nil {
+			return string(j), step
+		}
+	}
+	return fmt.Sprint(value), step
+}
+
+// parsesOwnStrings returns true if ScanString parses strings
+// for argType with its encoding.TextUnmarshaler method like slog.Level,
+// or as time.Duration like "5s", instead of as number of its kind.
+func parsesOwnStrings(argType reflect.Type) bool {
+	return argType == typeOfDuration || reflect.PointerTo(argType).Implements(typeOfTextUnmarshaler)
 }
 
 // post handles POST requests by parsing form data and calling the wrapped function.
@@ -482,6 +604,10 @@ func (handler *Handler) parseArgs(formfs *multipartfs.MultipartFileSystem) ([]an
 		argName, argType := argNames[offs+i], argTypes[offs+i]
 		values := formfs.Form.Value[argName]
 		switch {
+		case argName == "_":
+			// Not in the form and not used by the function
+			args[i] = reflect.Zero(argType).Interface()
+
 		case isFileArgType(argType):
 			if slices.ContainsFunc(values, func(value string) bool { return value != "" }) {
 				return nil, newRequestError(nil, http.StatusBadRequest, fmt.Sprintf("argument %q must be an uploaded file", argName))
@@ -500,10 +626,17 @@ func (handler *Handler) parseArgs(formfs *multipartfs.MultipartFileSystem) ([]an
 			args[i] = values[0]
 
 		default:
+			value := values[0]
+			if len(values) > 1 && isSliceArgType(argType) {
+				// Like httpfun.RequestMultipartFormArgs, multiple values
+				// of a field, like of a select with the multiple attribute,
+				// are the elements of a slice or array argument
+				value = sliceLiteral(values)
+			}
 			destPtr := reflect.New(argType)
-			err := function.ScanString(values[0], destPtr.Interface())
+			err := function.ScanString(value, destPtr.Interface())
 			if err != nil {
-				err = function.NewErrParseArgString(err, handler.wrappedFunc, argName, values[0])
+				err = function.NewErrParseArgString(err, handler.wrappedFunc, argName, value)
 				return nil, newRequestError(err, http.StatusBadRequest, fmt.Sprintf("invalid value for argument %q", argName))
 			}
 			args[i] = destPtr.Elem().Interface()
@@ -565,7 +698,10 @@ func (handler *Handler) fileArg(formfs *multipartfs.MultipartFileSystem, argName
 // at any depth like *[]fs.File, so that no text value becomes a file path.
 // fileArg only fills the supported types and returns an error for others.
 func isFileArgType(argType reflect.Type) bool {
-	for {
+	// Recursive types like type T []T would loop forever
+	visited := make(map[reflect.Type]bool)
+	for !visited[argType] {
+		visited[argType] = true
 		if argType.Implements(typeOfFileReader) {
 			return true
 		}
@@ -576,6 +712,84 @@ func isFileArgType(argType reflect.Type) bool {
 			return false
 		}
 	}
+	return false
+}
+
+// isUploadableFileArgType returns true if fileArg can pass uploaded files
+// as argType: a type that fs.File can be assigned to,
+// or a pointer, slice, or array of such a type.
+func isUploadableFileArgType(argType reflect.Type) bool {
+	if typeOfFile.AssignableTo(argType) {
+		return true
+	}
+	switch argType.Kind() {
+	case reflect.Pointer, reflect.Slice, reflect.Array:
+		return typeOfFile.AssignableTo(argType.Elem())
+	}
+	return false
+}
+
+// nestedFileType returns a type implementing fs.FileReader
+// in the exported struct fields, map keys or values,
+// or elements of argType, or nil if there is none.
+func nestedFileType(argType reflect.Type) reflect.Type {
+	visited := make(map[reflect.Type]bool)
+	var find func(t reflect.Type) reflect.Type
+	find = func(t reflect.Type) reflect.Type {
+		if visited[t] {
+			return nil
+		}
+		visited[t] = true
+		if t.Implements(typeOfFileReader) {
+			return t
+		}
+		switch t.Kind() {
+		case reflect.Pointer, reflect.Slice, reflect.Array:
+			return find(t.Elem())
+		case reflect.Map:
+			if fileType := find(t.Key()); fileType != nil {
+				return fileType
+			}
+			return find(t.Elem())
+		case reflect.Struct:
+			for field := range t.Fields() {
+				if !field.IsExported() && !field.Anonymous {
+					// Not set from JSON
+					continue
+				}
+				if fileType := find(field.Type); fileType != nil {
+					return fileType
+				}
+			}
+		}
+		return nil
+	}
+	return find(argType)
+}
+
+// isSliceArgType returns true if argType, or the type it points to,
+// is a slice or array type other than []byte, which is scanned from one string.
+func isSliceArgType(argType reflect.Type) bool {
+	for argType.Kind() == reflect.Pointer {
+		argType = argType.Elem()
+	}
+	return argType != typeOfBytes && (argType.Kind() == reflect.Slice || argType.Kind() == reflect.Array)
+}
+
+// sliceLiteral returns values as slice literal of JSON strings like ["1","2"],
+// like httpfun.RequestQueryArgs passes multiple values,
+// which function.ScanString scans as the elements of slices and arrays.
+func sliceLiteral(values []string) string {
+	var b strings.Builder
+	encoder := json.NewEncoder(&b)
+	encoder.SetEscapeHTML(false)
+	_ = encoder.Encode(values) // Can't fail for strings
+	return strings.TrimSuffix(b.String(), "\n")
+}
+
+// argType returns the type of the argument arg of the wrapped function.
+func (handler *Handler) argType(arg string) reflect.Type {
+	return handler.wrappedFunc.ArgTypes()[slices.Index(handler.wrappedFunc.ArgNames(), arg)]
 }
 
 // mustBeArg panics if arg is not the name of an argument
@@ -585,7 +799,7 @@ func (handler *Handler) mustBeArg(method, arg string) {
 	if handler.wrappedFunc.ContextArg() {
 		argNames = argNames[1:]
 	}
-	if !slices.Contains(argNames, arg) {
+	if arg == "_" || !slices.Contains(argNames, arg) {
 		panic(fmt.Sprintf("htmlform.Handler.%s: function %s has no argument %q", method, handler.wrappedFunc.Name(), arg))
 	}
 }

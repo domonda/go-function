@@ -136,7 +136,8 @@ time.RFC3339,
 time.DateOnly + " 15:04:05.999999999 -0700 MST", // format of time.Time.String()
 time.DateTime,
 time.DateOnly + " 15:04",
-time.DateOnly + "T15:04", // browser datetime-local inputs
+time.DateOnly + "T15:04:05.999999999", // browser datetime-local inputs with seconds
+time.DateOnly + "T15:04",              // browser datetime-local inputs
 time.DateOnly,
 ```
 

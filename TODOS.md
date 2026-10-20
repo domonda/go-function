@@ -30,18 +30,6 @@ Problems found by the reviews of the v1.0.0 release that predate it.
 
 ## htmlform
 
-### File fields of struct arguments take text values as server paths
-
-**What:** Reject text values for struct arguments, maps and slices of structs that contain `fs.File` or `fs.FileReader` fields, or reject such argument types in `NewHandler`.
-
-**Why:** `isFileArgType` only protects arguments that are files or pointers, slices or arrays of files. A text value like `{"F":"/etc/hosts"}` for an argument of type `struct{ F fs.File }` reaches the function as a path of a server file.
-
-**Context:** The limitation is documented in `htmlform/doc.go`, but it fails open. `isFileArgType` in `htmlform/handler.go` would have to walk struct fields and map elements.
-
-**Effort:** M
-**Priority:** P2
-**Depends on:** None
-
 ### Upload file names are URL-decoded by go-fs
 
 **What:** Open uploaded files by their multipart part instead of by their file name.
@@ -68,18 +56,6 @@ Problems found by the reviews of the v1.0.0 release that predate it.
 **Priority:** P3
 **Depends on:** None
 
-### htmlform example exposes debug errors on all interfaces
-
-**What:** Listen on `localhost:8080` in `htmlform/examples/main.go`.
-
-**Why:** The example sets `httperr.DebugShowInternalErrorsInResponse = true` and listens on `:8080`, all network interfaces, while its log message says `http://localhost:8080`. Copied into a real server it shows internal errors to everyone on the network.
-
-**Context:** Change the `Addr` of the `http.Server` in the example.
-
-**Effort:** S
-**Priority:** P3
-**Depends on:** None
-
 ## Completed
 
 ### VoidFuncWrapper and ErrorFuncWrapper ignore their arguments
@@ -87,3 +63,15 @@ Problems found by the reviews of the v1.0.0 release that predate it.
 They return errors for passed arguments or strings and for JSON that is no object, like `ReflectWrapper`.
 
 **Completed:** v1.0.0 (2026-10-19)
+
+### htmlform example exposes debug errors on all interfaces
+
+The example listens on `localhost:8080`.
+
+**Completed:** v1.0.0 (2026-10-20)
+
+### File fields of struct arguments take text values as server paths
+
+`htmlform.NewHandler` returns an error for arguments with file types in struct fields and maps, and for file arguments that uploads can't fill.
+
+**Completed:** v1.0.0 (2026-10-20)

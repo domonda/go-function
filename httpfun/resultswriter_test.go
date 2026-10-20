@@ -309,6 +309,36 @@ func TestRespondRedirect(t *testing.T) {
 	assert.NotContains(t, response.Body.String(), "secret")
 }
 
+func TestRespondRedirect_statusAfterCall(t *testing.T) {
+	// After the function was called, requests that changed something
+	// are redirected with 303 See Other, so that browsers get the URL with GET
+	// instead of repeating a PUT, PATCH, or DELETE request there like after a 302.
+	// GET and HEAD requests, and the http.Handler without a function call, keep 302.
+	redirectFunc := httpfun.RespondRedirectFunc(func(*http.Request) (string, error) { return "/done", nil })
+	for _, writer := range []httpfun.ResultsWriter{httpfun.RespondRedirect("/done"), redirectFunc} {
+		for method, wantStatus := range map[string]int{
+			http.MethodGet:    http.StatusFound,
+			http.MethodHead:   http.StatusFound,
+			http.MethodPost:   http.StatusSeeOther,
+			http.MethodPut:    http.StatusSeeOther,
+			http.MethodPatch:  http.StatusSeeOther,
+			http.MethodDelete: http.StatusSeeOther,
+		} {
+			response := httptest.NewRecorder()
+			err := writer.WriteResults(nil, nil, response, httptest.NewRequest(method, "/", nil))
+			require.NoError(t, err)
+			assert.Equal(t, wantStatus, response.Code, "%T %s", writer, method)
+			assert.Equal(t, "/done", response.Header().Get("Location"))
+		}
+	}
+
+	for _, handler := range []http.Handler{httpfun.RespondRedirect("/moved"), redirectFunc} {
+		response := httptest.NewRecorder()
+		handler.ServeHTTP(response, httptest.NewRequest(http.MethodDelete, "/", nil))
+		assert.Equal(t, http.StatusFound, response.Code, "%T as http.Handler", handler)
+	}
+}
+
 func TestDetectContentType_data(t *testing.T) {
 	// JSON arrays are as much JSON as objects,
 	// but scalars like 123 are more likely plain text

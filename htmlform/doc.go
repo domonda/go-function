@@ -43,7 +43,12 @@
 //	fs.FileReader  → <input type="file">
 //	other types    → <input type="text">
 //
-// Set input types like "datetime-local" for time.Time with SetArgInputType.
+// Types that parse their own strings, like time.Duration ("5s")
+// and types implementing encoding.TextUnmarshaler, get text fields
+// also if their kind is a number.
+// Set input types like "datetime-local" or "date" for time.Time with SetArgInputType,
+// default values of time.Time are then formatted for these inputs.
+// Arguments named _ get no form field and are passed as zero values.
 //
 // # Customizing Fields
 //
@@ -112,6 +117,7 @@
 //   - String type → Optional (empty string is valid)
 //   - Types implementing IsNull() → Optional
 //   - bool checkboxes are never marked as required, unchecked is false
+//   - A variadic last argument → Optional, like in Go it can have no values
 //
 // Required fields are enforced by browsers with the required attribute
 // of the form field, the server passes the zero value for a missing value.
@@ -135,7 +141,11 @@
 //	    <form method="post" enctype="multipart/form-data">
 //	        {{range .Fields}}
 //	            <label>{{.Label}}</label>
-//	            <input type="{{.Type}}" name="{{.Name}}" value="{{.Value}}">
+//	            {{if eq .Type "checkbox"}}
+//	                <input type="checkbox" name="{{.Name}}" value="true" {{if eq .Value "true"}}checked{{end}}>
+//	            {{else}}
+//	                <input type="{{.Type}}" name="{{.Name}}" value="{{.Value}}">
+//	            {{end}}
 //	        {{end}}
 //	        <button>{{.SubmitButtonText}}</button>
 //	    </form>
@@ -158,8 +168,10 @@
 // A non-empty text value submitted for a file argument is rejected
 // with 400 Bad Request without calling the function,
 // because it would be used as path of a file on the server.
-// An upload for an argument type that fs.File can't be assigned to,
-// like fs.MemFile, results in an error of the server.
+// A file argument of a type that fs.File can't be assigned to,
+// like fs.MemFile or a pointer to a slice of files, is an error of NewHandler,
+// and so is a file type in a struct field or map of an argument,
+// which uploads can't fill and a text value would set to a path on the server.
 //
 //	func ProcessDocument(ctx context.Context, name string, document fs.FileReader) error {
 //	    data, err := document.ReadAll()
@@ -185,10 +197,9 @@
 // a string becomes the path of a file on the server
 // that the function then reads or writes on behalf of the client.
 // For the same reason don't register a process-global StringScanner
-// that converts strings to fs.FileReader, and don't use struct arguments
-// with fs.File fields for forms of untrusted users,
-// because only arguments that are files themselves
-// or pointers, slices or arrays of files are protected.
+// that converts strings to fs.FileReader. NewHandler rejects arguments
+// with file types in struct fields and maps, but can't detect types
+// that read a file path in their own UnmarshalJSON or UnmarshalText method.
 //
 // # Complete Example
 //
@@ -318,7 +329,10 @@
 //   - Maps other than map[string]any are not supported,
 //     struct and map[string]any arguments are entered as JSON in a text field
 //   - Slices and arrays of files get a multiple file upload field,
-//     other slices and arrays are entered as one text value like [1,2,3]
+//     other slices and arrays are entered as one text value like [1,2,3],
+//     or as multiple values of the field in a custom template,
+//     like of a select with the multiple attribute
+//   - A variadic argument is not required, because it can have no values
 //   - time.Time arguments get a text field unless their input type
 //     is set to "datetime-local" with SetArgInputType
 //   - The server only validates with the validators set by SetArgValidator

@@ -1427,3 +1427,12 @@ func TestScanString_SetTime(t *testing.T) {
 
 	assert.Error(t, ScanString("not a time", &dest))
 }
+
+func TestScanString_datetimeLocalWithSeconds(t *testing.T) {
+	// Browsers submit datetime-local values with seconds if the value has seconds
+	var got time.Time
+	require.NoError(t, ScanString("2026-10-20T14:30:05", &got))
+	assert.Equal(t, time.Date(2026, 10, 20, 14, 30, 5, 0, TimeLocation), got)
+	require.NoError(t, ScanString("2026-10-20T14:30", &got))
+	assert.Equal(t, time.Date(2026, 10, 20, 14, 30, 0, 0, TimeLocation), got)
+}

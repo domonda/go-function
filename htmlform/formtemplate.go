@@ -14,6 +14,7 @@ package htmlform
 // The template handles these field types specially:
 //   - checkbox: Inline label, checked state support
 //   - select: Dropdown with options, selected value support
+//   - radio: One radio button per option, checked value support
 //   - textarea: Multi-line text with 40 cols × 5 rows
 //   - all others: Standard <input> tags with type attribute
 //
@@ -90,6 +91,15 @@ var FormTemplate = /*html*/ `
 						<option value="{{.Value}}" {{if eq (printf "%v" .Value) $selectValue}}selected{{end}}>{{.Label}}</option>
 					{{end}}
 				</select>
+			{{else if eq .Type "radio"}}
+				<fieldset style="border: none; margin: 0; padding: 0">
+					<legend style="padding: 0">{{.Label}}:</legend>
+					{{$field := .}}
+					{{range $i, $option := .Options}}
+						<input type="radio" id="{{$field.Name}}-{{$i}}" name="{{$field.Name}}" value="{{$option.Value}}" {{if eq (printf "%v" $option.Value) $field.Value}}checked{{end}} {{if $field.Required}}required{{end}}/>
+						<label style="display: inline" for="{{$field.Name}}-{{$i}}">{{$option.Label}}</label>
+					{{end}}
+				</fieldset>
 			{{else if eq .Type "textarea"}}
 				<label for="{{.Name}}">{{.Label}}:</label>
 				<textarea id="{{.Name}}" name="{{.Name}}" cols="40" rows="5" {{if .Required}}required{{end}}>{{.Value}}</textarea>

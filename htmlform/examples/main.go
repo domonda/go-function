@@ -43,7 +43,9 @@ func main() {
 
 	log.Info("Listening on http://localhost:8080").Log()
 	server := &http.Server{
-		Addr:         ":8080",
+		// Only local connections, because DebugShowInternalErrorsInResponse
+		// shows internal errors in the responses
+		Addr:         "localhost:8080",
 		Handler:      handler,
 		ReadTimeout:  30 * time.Second,
 		WriteTimeout: 30 * time.Second,

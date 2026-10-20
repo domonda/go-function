@@ -21,7 +21,8 @@ var (
 		time.DateOnly + " 15:04:05.999999999 -0700 MST", // Used by time.Time.String()
 		time.DateTime,
 		time.DateOnly + " 15:04",
-		time.DateOnly + "T15:04", // Used by browser datetime-local input type
+		time.DateOnly + "T15:04:05.999999999", // Used by browser datetime-local input type with seconds
+		time.DateOnly + "T15:04",              // Used by browser datetime-local input type
 		time.DateOnly,
 	}
 
