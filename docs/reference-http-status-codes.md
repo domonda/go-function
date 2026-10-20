@@ -68,7 +68,6 @@ Notes:
 | 400 Bad Request | `invalid value for argument "a"` | the value of field `a` couldn't be parsed |
 | 400 Bad Request | `invalid argument "a": <validator error>` | the validator set with `SetArgValidator("a", ...)` returned an error |
 | 400 Bad Request | `argument "a" must be an uploaded file` | a non-empty text value was sent for a file argument |
-| 400 Bad Request | `files uploaded for argument "a" must have different names` | two files with the same name were uploaded for one file argument |
 | 400 Bad Request | `argument "a" takes at most N files` | more files than an array argument `[N]fs.File` holds |
 | 403 Forbidden | `Forbidden` | a browser sent the POST from another origin, see `SetCrossOriginProtection` |
 | 200 OK | empty | POST, the function returned without error and the `ResultsWriter` is nil |

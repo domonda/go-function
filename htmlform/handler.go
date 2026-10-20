@@ -654,13 +654,6 @@ func (handler *Handler) fileArg(formfs *multipartfs.MultipartFileSystem, argName
 	if len(files) == 0 {
 		return reflect.Zero(argType).Interface(), nil
 	}
-	// The files are identified by field and file name,
-	// so uploads with the same file name would all open the first one
-	for i, file := range files {
-		if slices.Contains(files[:i], file) {
-			return nil, newRequestError(nil, http.StatusBadRequest, fmt.Sprintf("files uploaded for argument %q must have different names", argName))
-		}
-	}
 	notAssignable := func() error {
 		return fmt.Errorf("can't pass uploaded file as argument '%s' of type %s of function %s", argName, argType, handler.wrappedFunc)
 	}

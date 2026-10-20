@@ -7,6 +7,14 @@
 // the values are parsed and passed to the function, making it easy to create
 // web interfaces for any Go function.
 //
+// # Scope
+//
+// This package is meant for quick internal dashboards and admin tools,
+// not for polished production websites, and it doesn't have the same
+// quality criteria as the root package github.com/domonda/go-function.
+// For public websites, write the forms yourself and call your functions
+// through httpfun or the wrappers of the root package.
+//
 // # Basic Usage
 //
 // Generate an HTML form from a function:
@@ -164,6 +172,7 @@
 // which is nil for fs.FileReader.
 // Pointers, slices and arrays of such types are file arguments too:
 // a slice or array gets all files uploaded with the same field name,
+// also files with the same name, which go-fs names like "scan (2).pdf",
 // and its form field allows selecting multiple files.
 // A non-empty text value submitted for a file argument is rejected
 // with 400 Bad Request without calling the function,
@@ -174,7 +183,7 @@
 // which uploads can't fill and a text value would set to a path on the server.
 //
 //	func ProcessDocument(ctx context.Context, name string, document fs.FileReader) error {
-//	    data, err := document.ReadAll()
+//	    data, err := document.ReadAll(ctx)
 //	    if err != nil {
 //	        return err
 //	    }

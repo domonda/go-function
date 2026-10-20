@@ -28,20 +28,6 @@ Problems found by the reviews of the v1.0.0 release that predate it.
 **Priority:** P3
 **Depends on:** None
 
-## htmlform
-
-### Upload file names are URL-decoded by go-fs
-
-**What:** Open uploaded files by their multipart part instead of by their file name.
-
-**Why:** `multipartfs` of go-fs URL-decodes the names: an upload named `report%201.pdf` can't be opened and the user gets a misleading 404, and an upload named `..%2Fother%2Fx.txt` for one field resolves to the file uploaded for the field `other`. It can't escape the in-memory upload file system.
-
-**Context:** `fileArg` in `htmlform/handler.go` joins the field and file name, go-fs `fsimpl.JoinCleanPath` decodes them. The fix belongs in go-fs or needs an API that binds uploads by part index.
-
-**Effort:** M
-**Priority:** P2
-**Depends on:** go-fs
-
 ## Infrastructure
 
 ### tag-release.sh doesn't check that the version is new
@@ -73,5 +59,11 @@ The example listens on `localhost:8080`.
 ### File fields of struct arguments take text values as server paths
 
 `htmlform.NewHandler` returns an error for arguments with file types in struct fields and maps, and for file arguments that uploads can't fill.
+
+**Completed:** v1.0.0 (2026-10-20)
+
+### Upload file names are URL-decoded by go-fs
+
+Fixed in go-fs v1.0.0-beta.1, which htmlform requires.
 
 **Completed:** v1.0.0 (2026-10-20)

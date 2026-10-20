@@ -195,7 +195,7 @@ func TestHandler_GET_customized(t *testing.T) {
 
 func TestHandler_POST(t *testing.T) {
 	f := func(ctx context.Context, name string, age int, active bool, file fs.File) (string, error) {
-		content, err := file.ReadAllString()
+		content, err := file.ReadAllString(ctx)
 		if err != nil {
 			return "", err
 		}
@@ -486,7 +486,7 @@ func TestHandler_POST_fileArg(t *testing.T) {
 		if document == nil {
 			return "no document", nil
 		}
-		return document.ReadAllString()
+		return document.ReadAllString(t.Context())
 	}
 	functions := []struct {
 		name string
@@ -687,7 +687,7 @@ func TestHandler_POST_largeUpload(t *testing.T) {
 		if err != nil {
 			return 0, err
 		}
-		data, err := document.ReadAll()
+		data, err := document.ReadAll(ctx)
 		return len(data), err
 	}
 	handler := htmlform.MustNewHandler(function.MustReflectWrapper(f, "ctx", "document"), "Form", httpfun.RespondJSON)
@@ -839,7 +839,7 @@ func TestHandler_POST_nestedFileArgs(t *testing.T) {
 	f := func(files []fs.File, single *fs.File) error {
 		gotSlice = nil
 		for _, file := range files {
-			data, err := file.ReadAllString()
+			data, err := file.ReadAllString(t.Context())
 			if err != nil {
 				return err
 			}
@@ -847,7 +847,7 @@ func TestHandler_POST_nestedFileArgs(t *testing.T) {
 		}
 		gotPtr = ""
 		if single != nil {
-			data, err := single.ReadAllString()
+			data, err := single.ReadAllString(t.Context())
 			if err != nil {
 				return err
 			}
@@ -973,15 +973,70 @@ func TestHandler_POST_fileArgEdgeCases(t *testing.T) {
 	})
 
 	t.Run("same file name twice", func(t *testing.T) {
-		// Uploaded files are identified by field and file name,
-		// so the second file would silently be read as the first one
-		called = false
-		handler := htmlform.MustNewHandler(function.MustReflectWrapper(func(files []fs.File) { called = true }, "files"), "Form", httpfun.RespondNothing)
+		// go-fs gives every upload its own file, also with the same file name,
+		// so the second file is not read as the first one
+		var contents, names []string
+		f := func(files []fs.File) error {
+			for _, file := range files {
+				content, err := file.ReadAllString(t.Context())
+				if err != nil {
+					return err
+				}
+				contents = append(contents, content)
+				names = append(names, file.Name())
+			}
+			return nil
+		}
+		handler := htmlform.MustNewHandler(function.MustReflectWrapper(f, "files"), "Form", httpfun.RespondNothing)
 
 		response := uploadFiles(t, handler, "files", "scan.pdf", "scan.pdf")
 
-		assert.Equal(t, http.StatusBadRequest, response.Code)
-		assert.False(t, called)
+		require.Equal(t, http.StatusOK, response.Code, response.Body.String())
+		assert.Equal(t, []string{"content 0", "content 1"}, contents)
+		assert.Equal(t, []string{"scan.pdf", "scan (2).pdf"}, names)
+	})
+
+	t.Run("file names with URL escapes", func(t *testing.T) {
+		// File names are not URL-decoded by go-fs,
+		// so they open their own upload instead of no file or the upload of another field
+		var docContent, docName, otherContent string
+		f := func(doc, other fs.File) error {
+			var err error
+			docName = doc.Name()
+			if docContent, err = doc.ReadAllString(t.Context()); err != nil {
+				return err
+			}
+			if other != "" {
+				otherContent, err = other.ReadAllString(t.Context())
+			}
+			return err
+		}
+		handler := htmlform.MustNewHandler(function.MustReflectWrapper(f, "doc", "other"), "Form", httpfun.RespondNothing)
+
+		for _, name := range []string{"report%201.pdf", "100%25.txt", `say "hi".txt`, "a%2Fb.txt"} {
+			response := uploadFiles(t, handler, "doc", name)
+			require.Equal(t, http.StatusOK, response.Code, "%s: %s", name, response.Body.String())
+			assert.Equal(t, "content 0", docContent, name)
+			assert.Equal(t, name, docName)
+		}
+
+		var body bytes.Buffer
+		writer := multipart.NewWriter(&body)
+		for field, upload := range map[string][2]string{"doc": {"..%2Fother%2Fx.txt", "doc content"}, "other": {"x.txt", "other content"}} {
+			part, err := writer.CreateFormFile(field, upload[0])
+			require.NoError(t, err)
+			_, err = part.Write([]byte(upload[1]))
+			require.NoError(t, err)
+		}
+		require.NoError(t, writer.Close())
+		request := httptest.NewRequest(http.MethodPost, "/", &body)
+		request.Header.Set("Content-Type", writer.FormDataContentType())
+
+		response := serve(handler, request)
+
+		require.Equal(t, http.StatusOK, response.Code, response.Body.String())
+		assert.Equal(t, "doc content", docContent)
+		assert.Equal(t, "other content", otherContent)
 	})
 }
 

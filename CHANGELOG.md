@@ -26,8 +26,8 @@ by `gen-func-wrappers` are now covered by semantic versioning.
   the protection of form submissions against cross-site request forgery.
 - `htmlform` takes pointers, slices and arrays of file types from uploaded files;
   a slice or array gets all files uploaded with the same field name,
-  which must have different file names, and more files than an array holds are rejected
-  with 400 Bad Request.
+  also files with the same name, which go-fs names like `scan (2).pdf`,
+  and more files than an array holds are rejected with 400 Bad Request.
 - `httpfun.DefaultHandleError` is the default `HandleError`,
   so custom error handlers can delegate to it and keep its status codes.
 - `Description.Variadic` reports if the last argument is variadic like `...int`,
@@ -193,7 +193,10 @@ by `gen-func-wrappers` are now covered by semantic versioning.
   `v0.0.0-20261013080339-68c5a526b805` and its new import API.
 - Dependencies updated, among them `testify` v1.11.1 → v1.12.1,
   `golang.org/x/tools` v0.48.0 → v0.52.0 and `golang.org/x/mod` v0.38.0 → v0.42.0.
-  `htmlform` requires `github.com/ungerik/go-fs` v0.1.0, its first tagged version, instead of a pseudo-version.
+  `htmlform` requires `github.com/ungerik/go-fs` v1.0.0-beta.1 instead of a pseudo-version,
+  which opens every upload by its own file and field name: names like `report%201.pdf`
+  or with a `"` no longer answer 404, and a file named `..%2Fother%2Fx.txt` no longer reads
+  the upload of the field `other`. `ReadAll` and `ReadAllString` of go-fs files take a context.
 
 ### Fixed
 
