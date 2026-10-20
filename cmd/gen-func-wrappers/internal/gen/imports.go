@@ -539,8 +539,23 @@ func (target *targetFile) useImport(setImports astvisit.Imports, pkgName, path s
 		return fmt.Errorf("the generated code imports %q and %q with the same name %s", otherPath, path, pkgName)
 	}
 	target.setAdded(pkgName, path)
-	setImports.Add(path)
+	if !target.importsWithName(path, pkgName) {
+		setImports.Add(path)
+	}
 	return nil
+}
+
+// importsWithName reports if the target file imports the path
+// with the explicit name, like json "encoding/json",
+// which the generated code can use instead of adding
+// the import without name a second time.
+func (target *targetFile) importsWithName(path, name string) bool {
+	for _, imp := range target.imports {
+		if imp.Path == path && imp.Name == name {
+			return true
+		}
+	}
+	return false
 }
 
 // setAdded records that the generated code uses name for the import path.

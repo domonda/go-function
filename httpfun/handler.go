@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"mime/multipart"
 	"net/http"
 	"os"
 	"reflect"
@@ -231,6 +232,12 @@ func (e *requestError) ServeHTTP(response http.ResponseWriter, _ *http.Request) 
 // except for errors of the server like a missing environment variable
 // or a failed temporary file of an upload.
 func argsRequestError(err error) error {
+	var errResponse http.Handler
+	if errors.As(err, &errResponse) {
+		// The error already carries its response, like httperr.Unauthorized,
+		// also if it is joined with an error of the server
+		return err
+	}
 	if errors.Is(err, errEnvVarNotSet) {
 		return err
 	}
@@ -239,12 +246,10 @@ func argsRequestError(err error) error {
 		// like of a missing temporary directory, with 404 Not Found
 		return fmt.Errorf("can't get arguments of request because of file system error: %s", err)
 	}
-	var errResponse http.Handler
-	if errors.As(err, &errResponse) {
-		// The error already carries its response, like httperr.Unauthorized
-		return err
-	}
-	if _, ok := errors.AsType[*http.MaxBytesError](err); ok {
+	if _, ok := errors.AsType[*http.MaxBytesError](err); ok || errors.Is(err, multipart.ErrMessageTooLarge) {
+		// The body exceeded a limit like MaxRequestBodySize or MaxMultipartFormSize,
+		// or the form fields that aren't files exceeded the memory
+		// that http.Request.ParseMultipartForm allows for them
 		return &requestError{err: err, statusCode: http.StatusRequestEntityTooLarge, message: http.StatusText(http.StatusRequestEntityTooLarge)}
 	}
 	return &requestError{err: err, statusCode: http.StatusBadRequest, message: http.StatusText(http.StatusBadRequest)}

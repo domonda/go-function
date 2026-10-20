@@ -36,7 +36,7 @@ func ConstRequestArg(name, value string) RequestArgsFunc {
 func RequestBodyAsArg(argName string) RequestArgsFunc {
 	return func(request *http.Request) (map[string]string, error) {
 		defer request.Body.Close()
-		body, err := io.ReadAll(http.MaxBytesReader(nil, request.Body, MaxRequestBodySize))
+		body, err := readRequestBody(request)
 		if err != nil {
 			return nil, err
 		}
@@ -151,6 +151,8 @@ func RequestArgFromEnvVar(envVar, argName string) RequestArgsFunc {
 // whose element type is scanned from strings, like numbers, strings, or times.
 // Elements of types unmarshalled from JSON objects, like structs or maps,
 // can't be passed as multiple values, but as one JSON array like [{"a":1},{"a":2}].
+// Invalid UTF-8 in one of multiple values is replaced with U+FFFD
+// like by encoding/json, a single value is passed unchanged.
 func RequestQueryArgs(request *http.Request) (map[string]string, error) {
 	args := make(map[string]string)
 	for name, values := range request.URL.Query() {
@@ -213,11 +215,20 @@ func RequestMultipartFormArgs(request *http.Request) (map[string]string, error) 
 // The request body is capped by MaxRequestBodySize.
 func RequestBodyJSONFieldsAsArgs(request *http.Request) (map[string]string, error) {
 	defer request.Body.Close()
-	body, err := io.ReadAll(http.MaxBytesReader(nil, request.Body, MaxRequestBodySize))
+	body, err := readRequestBody(request)
 	if err != nil {
 		return nil, err
 	}
 	return namedStringsFromJSON(body)
+}
+
+// readRequestBody reads the body of the request,
+// at most MaxRequestBodySize bytes if it is greater than zero.
+func readRequestBody(request *http.Request) ([]byte, error) {
+	if MaxRequestBodySize <= 0 {
+		return io.ReadAll(request.Body)
+	}
+	return io.ReadAll(http.MaxBytesReader(nil, request.Body, MaxRequestBodySize))
 }
 
 func namedStringsFromJSON(jsonObject []byte) (map[string]string, error) {

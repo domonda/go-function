@@ -166,6 +166,16 @@ func TestRequestBodyAsArg(t *testing.T) {
 		var maxBytesErr *http.MaxBytesError
 		assert.True(t, errors.As(err, &maxBytesErr), "error: %v", err)
 	})
+
+	t.Run("MaxRequestBodySize disabled", func(t *testing.T) {
+		// A value <= 0 disables the limit like for MaxSliceLiteralElements
+		// instead of rejecting every body
+		setMaxRequestBodySize(t, 0)
+
+		got, err := httpfun.RequestBodyAsArg("data")(httptest.NewRequest(http.MethodPost, "/", strings.NewReader("raw body")))
+		require.NoError(t, err)
+		assert.Equal(t, map[string]string{"data": "raw body"}, got)
+	})
 }
 
 func setMaxRequestBodySize(t *testing.T, size int64) {

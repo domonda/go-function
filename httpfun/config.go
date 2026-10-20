@@ -51,6 +51,7 @@ var (
 	// RequestBodyAsArg and RequestBodyJSONFieldsAsArgs.
 	// Requests larger than this are rejected before they can exhaust memory,
 	// Handler answers them with 413 Request Entity Too Large.
+	// A value <= 0 disables the limit.
 	// Default: 32 MiB.
 	MaxRequestBodySize int64 = 32 << 20
 

@@ -26,7 +26,7 @@ by `gen-func-wrappers` are now covered by semantic versioning.
   The handlers of `httperr` like `httperr.DefaultHandler` implement `ErrorHandler`.
 - `MaxSliceLiteralElements` (default 1 << 20, a value <= 0 disables it) limits the elements
   of every slice and array literal scanned from a string.
-- `httpfun.MaxRequestBodySize` (default 32 MiB) limits the request bodies
+- `httpfun.MaxRequestBodySize` (default 32 MiB, a value <= 0 disables it) limits the request bodies
   read by `RequestBodyAsArg` and `RequestBodyJSONFieldsAsArgs`.
 
 ### Changed
@@ -72,6 +72,12 @@ by `gen-func-wrappers` are now covered by semantic versioning.
   Like generated wrappers, its `CallWithStrings`, `CallWithNamedStrings` and `CallWithJSON`
   pass the zero value for arguments named `_` instead of the string or JSON value
   passed for them, so a client can't set them with the name or key `_`.
+- **Breaking:** `httpfun.Handler` passes other errors of a `RequestArgsFunc` to its error handlers
+  wrapped as errors of the request, which `httperr.DefaultHandler` and `DefaultHandleError`
+  answer with 400 Bad Request, instead of unwrapped, which they answered with 500 Internal Server Error
+  or 404 Not Found for `os.ErrNotExist` and `sql.ErrNoRows`. A custom `RequestArgsFunc`
+  that fails because of the server, like a session lookup with a database error,
+  returns an error carrying its response, like `httperr.New(http.StatusServiceUnavailable)`.
 - **Breaking:** `httpfun.RespondRedirect` and `RespondRedirectFunc` redirect requests with other methods
   than GET and HEAD after the function call with 303 See Other instead of 302 Found,
   because browsers repeat PUT, PATCH and DELETE requests at the URL of a 302 redirect.
@@ -139,15 +145,17 @@ by `gen-func-wrappers` are now covered by semantic versioning.
   and `[ ]` scans as an empty slice.
 - `httpfun.Handler` answers an argument value the function can't parse
   with 400 Bad Request instead of 500 Internal Server Error,
-  and a request body over the size limit with 413 Request Entity Too Large.
+  and a request body over the size limit, or multipart form fields over the memory
+  that `http.Request.ParseMultipartForm` allows for them, with 413 Request Entity Too Large.
   The response names the argument but not its value or the parse error,
   and the `ResultsWriter` is not called, which got the parse error as result error before.
   Errors from parsing arguments of other functions that the wrapped function called,
   file system errors of a `RequestArgsFunc` like a failed temporary file of an upload,
   and a missing environment variable of `RequestArgFromEnvVar`, are errors of the server.
   Errors of a `RequestArgsFunc` that carry their own response, like `httperr.Unauthorized`,
-  get it instead of 400 Bad Request, and without error handlers `httpfun.Handler` passes
-  errors of reading the request to `HandleError` instead of answering them with 400 Bad Request.
+  get it instead of 400 Bad Request, also if they are joined with other errors,
+  and without error handlers `httpfun.Handler` passes errors of reading the request
+  to `HandleError` instead of answering them with 400 Bad Request.
 - Generated `Call` methods return an error for too many arguments or an argument
   that is not assignable to its type, accept assignable values like a `[]int` for `type MyInts []int`,
   and pass missing or untyped nil arguments as zero values, like `ReflectWrapper`.

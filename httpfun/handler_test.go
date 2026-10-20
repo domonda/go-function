@@ -1,10 +1,12 @@
 package httpfun_test
 
 import (
+	"bytes"
 	"context"
 	"errors"
 	"fmt"
 	"io/fs"
+	"mime/multipart"
 	"net/http"
 	"net/http/httptest"
 	"net/url"
@@ -412,6 +414,34 @@ func TestHandler_getArgsErrors(t *testing.T) {
 
 		response := serve(httpfun.Handler(getArgs, wrapper, httpfun.RespondJSON), httptest.NewRequest(http.MethodPost, "/", nil))
 		assert.Equal(t, http.StatusInternalServerError, response.Code)
+	})
+
+	t.Run("error with response joined with file system error", func(t *testing.T) {
+		// The response of the error wins over the file system error,
+		// like for an error that only carries a response
+		getArgs := func(*http.Request) (map[string]string, error) {
+			return nil, errors.Join(httperr.NotFound, &os.PathError{Op: "open", Path: "/tmp/x", Err: fs.ErrNotExist})
+		}
+
+		response := serve(httpfun.Handler(getArgs, wrapper, httpfun.RespondJSON), httptest.NewRequest(http.MethodGet, "/", nil))
+		assert.Equal(t, http.StatusNotFound, response.Code)
+	})
+
+	t.Run("multipart form fields too large for memory", func(t *testing.T) {
+		// ParseMultipartForm limits the memory of the form fields that aren't files,
+		// a form exceeding it is too large like a body over MaxMultipartFormSize
+		var body bytes.Buffer
+		form := multipart.NewWriter(&body)
+		value := strings.Repeat("x", 1<<20)
+		for i := range 12 {
+			require.NoError(t, form.WriteField(fmt.Sprintf("f%d", i), value))
+		}
+		require.NoError(t, form.Close())
+		request := httptest.NewRequest(http.MethodPost, "/", &body)
+		request.Header.Set("Content-Type", form.FormDataContentType())
+
+		response := serve(httpfun.Handler(httpfun.RequestMultipartFormArgs, wrapper, httpfun.RespondJSON), request)
+		assert.Equal(t, http.StatusRequestEntityTooLarge, response.Code)
 	})
 
 	t.Run("body too large with error handlers", func(t *testing.T) {

@@ -1146,8 +1146,28 @@ var (
 	mul2Wrapper = function.WrapperTODO(Mul) // trailing
 )
 `},
-			wantContains:    []string{"// mulWrapper wraps Mul as function.Wrapper (generated code)", "var mul2Wrapper mul2WrapperT", "x = 1"},
-			wantNotContains: []string{"documented by the user", "// trailing"},
+			wantContains: []string{"// mulWrapper wraps Mul as function.Wrapper (generated code)", "var mul2Wrapper mul2WrapperT", "x = 1"},
+		},
+		{
+			// An import of the file with the name that the generated code uses
+			// for the package is used instead of adding it a second time
+			name: "file imports package of generated code with its own name",
+			files: map[string]string{"test.go": `package testpkg
+
+import (
+	json "encoding/json"
+
+	"github.com/domonda/go-function"
+)
+
+var _ = json.Valid
+
+func Count(m map[string]int) int { return len(m) }
+
+var countWrapper = function.WrapperTODO(Count)
+`},
+			wantContains:    []string{"\tjson \"encoding/json\"\n", "json.Unmarshal(argsJSON"},
+			wantNotContains: []string{"\t\"encoding/json\"\n"},
 		},
 		{
 			// golang.org/x/net/context.Context is an alias of context.Context,
