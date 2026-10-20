@@ -208,6 +208,8 @@ by `gen-func-wrappers` are now covered by semantic versioning.
 - The printing and logging results handlers like `PrintTo` and `LogTo` no longer replace
   the results with their strings for the results handlers after them.
 - The default `TimeFormats` parse `datetime-local` values with seconds like `2026-10-20T14:30:05`.
+- `uintptr` is scanned like the other unsigned integers instead of with `fmt.Sscan`,
+  with base prefixes like `0x10`, and `""`, `nil` and `null` scan as `0`.
 - `httpfun.Handler` and `HandlerNoWrapper` panic again with `http.ErrAbortHandler`,
   so that net/http aborts the response, instead of answering it with 500 Internal Server Error.
 - `ScanString` and `TypeStringScanners.ScanString` return an error for non-pointer
@@ -292,12 +294,13 @@ by `gen-func-wrappers` are now covered by semantic versioning.
   because scanning a 32 MiB literal of a request body allocated about 1.5 GiB.
   `[]any` destinations, like the slice of a `...any` argument, are decoded by `encoding/json`
   without this limit.
-- The errors of `ScanString` for numbers, booleans, times, durations, and slice and array literals
-  quote at most the first 100 bytes of the scanned string followed by its length,
-  and strings longer than 256 bytes are rejected as `time.Time` or `time.Duration`
-  before parsing, because quoting all of an invalid 32 MiB request body allocated
-  about 1 GiB per request, and about 4 GiB for a `time.Duration` argument.
-  The errors of `encoding/json` for struct, map and `[]any` destinations are unchanged.
+- The errors of `ScanString` for integers, floats, booleans, times, durations,
+  and slice and array literals quote at most the first 100 bytes of the scanned string
+  followed by its length, and strings longer than 256 bytes after trimming whitespace
+  are rejected as `time.Time` or `time.Duration` before parsing, because quoting all
+  of an invalid 32 MiB request body allocated more than 1 GiB per request.
+  The errors of `fmt.Sscan` for other types like complex numbers, and of `encoding/json`
+  for struct, map and `[]any` destinations, are unchanged.
 - The documentation warns against exposing arguments of types that name files,
   like `fs.File` of go-fs, to untrusted input of `CallWithStrings`, `CallWithNamedStrings`
   or `CallWithJSON`, and the `-replaceForJSON` examples of `gen-func-wrappers`

@@ -91,7 +91,7 @@ Error text often contains details an attacker can use: file paths, SQL, internal
 
 - 400 responses for invalid arguments name the argument but not its value or the parse error: `invalid value for argument "degrees"`.
 - 500 responses say `Internal Server Error` and nothing else, unless `httperr.DebugShowInternalErrorsInResponse` is true. Leave it false in production.
-- `ErrParseArgString`, `ErrParseArgJSON`, and `ErrParseArgsJSON` don't add the value or the JSON input to their `Error()` text. The scanner error they wrap usually quotes the value once, like `can't parse "hot" as float`, for numbers, times, and slice literals at most its first 100 bytes of large values like request bodies, so their text belongs in logs, not in responses.
+- `ErrParseArgString`, `ErrParseArgJSON`, and `ErrParseArgsJSON` don't add the value or the JSON input to their `Error()` text. The scanner error they wrap usually quotes the value once, like `can't parse "hot" as float`, for integers, floats, times, durations, and slice literals at most its first 100 bytes of large values like request bodies, so their text belongs in logs, not in responses.
 - `htmlform` answers a broken multipart body with `invalid multipart form`, because the parser's error can contain the server's network address.
 
 Exceptions you control:

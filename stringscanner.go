@@ -245,6 +245,9 @@ func scanString(sourceStr string, destVal reflect.Value, explicitStr bool) (err 
 		}
 		duration, err := time.ParseDuration(trimmedSrc)
 		if err != nil {
+			if len(trimmedSrc) > maxErrorValueLen {
+				return fmt.Errorf("can't parse %s as time.Duration", quoteForError(trimmedSrc))
+			}
 			// The error of time.ParseDuration quotes the string
 			return fmt.Errorf("can't parse time.Duration: %w", err)
 		}
@@ -354,7 +357,12 @@ func scanString(sourceStr string, destVal reflect.Value, explicitStr bool) (err 
 			destVal.SetUint(0)
 			return nil
 		}
-		u, err := strconv.ParseUint(trimmedSrc, 10, destVal.Type().Bits())
+		// Like fmt.Sscan before, uintptr accepts base prefixes like 0x for addresses
+		base := 10
+		if destVal.Kind() == reflect.Uintptr {
+			base = 0
+		}
+		u, err := strconv.ParseUint(trimmedSrc, base, destVal.Type().Bits())
 		if err != nil {
 			return fmt.Errorf("can't parse %s as uint because of: %w", quoteForError(trimmedSrc), numErrorReason(err))
 		}
@@ -462,7 +470,8 @@ func quoteForError(s string) string {
 	return fmt.Sprintf("%s... (%d bytes)", strconv.Quote(s[:end]), len(s))
 }
 
-// maxTimeLen is the maximum length of a string parsed as time.Time or time.Duration.
+// maxTimeLen is the maximum length of a string parsed as time.Time or time.Duration
+// after trimming whitespace.
 // Valid values of the TimeFormats layouts and durations are much shorter,
 // and the errors of the time package copy and quote the whole string,
 // for every layout of TimeFormats, which would multiply a large untrusted input

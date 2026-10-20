@@ -37,9 +37,9 @@ Elements of slices and arrays and targets of pointers are scanned with the packa
 | 1 | type with a `SetNull()` method | | | calls `SetNull()` |
 | 2 | `string` | anything, unchanged | kept | kept as text |
 | 3 | `error` | anything | trimmed | `nil` |
-| 4 | `time.Time` | layouts in `TimeFormats`, tried in order, at most 256 bytes | trimmed | zero time |
+| 4 | `time.Time` | layouts in `TimeFormats`, tried in order, at most 256 bytes after trimming | trimmed | zero time |
 | 5 | type with a `Set(time.Time)` method | like `time.Time`, then calls `Set` | trimmed | `Set(time.Time{})` |
-| 6 | `time.Duration` | `time.ParseDuration`: `1h30m`, `250ms`; `90` without unit is an error, at most 256 bytes | trimmed | `0` |
+| 6 | `time.Duration` | `time.ParseDuration`: `1h30m`, `250ms`; `90` without unit is an error, at most 256 bytes after trimming | trimmed | `0` |
 | 7 | `encoding.TextUnmarshaler` | anything, passed unchanged to `UnmarshalText` | kept | passed to `UnmarshalText` |
 | 8 | `json.Unmarshaler` | valid JSON as is, else the string encoded as a JSON string; valid non-string JSON that is rejected is retried as a JSON string | trimmed if valid JSON, kept if encoded as a JSON string | `null` as JSON `null`, `""` and `nil` as JSON strings |
 | 9 | `map[string]any` | a JSON object | trimmed | `nil` |
@@ -49,7 +49,7 @@ Elements of slices and arrays and targets of pointers are scanned with the packa
 | 13 | other kinds of `string` | anything, unchanged | kept | kept as text |
 | 14 | `bool` kinds | `strconv.ParseBool`: `1 t T TRUE true True 0 f F FALSE false False` | trimmed | `false` |
 | 15 | `int` kinds | base-10 integer within the type's bit size | trimmed | `0` |
-| 16 | `uint` kinds | base-10 unsigned integer within the type's bit size | trimmed | `0` |
+| 16 | `uint` kinds | base-10 unsigned integer within the type's bit size, for `uintptr` also with a base prefix like `0x10` | trimmed | `0` |
 | 17 | `float` kinds | `strconv.ParseFloat`: `3.14`, `1e3`, `NaN`, `Inf` | trimmed | `0` |
 | 18 | struct | a JSON object for `json.Unmarshal` | trimmed | zero struct |
 | 19 | slice `[]T` | a [slice literal](#slice-literals) `[a,b]`, or a single value without brackets as one element | trimmed | `nil` |

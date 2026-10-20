@@ -1458,6 +1458,8 @@ func TestScanString_errorsQuoteBoundedValue(t *testing.T) {
 		{name: "Set(time.Time)", src: long, dest: new(settableTime)},
 		{name: "duration", src: long, dest: new(time.Duration)},
 		{name: "duration with number", src: "1" + long, dest: new(time.Duration)},
+		// Not rejected by the length limit of times, but quoted shortened
+		{name: "duration of 200 bytes", src: strings.Repeat("\x01", 200), dest: new(time.Duration)},
 		// Scanned like the other unsigned integers instead of with fmt.Sscan
 		{name: "uintptr", src: long, dest: new(uintptr)},
 		{name: "malformed slice literal", src: "[" + long, dest: new([]int)},
@@ -1481,9 +1483,13 @@ func TestScanString_errorsQuoteBoundedValue(t *testing.T) {
 }
 
 func TestScanString_uintptr(t *testing.T) {
+	// Like fmt.Sscan before, uintptr accepts base prefixes for addresses
+	for src, want := range map[string]uintptr{" 42 ": 42, "0x10": 16, "1_0": 10, "null": 0} {
+		var u uintptr
+		require.NoError(t, ScanString(src, &u), src)
+		assert.Equal(t, want, u, src)
+	}
 	var u uintptr
-	require.NoError(t, ScanString(" 42 ", &u))
-	assert.Equal(t, uintptr(42), u)
 	assert.EqualError(t, ScanString("-1", &u), `can't parse "-1" as uint because of: invalid syntax`)
 }
 
