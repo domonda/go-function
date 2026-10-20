@@ -22,7 +22,7 @@ Exact behavior, for looking things up.
 
 - [Calling conventions](reference-calling-conventions.md): `Call`, `CallWithStrings`, `CallWithNamedStrings`, `CallWithJSON`, `Description`, results handlers
 - [String conversion](reference-string-conversion.md): what `ScanString` accepts for each type, slice literals, scanner lookup, configuration
-- [HTTP status codes](reference-http-status-codes.md): every status of `httpfun.Handler` and `htmlform.Handler` and its cause
+- [HTTP status codes](reference-http-status-codes.md): every status of `httpfun.Handler` and its cause
 
 ## Explanation
 
@@ -36,5 +36,5 @@ Background and design decisions.
 - [`function`](https://pkg.go.dev/github.com/domonda/go-function): wrappers, descriptions, string conversion
 - [`httpfun`](https://pkg.go.dev/github.com/domonda/go-function/httpfun): HTTP handlers
 - [`cli`](https://pkg.go.dev/github.com/domonda/go-function/cli): command dispatchers and shell completion
-- [`htmlform`](https://pkg.go.dev/github.com/domonda/go-function/htmlform): HTML forms
+- [`htmlform`](https://pkg.go.dev/github.com/domonda/go-htmlform): HTML forms for quick internal dashboards, the separate module [go-htmlform](https://github.com/domonda/go-htmlform)
 - [`gen-func-wrappers`](../cmd/gen-func-wrappers/README.md): code generator

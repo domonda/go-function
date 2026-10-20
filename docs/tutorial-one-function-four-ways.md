@@ -226,13 +226,13 @@ Stop the server with Ctrl+C.
 
 ## Step 5: Add an HTML form
 
-Add the `htmlform` module:
+Add the `go-htmlform` module, a separate module for forms of quick internal dashboards:
 
 ```bash
-go get github.com/domonda/go-function/htmlform@latest
+go get github.com/domonda/go-htmlform@latest
 ```
 
-At the start of `Serve`, create a form handler, and register it on the mux. Add the import `"github.com/domonda/go-function/htmlform"`:
+At the start of `Serve`, create a form handler, and register it on the mux. Add the import `"github.com/domonda/go-htmlform"`:
 
 ```go
 func Serve(addr string) error {
@@ -358,8 +358,8 @@ import (
 
 	"github.com/domonda/go-function"
 	"github.com/domonda/go-function/cli"
-	"github.com/domonda/go-function/htmlform"
 	"github.com/domonda/go-function/httpfun"
+	"github.com/domonda/go-htmlform"
 )
 
 // ErrUnknownUnit is returned by Convert for a unit other than C or F.

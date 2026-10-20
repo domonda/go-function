@@ -30,12 +30,12 @@ Exposed through `httpfun.Handler` with `RequestQueryArgs`, `?document=/etc/passw
 
 go-function can't tell a path type from any other string type, so it doesn't block them in `httpfun` or `CallWithJSON`. The defenses:
 
-- **`htmlform` takes file arguments only from uploads.** An argument whose type implements `fs.FileReader`, or a pointer, slice, or array of such a type, is filled only with files uploaded with the form. A non-empty text value for it is rejected with 400 Bad Request before the function runs.
+- **[go-htmlform](https://github.com/domonda/go-htmlform) takes file arguments only from uploads.** An argument whose type implements `fs.FileReader`, or a pointer, slice, or array of such a type, is filled only with files uploaded with the form. A non-empty text value for it is rejected with 400 Bad Request before the function runs.
 - **Don't expose path-like argument types to untrusted callers** through `httpfun`, `CallWithJSON`, or `CallWithStrings`. Take the content instead: `[]byte`, a `string`, or a type like `fs.MemFile` that carries name and data.
 - **Don't register a process-wide scanner** that converts strings into `fs.FileReader` or other resource handles. It would apply to every string-based transport at once.
 - **Generator JSON replacements:** `gen-func-wrappers -replaceForJSON=fs.FileReader:fs.File` makes `CallWithJSON` unmarshal JSON strings into server paths. Use a content type like `fs.MemFile` for wrappers that get JSON from clients.
 
-`htmlform` only protects arguments that are files or pointers, slices, or arrays of files. A struct argument with an `fs.File` field is entered as JSON text, and its file field becomes a server path. Don't use such struct arguments in forms for untrusted users.
+`htmlform.NewHandler` also rejects arguments with a file type in a struct field or map, which a JSON text value would set to a server path. It can't detect types that read a path in their own `UnmarshalJSON` or `UnmarshalText` method.
 
 ## Who decides which argument
 

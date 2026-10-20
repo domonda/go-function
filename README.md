@@ -13,7 +13,7 @@
 - **Automatic Type Conversion**: Convert strings to the correct types automatically
 - **HTTP Integration**: Turn functions into HTTP handlers with `httpfun` package
 - **CLI Integration**: Build command-line interfaces with `cli` package
-- **HTML Forms**: Generate HTML forms from function signatures with `htmlform` package
+- **HTML Forms**: Generate HTML forms for quick internal dashboards with the separate module [go-htmlform](https://github.com/domonda/go-htmlform)
 - **Code Generation**: Generate zero-overhead wrappers with `gen-func-wrappers`
 - **Reflection Fallback**: Use reflection-based wrappers when code generation isn't needed
 - **Context Support**: Automatic `context.Context` handling
@@ -246,11 +246,12 @@ func Variadic(args ...string) string
 - `SuperStringArgsDispatcher` - Multi-level command dispatcher
 - `CompleteStringArgsDispatcher` / `CompleteSuperStringArgsDispatcher` - Shell completion support
 
-### HTML Forms Package (`htmlform`)
+### HTML Forms (`go-htmlform`)
 
-- `NewHandler` - Generate HTML forms for functions
-- Form generation with validation
-- Customizable templates
+HTML forms for wrapped functions moved to the separate module
+[github.com/domonda/go-htmlform](https://github.com/domonda/go-htmlform),
+meant for quick internal dashboards. Its last release from this repository
+is `htmlform/v0.7.1`.
 
 ### Code Generator (`cmd/gen-func-wrappers`)
 

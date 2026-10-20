@@ -59,10 +59,6 @@ jobs:
           go test -count=1 -race -v "$dir/..."
         done < module-dirs
 
-    - name: Check generated wrappers are up to date
-      working-directory: htmlform/examples
-      run: go run ../../cmd/gen-func-wrappers -validate main.go
-
     - name: Gosec
       run: |
         while read -r dir; do

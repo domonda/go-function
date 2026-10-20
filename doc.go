@@ -85,7 +85,6 @@
 // The package includes several sub-packages for specific use cases:
 //
 //   - httpfun: Create HTTP handlers from functions
-//   - htmlform: Generate HTML forms for function arguments
 //   - cli: Build command-line interfaces from functions
 //   - cmd/gen-func-wrappers: Code generator for zero-overhead wrappers
 //
@@ -102,8 +101,8 @@
 // this error through the error return value of the Call* methods.
 // Panics of the wrapped function are not recovered by the Call* methods,
 // they propagate to the caller. httpfun.Handler recovers them
-// if httpfun.CatchHandlerPanics is true (the default) and htmlform.Handler
-// always recovers them, both respond with an HTTP error.
+// if httpfun.CatchHandlerPanics is true (the default)
+// and responds with an HTTP error.
 //
 // # Context Support
 //

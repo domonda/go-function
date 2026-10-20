@@ -43,7 +43,7 @@ Each adapter depends on the smallest interface it needs:
 
 - `httpfun.Handler` takes a `CallWithNamedStringsWrapper`. HTTP query parameters, form fields, and the fields of a JSON body all arrive as name-value pairs.
 - The `cli` dispatchers take a full `Wrapper`. They use `CallWithStrings` for positional arguments and the `Description` for help text.
-- `htmlform.Handler` takes a full `Wrapper`. It uses the `Description` to render one input per argument, then parses the submitted values itself and calls `Call` with typed values. It can't use a string convention, because uploaded files must reach the function as `fs.File` values, never as strings that could name a file on the server (see [Security model](explanation-security-model.md)), and validators run on the parsed values before the call.
+- `htmlform.Handler` of the separate module [go-htmlform](https://github.com/domonda/go-htmlform) takes a full `Wrapper`. It uses the `Description` to render one input per argument, then parses the submitted values itself and calls `Call` with typed values. It can't use a string convention, because uploaded files must reach the function as `fs.File` values, never as strings that could name a file on the server (see [Security model](explanation-security-model.md)), and validators run on the parsed values before the call.
 
 ### One conversion engine
 

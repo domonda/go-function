@@ -49,21 +49,3 @@ Problems found by the reviews of the v1.0.0 release that predate it.
 They return errors for passed arguments or strings and for JSON that is no object, like `ReflectWrapper`.
 
 **Completed:** v1.0.0 (2026-10-19)
-
-### htmlform example exposes debug errors on all interfaces
-
-The example listens on `localhost:8080`.
-
-**Completed:** v1.0.0 (2026-10-20)
-
-### File fields of struct arguments take text values as server paths
-
-`htmlform.NewHandler` returns an error for arguments with file types in struct fields and maps, and for file arguments that uploads can't fill.
-
-**Completed:** v1.0.0 (2026-10-20)
-
-### Upload file names are URL-decoded by go-fs
-
-Fixed in go-fs v1.0.0-beta.1, which htmlform requires.
-
-**Completed:** v1.0.0 (2026-10-20)
