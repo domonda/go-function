@@ -49,7 +49,7 @@ Elements of slices and arrays and targets of pointers are scanned with the packa
 | 13 | other kinds of `string` | anything, unchanged | kept | kept as text |
 | 14 | `bool` kinds | `strconv.ParseBool`: `1 t T TRUE true True 0 f F FALSE false False` | trimmed | `false` |
 | 15 | `int` kinds | base-10 integer within the type's bit size | trimmed | `0` |
-| 16 | `uint` kinds | base-10 unsigned integer within the type's bit size, for `uintptr` also with a base prefix like `0x10` | trimmed | `0` |
+| 16 | `uint` kinds | base-10 unsigned integer within the type's bit size, for `uintptr` a Go integer literal: base prefixes like `0x10`, `0o17`, `0b101`, a leading `0` for octal so `010` is `8`, and `_` separators like `1_000`; content after the number like `42abc` is an error | trimmed | `0` |
 | 17 | `float` kinds | `strconv.ParseFloat`: `3.14`, `1e3`, `NaN`, `Inf` | trimmed | `0` |
 | 18 | struct | a JSON object for `json.Unmarshal` | trimmed | zero struct |
 | 19 | slice `[]T` | a [slice literal](#slice-literals) `[a,b]`, or a single value without brackets as one element | trimmed | `nil` |
@@ -64,6 +64,7 @@ Notes:
 - A type implementing `encoding.TextUnmarshaler` owns all of its input, including empty strings and the nil words. Handle them in `UnmarshalText` if the type has an empty or null value.
 - Only `map[string]any` maps are supported. `map[string]int` returns `type not supported: map[string]int`. Use a struct type for structured arguments.
 - `ScanString` can't fill a plain `any` destination. The wrappers avoid this by passing the string itself to arguments of type `any`.
+- Errors for integers, floats, booleans, times, durations, and slice and array literals quote at most the first 100 bytes of a longer input, followed by `...` and its length like `... (150 bytes)`. Errors of `fmt.Sscan` and `encoding/json` for other types are passed on unchanged.
 
 ## Examples
 
@@ -76,6 +77,9 @@ Output of `ScanString` for the input in quotes:
 | `int` | `"4.2"` | error: `can't parse "4.2" as int because of: invalid syntax` |
 | `int8` | `"300"` | error: `can't parse "300" as int because of: value out of range` |
 | `uint` | `"-1"` | error: `can't parse "-1" as uint because of: invalid syntax` |
+| `uintptr` | `"0x10"` | `16` |
+| `uintptr` | `"010"` | `8`, a leading `0` is octal |
+| `uintptr` | `"42abc"` | error: `can't parse "42abc" as uint because of: invalid syntax` |
 | `float64` | `"1e3"` | `1000` |
 | `bool` | `"T"` | `true` |
 | `bool` | `"yes"` | error: `can't parse "yes" as bool because of: invalid syntax` |

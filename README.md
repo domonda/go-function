@@ -354,7 +354,7 @@ httpfun.HandleError = func(err error, w http.ResponseWriter, r *http.Request) bo
 httpfun.CatchHandlerPanics = true
 
 // Request body size limits, larger requests are answered with 413
-httpfun.MaxRequestBodySize = 32 << 20     // RequestBodyAsArg and RequestBodyJSONFieldsAsArgs, default 32 MiB
+httpfun.MaxRequestBodySize = 32 << 20     // RequestBodyAsArg and RequestBodyJSONFieldsAsArgs, default 32 MiB, <= 0 disables it
 httpfun.MaxMultipartFormSize = 32 << 20   // RequestMultipartFormArgs total request body cap, default 32 MiB
 httpfun.MaxMultipartFormMemory = 1 << 20  // in-memory threshold, default 1 MiB
 ```

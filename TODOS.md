@@ -48,4 +48,4 @@ Problems found by the reviews of the v1.0.0 release that predate it.
 
 They return errors for passed arguments or strings and for JSON that is no object, like `ReflectWrapper`.
 
-**Completed:** v1.0.0 (2026-10-19)
+**Completed:** v1.0.0 (2026-10-20)

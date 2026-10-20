@@ -9,7 +9,7 @@ The root module and the `cli` and `cmd/gen-func-wrappers` submodules
 are released together with the same version. Until v0.7.1 the `htmlform` submodule
 was released with them, it moved to `github.com/domonda/go-htmlform`.
 
-## [1.0.0] - 2026-10-19
+## [1.0.0] - 2026-10-20
 
 First stable release: the APIs of all modules and the code generated
 by `gen-func-wrappers` are now covered by semantic versioning.
@@ -209,7 +209,9 @@ by `gen-func-wrappers` are now covered by semantic versioning.
   the results with their strings for the results handlers after them.
 - The default `TimeFormats` parse `datetime-local` values with seconds like `2026-10-20T14:30:05`.
 - `uintptr` is scanned like the other unsigned integers instead of with `fmt.Sscan`,
-  with base prefixes like `0x10`, and `""`, `nil` and `null` scan as `0`.
+  with Go integer literal prefixes like `0x10` and a leading `0` for octal as before,
+  `""`, `nil` and `null` scan as `0`, and content after the number like `42abc`,
+  which `fmt.Sscan` ignored, is an error.
 - `httpfun.Handler` and `HandlerNoWrapper` panic again with `http.ErrAbortHandler`,
   so that net/http aborts the response, instead of answering it with 500 Internal Server Error.
 - `ScanString` and `TypeStringScanners.ScanString` return an error for non-pointer

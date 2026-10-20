@@ -36,7 +36,7 @@ The body of a 500 response is `Internal Server Error`. It includes the error tex
 | 400 Bad Request | `invalid JSON for argument "a"` | an `ErrParseArgJSON` of this function, from a custom wrapper |
 | 400 Bad Request | `invalid JSON object for arguments` | an `ErrParseArgsJSON` of this function, from a custom wrapper |
 | 400 Bad Request | `Bad Request` | the `RequestArgsFunc` failed, like for a body that is not a JSON object or a broken multipart form |
-| 413 Request Entity Too Large | `Request Entity Too Large` | the body exceeded `MaxRequestBodySize` (`RequestBodyAsArg`, `RequestBodyJSONFieldsAsArgs`) or `MaxMultipartFormSize` (`RequestMultipartFormArgs`) |
+| 413 Request Entity Too Large | `Request Entity Too Large` | the body exceeded `MaxRequestBodySize` (`RequestBodyAsArg`, `RequestBodyJSONFieldsAsArgs`) or `MaxMultipartFormSize` (`RequestMultipartFormArgs`), or the form fields of `RequestMultipartFormArgs` that aren't files exceeded the memory that `http.Request.ParseMultipartForm` allows for them |
 | any | written by the error | the `RequestArgsFunc`, the function, or a panic returned an error that implements `http.Handler`, like `httperr.Unauthorized` |
 | 404 Not Found | `Requested file not found` | the function's error wraps `os.ErrNotExist` |
 | 404 Not Found | `Requested database row not found` | the function's error wraps `sql.ErrNoRows` |
