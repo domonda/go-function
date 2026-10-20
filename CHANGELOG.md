@@ -182,6 +182,7 @@ by `gen-func-wrappers` are now covered by semantic versioning.
   `v0.0.0-20261013080339-68c5a526b805` and its new import API.
 - Dependencies updated, among them `testify` v1.11.1 → v1.12.1,
   `golang.org/x/tools` v0.48.0 → v0.52.0 and `golang.org/x/mod` v0.38.0 → v0.42.0.
+  `htmlform` requires `github.com/ungerik/go-fs` v0.1.0, its first tagged version, instead of a pseudo-version.
 
 ### Fixed
 
