@@ -40,7 +40,7 @@ with their own go.mod file.
 
 Command-line flags:
 
-	-replaceForJSON string
+	-replaceForJSON value
 	    Comma-separated list of InterfaceType:ImplementationType mappings
 	    used for JSON unmarshalling. This is useful when an interface type
 	    cannot be directly unmarshalled from JSON.
@@ -62,7 +62,7 @@ Command-line flags:
 	    Print detailed information about what's happening during generation.
 
 	-print
-	    Print generated code to stdout instead of writing to files.
+	    Print the rewritten files to stdout instead of writing them.
 	    Useful for debugging and previewing changes.
 
 	-validate

@@ -67,9 +67,11 @@ func (f ErrorHandlerFunc) HandleError(err error, response http.ResponseWriter, r
 // or a wrapper embedded in it, like by a decorating struct.
 // So a parse error of another wrapper that the wrapped function called
 // and returned is an error of the server, also if it was returned unwrapped.
-// A wrapper behind a function adapter like function.CallWithNamedStringsWrapperFunc
-// or in a named struct field can't be recognized, so its invalid argument values
-// are answered as errors of the server: embed the wrapper to keep 400 Bad Request.
+// A wrapper behind a function adapter like function.CallWithNamedStringsWrapperFunc,
+// in a named struct field, embedded more than maxWrapperEmbeddingDepth levels deep,
+// or a value of a type that can't be compared with ==, like a struct with a slice field,
+// can't be recognized, so its invalid argument values are answered as errors
+// of the server: embed the wrapper or pass a pointer to keep 400 Bad Request.
 //
 // Example:
 //
@@ -277,8 +279,13 @@ func isWrapperOf(errFunc, wrapper any) bool {
 	return isValueOf(reflect.ValueOf(errFunc), reflect.ValueOf(wrapper), 0)
 }
 
+// maxWrapperEmbeddingDepth limits the pointers, interfaces, and embedded fields
+// that isWrapperOf follows from the passed wrapper to the wrapper of an error,
+// because a recursive type can embed itself through pointers without end.
+const maxWrapperEmbeddingDepth = 8
+
 func isValueOf(errFunc, wrapper reflect.Value, depth int) bool {
-	if !errFunc.IsValid() || !wrapper.IsValid() || depth > 8 {
+	if !errFunc.IsValid() || !wrapper.IsValid() || depth > maxWrapperEmbeddingDepth {
 		return false
 	}
 	if errFunc.Type() == wrapper.Type() && errFunc.Comparable() && wrapper.Comparable() && errFunc.Equal(wrapper) {

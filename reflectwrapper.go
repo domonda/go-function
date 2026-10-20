@@ -25,7 +25,9 @@ import (
 // of type context.Context then "ctx" is assumed
 // as argument name in case no name has been passed.
 // The names must not be empty and must be unique,
-// except "_" for arguments that are not called by name, like in Go.
+// except "_" for arguments that are not passed by name, like in Go:
+// like generated wrappers, CallWithStrings, CallWithNamedStrings,
+// and CallWithJSON pass their zero value, Call passes its arg.
 // An error is returned for a nil function, also of a function type.
 func ReflectWrapper(function any, argNames ...string) (Wrapper, error) {
 	return newReflectWrapper(function, argNames)
@@ -265,8 +267,10 @@ func (f *reflectWrapper) CallWithStrings(ctx context.Context, strs ...string) (r
 	}
 	for i := offs; i < len(in); i++ {
 		argType := f.funcType.In(i)
-		if i-offs >= len(strs) {
-			// Pass default value if not enough strs
+		if i-offs >= len(strs) || f.argNames[i] == "_" {
+			// Pass default value if not enough strs,
+			// and like generated wrappers for an argument named "_",
+			// whose string is not used
 			in[i] = reflect.Zero(argType)
 			continue
 		}
@@ -314,7 +318,8 @@ func (f *reflectWrapper) CallWithNamedStrings(ctx context.Context, strs map[stri
 	for i := offs; i < len(in); i++ {
 		argType := f.funcType.In(i)
 		argName := f.argNames[i]
-		if str, ok := strs[argName]; ok {
+		// Like generated wrappers, an argument named "_" is not passed by name
+		if str, ok := strs[argName]; ok && argName != "_" {
 			if argType == typeOfAny {
 				// Pass string directly for argument of type any
 				in[i] = reflect.ValueOf(str)
@@ -347,7 +352,8 @@ func (f *reflectWrapper) CallWithJSON(ctx context.Context, argsJSON []byte) (res
 		argType := f.funcType.In(i)
 		destPtr := reflect.New(argType)
 		argName := f.argNames[i]
-		if arg, ok := args[argName]; ok {
+		// Like generated wrappers, an argument named "_" is not passed by name
+		if arg, ok := args[argName]; ok && argName != "_" {
 			if argType == typeOfError {
 				// json.Unmarshal does not work for errors
 				// so unmarshal string and create error from it

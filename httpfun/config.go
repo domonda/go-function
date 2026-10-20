@@ -20,7 +20,8 @@ var (
 	// When true, panics are caught and converted to errors
 	// for the error handlers of the Handler and HandleError,
 	// except http.ErrAbortHandler, which aborts the response like without recovering.
-	// When false, panics will crash the server (useful for debugging).
+	// When false, net/http recovers the panic, logs it with its stack trace,
+	// and aborts the response, while the server keeps running (useful for debugging).
 	// Default: true
 	//
 	// WARNING: This is a global setting. Set it once during initialization.

@@ -198,14 +198,16 @@ Listening on :8080
 In a second terminal:
 
 ```bash
-curl 'localhost:8080/convert?degrees=100&to=F'
-curl -X POST localhost:8080/convert -d '{"degrees": 98.6, "to": "C"}'
+curl -w '\n' 'localhost:8080/convert?degrees=100&to=F'
+curl -w '\n' -X POST localhost:8080/convert -d '{"degrees": 98.6, "to": "C"}'
 ```
 
 ```
 212
 37
 ```
+
+The JSON responses have no trailing newline, `-w '\n'` prints one after each.
 
 An invalid argument gets `400 Bad Request` naming the argument, without echoing the value:
 

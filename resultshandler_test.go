@@ -231,6 +231,12 @@ func TestPrintStructSliceAsTable(t *testing.T) {
 			results: []any{nil},
 			wantErr: true,
 		},
+		{
+			// A table without columns would print only the delimiters
+			name:    "struct without exported fields",
+			results: []any{[]struct{ a, b int }{{1, 2}}},
+			wantErr: true,
+		},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
@@ -254,26 +260,43 @@ func TestPrintHandlers_DontModifyResults(t *testing.T) {
 	// All results handlers get the same results slice,
 	// so a print handler must not replace the results with their strings
 	// for the handlers after it
-	var buf bytes.Buffer
-	handlers := map[string]ResultsHandler{
-		"PrintTo":             PrintTo(&buf),
-		"PrintlnTo":           PrintlnTo(&buf),
-		"PrintlnWithPrefixTo": PrintlnWithPrefixTo("prefix", &buf),
-		"LogTo":               LogTo(log.New(&buf, "", 0)),
-		"LogWithPrefixTo":     LogWithPrefixTo("prefix", log.New(&buf, "", 0)),
+	type printHandler struct {
+		handler ResultsHandler
+		output  func() string
 	}
-	for name, printHandler := range handlers {
+	toBuffer := func(newHandler func(*bytes.Buffer) ResultsHandler) func() printHandler {
+		return func() printHandler {
+			var buf bytes.Buffer
+			return printHandler{handler: newHandler(&buf), output: buf.String}
+		}
+	}
+	handlers := map[string]func() printHandler{
+		"PrintTo":             toBuffer(func(buf *bytes.Buffer) ResultsHandler { return PrintTo(buf) }),
+		"PrintlnTo":           toBuffer(func(buf *bytes.Buffer) ResultsHandler { return PrintlnTo(buf) }),
+		"PrintlnWithPrefixTo": toBuffer(func(buf *bytes.Buffer) ResultsHandler { return PrintlnWithPrefixTo("prefix", buf) }),
+		"LogTo":               toBuffer(func(buf *bytes.Buffer) ResultsHandler { return LogTo(log.New(buf, "", 0)) }),
+		"LogWithPrefixTo":     toBuffer(func(buf *bytes.Buffer) ResultsHandler { return LogWithPrefixTo("prefix", log.New(buf, "", 0)) }),
+		// The handlers printing to os.Stdout get their output captured
+		"Println":           func() printHandler { return printHandler{handler: Println} },
+		"PrintlnWithPrefix": func() printHandler { return printHandler{handler: PrintlnWithPrefix("prefix")} },
+	}
+	for name, newPrintHandler := range handlers {
 		t.Run(name, func(t *testing.T) {
+			p := newPrintHandler()
 			var got []any
 			record := ResultsHandlerFunc(func(_ context.Context, results []any, resultErr error) error {
 				got = results
 				return resultErr
 			})
-			f := NewStringArgsFunc(MustReflectWrapper(func() ([]int, float64) { return []int{1, 2}, 0.5 }), printHandler, record)
+			f := NewStringArgsFunc(MustReflectWrapper(func() ([]int, float64) { return []int{1, 2}, 0.5 }), p.handler, record)
 
-			require.NoError(t, f(context.Background()))
+			stdout := captureStdout(t, func() { require.NoError(t, f(context.Background())) })
 			assert.Equal(t, []any{[]int{1, 2}, 0.5}, got)
-			assert.NotEmpty(t, buf.String())
+			output := stdout
+			if p.output != nil {
+				output = p.output()
+			}
+			assert.Contains(t, output, "0.5", "the handler printed the results")
 		})
 	}
 }

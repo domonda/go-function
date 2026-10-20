@@ -751,6 +751,31 @@ var (
 			wantContains: []string{"err = json.Unmarshal(argsJSON, new(map[string]json.RawMessage))", "function.NewErrParseArgsJSON(err, f)"},
 		},
 		{
+			// Like ReflectWrapper, String writes empty interfaces as any,
+			// also in results and composite types, so that the generated
+			// and the reflected wrapper of a function describe it the same way
+			name: "empty interfaces in signature",
+			files: map[string]string{"test.go": `package testpkg
+
+import "github.com/domonda/go-function"
+
+func Loose(m map[string]interface{}, xs ...interface{}) (interface{}, []interface{}, error) {
+	return nil, nil, nil
+}
+
+func One() interface{} { return nil }
+
+var (
+	looseWrapper = function.WrapperTODO(Loose)
+	oneWrapper   = function.WrapperTODO(One)
+)
+`},
+			wantContains: []string{
+				`return "testpkg.Loose(m map[string]any, xs ...any) (any, []any, error)"`,
+				`return "testpkg.One() any"`,
+			},
+		},
+		{
 			name: "CallWrapper",
 			files: map[string]string{"test.go": `package testpkg
 
@@ -1083,14 +1108,15 @@ var htmlWrapper = function.WrapperTODO(HTML)
 			wantContains: []string{"\t\"text/template\"\n", "template2 \"html/template\"", "reflect.TypeFor[*template2.Template]()"},
 		},
 		{
-			// The generated code imports the standard library package context
+			// The generated code imports the standard library package context,
+			// a context that is not the first argument is a normal argument
 			name: "parameter type package named like package of generated code",
 			files: map[string]string{
 				"types.go": `package testpkg
 
 import "golang.org/x/net/context"
 
-func Deprecated(ctx context.Context, n int) {}
+func Deprecated(n int, ctx context.Context) {}
 `,
 				"test.go": `package testpkg
 
@@ -1099,6 +1125,49 @@ import "github.com/domonda/go-function"
 var deprecatedWrapper = function.WrapperTODO(Deprecated)
 `},
 			wantContains: []string{"context2 \"golang.org/x/net/context\"", "reflect.TypeFor[context2.Context]()"},
+		},
+		{
+			// The generated code replaces a TODO declaration with its doc comment
+			// and a wrapper spec of a var block with its trailing comment,
+			// a kept comment would be above the generated comment
+			// that the second run recognizes the generated wrapper by
+			name: "TODO var with doc comment and trailing comment in var block",
+			files: map[string]string{"test.go": `package testpkg
+
+import "github.com/domonda/go-function"
+
+func Mul(a, b int) int { return a * b }
+
+// mulWrapper is documented by the user
+var mulWrapper = function.WrapperTODO(Mul)
+
+var (
+	x          = 1
+	mul2Wrapper = function.WrapperTODO(Mul) // trailing
+)
+`},
+			wantContains:    []string{"// mulWrapper wraps Mul as function.Wrapper (generated code)", "var mul2Wrapper mul2WrapperT", "x = 1"},
+			wantNotContains: []string{"documented by the user", "// trailing"},
+		},
+		{
+			// golang.org/x/net/context.Context is an alias of context.Context,
+			// so like ReflectWrapper the generated wrapper passes the context
+			// of the Call methods instead of a nil context
+			name: "first argument of type golang.org/x/net/context.Context",
+			files: map[string]string{
+				"types.go": `package testpkg
+
+import "golang.org/x/net/context"
+
+func Legacy(ctx context.Context, n int) {}
+`,
+				"test.go": `package testpkg
+
+import "github.com/domonda/go-function"
+
+var legacyWrapper = function.WrapperTODO(Legacy)
+`},
+			wantContains: []string{"ContextArg() bool  { return true }", "Legacy(ctx, a.n)"},
 		},
 		{
 			// The receiver f and the local variable a of the generated
@@ -1344,6 +1413,21 @@ func TestRewriteAstFileSource_UnhandledDeclarations(t *testing.T) {
 			source:               "var a = function.WrapperTODO(Add)\n",
 			jsonTypeReplacements: map[string]string{"int": "unknownpkg.Int"},
 			wantErr:              "unknownpkg",
+		},
+		{
+			name:    "TODO call without function",
+			source:  "var a = function.WrapperTODO()\n",
+			wantErr: "single argument",
+		},
+		{
+			name:    "TODO call with two functions",
+			source:  "var a = function.WrapperTODO(Add, Add)\n",
+			wantErr: "single argument",
+		},
+		{
+			name:    "wrapper declared twice",
+			source:  "var a = function.WrapperTODO(Add)\n\nvar a = function.WrapperTODO(Add)\n",
+			wantErr: "declared twice",
 		},
 	}
 	for _, tt := range tests {

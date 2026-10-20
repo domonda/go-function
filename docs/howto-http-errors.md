@@ -73,7 +73,7 @@ GET /convert: can't parse string value of argument 'degrees' of function main.Co
 
 ### 3. Change the responses of every endpoint, including forms
 
-`htmlform.Handler` takes no error handlers. It passes errors to its results writer and then to the global `httpfun.HandleError`, which also answers every error that the handlers of an `httpfun.Handler` didn't. Replace it once at program start, before serving requests, and delegate to `httpfun.DefaultHandleError` for everything else:
+`htmlform.Handler` takes no error handlers. It passes errors to its results writer and then to the global `httpfun.HandleError`, which also answers every error that the handlers of an `httpfun.Handler` didn't. The responses that `htmlform.Handler` writes for the form submission itself, like 403 for a cross-origin POST, 405, 413, and 400 for an invalid multipart form, don't go through `HandleError`. Replace it once at program start, before serving requests, and delegate to `httpfun.DefaultHandleError` for everything else:
 
 ```go
 httpfun.HandleError = func(err error, w http.ResponseWriter, r *http.Request) bool {
@@ -100,7 +100,7 @@ import "github.com/ungerik/go-httpx/httperr"
 return 0, httperr.Errorf(http.StatusUnprocessableEntity, "unknown unit %q, use C or F", to)
 ```
 
-`GET /convert?degrees=1&to=K` now answers `422` with `unknown unit "K", use C or F`, through `httpfun.Handler` and `htmlform.Handler`, without any error handler. Predefined values like `httperr.NotFound`, `httperr.Forbidden`, and `httperr.Unauthorized` work the same way.
+`GET /convert?degrees=1&to=K` now answers `422` with `unknown unit "K", use C or F` through `httpfun.Handler`, and so does a form POST through `htmlform.Handler`, without any error handler. Predefined values like `httperr.NotFound`, `httperr.Forbidden`, and `httperr.Unauthorized` work the same way.
 
 This ties the function to HTTP. To keep it free of HTTP, map a sentinel error globally instead:
 

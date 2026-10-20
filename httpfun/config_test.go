@@ -79,6 +79,8 @@ func TestDefaultHandleError_delegation(t *testing.T) {
 	assert.Equal(t, "invalid value for argument \"a\"\n", response.Body.String())
 	require.Len(t, logged, 1, "the custom HandleError is called")
 	assert.ErrorAs(t, logged[0], new(function.ErrParseArgString), "the logged error keeps the details")
+	// The message of the logged error has the cause that the response leaves out
+	assert.ErrorContains(t, logged[0], `can't parse "five" as int`)
 }
 
 func TestDefaultHandleError_requestBodyTooLarge(t *testing.T) {

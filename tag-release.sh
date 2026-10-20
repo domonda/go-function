@@ -52,10 +52,14 @@ if [ -z "${1:-}" ]; then
     echo "at a clean HEAD that equals origin/$RELEASE_BRANCH."
     echo "The version must match the VERSION file."
     echo ""
-    echo "Examples:"
-    echo "  $0 v0.99.1               # Creates v0.99.1, cli/v0.99.1, cmd/gen-func-wrappers/v0.99.1"
-    echo "  $0 v0.99.1 \"bug fixes\"   # Same with custom message"
-    echo "  $0 v1.0.0-beta1          # Pre-release version"
+    EXAMPLE_VERSION="${VERSION_FILE_CONTENT:-v1.2.3}"
+    if [ -n "$VERSION_FILE_CONTENT" ]; then
+        echo "Examples for the VERSION file $EXAMPLE_VERSION:"
+    else
+        echo "Examples:"
+    fi
+    echo "  $0 $EXAMPLE_VERSION               # Creates $EXAMPLE_VERSION, cli/$EXAMPLE_VERSION, cmd/gen-func-wrappers/$EXAMPLE_VERSION"
+    echo "  $0 $EXAMPLE_VERSION \"bug fixes\"   # Same with custom message"
     echo ""
     echo "Version format: vMAJOR.MINOR.PATCH[-PRERELEASE]"
     exit 0

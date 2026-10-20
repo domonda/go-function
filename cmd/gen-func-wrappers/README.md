@@ -290,7 +290,7 @@ Every path can be a file, a directory, or a directory followed by `/...` to proc
 ### Options
 
 - `-verbose` - Print detailed information about processing
-- `-print` - Print generated code to stdout instead of modifying files
+- `-print` - Print the rewritten files to stdout instead of modifying them
 - `-validate` - Check for missing or outdated wrappers without modifying files, exits with code 1 if any are found, and with code 2 for any other error, like a file that doesn't parse
 - `-replaceForJSON=interface:concrete` - Replace interface types with concrete types for JSON unmarshaling, comma separated and repeatable
 - `-localImports=prefixes` - Comma separated import path prefixes that are grouped as "local" imports, detected from the `go.mod` file of every path if not specified

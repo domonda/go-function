@@ -364,6 +364,21 @@ func TestResultsWriters_replaceContentType(t *testing.T) {
 			err := writer.WriteResults([]any{[]byte("x")}, nil, response, request)
 			require.NoError(t, err)
 			assert.Len(t, response.Header().Values("Content-Type"), 1)
+			assert.NotEqual(t, "application/octet-stream", response.Header().Get("Content-Type"))
+		})
+	}
+
+	// The static writers also replace it as http.Handler
+	handlers := map[string]http.Handler{
+		"text/html; charset=utf-8":  httpfun.RespondStaticHTML("<p>x</p>"),
+		"text/plain; charset=utf-8": httpfun.RespondStaticPlaintext("x"),
+	}
+	for want, handler := range handlers {
+		t.Run(want, func(t *testing.T) {
+			response := httptest.NewRecorder()
+			response.Header().Set("Content-Type", "application/octet-stream")
+			handler.ServeHTTP(response, httptest.NewRequest(http.MethodGet, "/", nil))
+			assert.Equal(t, []string{want}, response.Header().Values("Content-Type"))
 		})
 	}
 }

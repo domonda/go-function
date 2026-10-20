@@ -91,12 +91,13 @@ Error text often contains details an attacker can use: file paths, SQL, internal
 
 - 400 responses for invalid arguments name the argument but not its value or the parse error: `invalid value for argument "degrees"`.
 - 500 responses say `Internal Server Error` and nothing else, unless `httperr.DebugShowInternalErrorsInResponse` is true. Leave it false in production.
-- `ErrParseArgString`, `ErrParseArgJSON`, and `ErrParseArgsJSON` don't add the value or the JSON input to their `Error()` text. The scanner error they wrap usually quotes the value once, like `can't parse "hot" as float`, so their text belongs in logs, not in responses.
+- `ErrParseArgString`, `ErrParseArgJSON`, and `ErrParseArgsJSON` don't add the value or the JSON input to their `Error()` text. The scanner error they wrap usually quotes the value once, like `can't parse "hot" as float`, at most its first 100 bytes for large values like request bodies, so their text belongs in logs, not in responses.
 - `htmlform` answers a broken multipart body with `invalid multipart form`, because the parser's error can contain the server's network address.
 
 Exceptions you control:
 
 - **`htmlform` validator errors are shown to the client** as `invalid argument "email": <your error text>`. Write messages for users, without internal details.
+- **`httpfun.RespondJSONObject` with a key for the error writes the error text** into a `200 OK` response, like `{"result": null, "error": "..."}`. Only use it for functions whose errors are meant for clients.
 - **Custom error handlers decide what they write.** A `HandleError` or `ErrorHandler` that writes `err.Error()` shows internal details again. Log the error and delegate to `httpfun.DefaultHandleError`, or write a fixed message.
 - **`httpfun.RespondHTML` doesn't escape results.** A function whose result contains user input must return escaped HTML, like from `html/template`. The form title and field labels of `htmlform` are escaped by its template.
 

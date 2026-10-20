@@ -15,6 +15,8 @@ import (
 // the base name of os.Args[0]. Call it at the start of main:
 // it completes the commands and exits if the shell requests a completion
 // with the COMP_LINE and COMP_POINT environment variables,
+// installs or uninstalls the completion in the shell configuration and exits
+// for COMP_INSTALL=1 or COMP_UNINSTALL=1,
 // and else returns so the program can dispatch the command.
 func CompleteStringArgsDispatcher(disp *StringArgsDispatcher) {
 	commandName := filepath.Base(os.Args[0])

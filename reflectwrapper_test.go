@@ -657,3 +657,34 @@ func TestReflectWrapper_InvalidFunctionOrNames(t *testing.T) {
 	require.NoError(t, err)
 	assert.Equal(t, []any{3}, results)
 }
+
+func TestReflectWrapper_BlankArgs(t *testing.T) {
+	// Like generated wrappers, arguments named "_" get their zero value
+	// from CallWithStrings, CallWithNamedStrings, and CallWithJSON,
+	// so a client can't set them by passing "_" as name or JSON key,
+	// and Call passes their args like for other arguments
+	var got []bool
+	w := MustReflectWrapper(func(hidden bool, name string, _ ...int) string {
+		got = append(got, hidden)
+		return name
+	}, "_", "name", "_")
+	ctx := context.Background()
+
+	results, err := w.CallWithStrings(ctx, "notabool", "x", "notanint")
+	require.NoError(t, err)
+	assert.Equal(t, []any{"x"}, results)
+
+	results, err = w.CallWithNamedStrings(ctx, map[string]string{"_": "true", "name": "x"})
+	require.NoError(t, err)
+	assert.Equal(t, []any{"x"}, results)
+
+	results, err = w.CallWithJSON(ctx, []byte(`{"_":true,"name":"x"}`))
+	require.NoError(t, err)
+	assert.Equal(t, []any{"x"}, results)
+
+	results, err = w.Call(ctx, []any{true, "x"})
+	require.NoError(t, err)
+	assert.Equal(t, []any{"x"}, results)
+
+	assert.Equal(t, []bool{false, false, false, true}, got)
+}

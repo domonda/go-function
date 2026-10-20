@@ -1225,6 +1225,46 @@ func TestScanString_RegisteredScannerForNestedValues(t *testing.T) {
 	})
 }
 
+func TestScanString_customDefaultScannerForNestedValues(t *testing.T) {
+	// Without registered scanners, nested values are scanned directly
+	// by DefaultScanString only if it is the default scanner of StringScanners,
+	// another default scanner still gets the slice elements
+	orig := StringScanners
+	t.Cleanup(func() { StringScanners = orig })
+	var scanned []string
+	StringScanners = NewTypeStringScanners(StringScannerFunc(func(sourceStr string, destPtr any) error {
+		scanned = append(scanned, sourceStr)
+		return DefaultScanString(sourceStr, destPtr)
+	}))
+
+	var ints []int
+	require.NoError(t, ScanString("[1,2]", &ints))
+	assert.Equal(t, []int{1, 2}, ints)
+	assert.Equal(t, []string{"[1,2]", "1", "2"}, scanned)
+}
+
+// BenchmarkScanString_intSlice measures scanning the elements of a slice literal,
+// which the default StringScanners scans without looking up scanners per element
+func BenchmarkScanString_intSlice(b *testing.B) {
+	var sb strings.Builder
+	sb.WriteByte('[')
+	for i := range 1000 {
+		if i > 0 {
+			sb.WriteByte(',')
+		}
+		sb.WriteString(strconv.Itoa(i))
+	}
+	sb.WriteByte(']')
+	src := sb.String()
+	b.ReportAllocs()
+	for b.Loop() {
+		var v []int
+		if err := ScanString(src, &v); err != nil {
+			b.Fatal(err)
+		}
+	}
+}
+
 func TestDefaultScanString_WithoutStringScanners(t *testing.T) {
 	// DefaultScanString scans nested values with StringScanners,
 	// but must keep working on its own if StringScanners is nil
@@ -1397,6 +1437,48 @@ func TestScanString_numberErrorsQuoteStringOnce(t *testing.T) {
 	var d time.Duration
 	err = ScanString("abc", &d)
 	assert.EqualError(t, err, `can't parse time.Duration: time: invalid duration "abc"`)
+}
+
+func TestScanString_errorsQuoteBoundedValue(t *testing.T) {
+	// Errors quote the scanned string, which can be a large untrusted input
+	// like an HTTP request body up to httpfun.MaxRequestBodySize,
+	// so they only quote its beginning instead of a copy that needs
+	// several times the memory of the input
+	long := strings.Repeat("\x01", 1<<20)
+	tests := []struct {
+		name string
+		src  string
+		dest any
+	}{
+		{name: "int", src: long, dest: new(int)},
+		{name: "float", src: long, dest: new(float64)},
+		{name: "time", src: long, dest: new(time.Time)},
+		{name: "malformed slice literal", src: "[" + long, dest: new([]int)},
+		{name: "empty element", src: "[," + long + "]", dest: new([]int)},
+		{name: "content after closing bracket", src: "[1]" + long + "]", dest: new([]int)},
+		{name: "unterminated string", src: `["` + long + "]", dest: new([]int)},
+		{name: "array length", src: "[" + long + "]", dest: new([2]string)},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			err := ScanString(tt.src, tt.dest)
+			require.Error(t, err)
+			assert.Less(t, len(err.Error()), 2000, "error must not quote the whole value")
+			assert.Contains(t, err.Error(), fmt.Sprintf("... (%d bytes)", len(tt.src)), "error names the length of the value")
+		})
+	}
+
+	// Short values are quoted completely
+	err := ScanString("[1,,2]", new([]int))
+	assert.EqualError(t, err, `slice value "[1,,2]" has an empty element`)
+}
+
+func Test_quoteForError(t *testing.T) {
+	assert.Equal(t, `"abc"`, quoteForError("abc"))
+	assert.Equal(t, strconv.Quote(strings.Repeat("a", maxErrorValueLen)), quoteForError(strings.Repeat("a", maxErrorValueLen)))
+	// A multi-byte character at the limit is not cut into invalid bytes
+	long := strings.Repeat("a", maxErrorValueLen-1) + "ä" + "b"
+	assert.Equal(t, `"`+strings.Repeat("a", maxErrorValueLen-1)+`"... (102 bytes)`, quoteForError(long))
 }
 
 // settableTime has a Set(time.Time) method like nullable.Time of go-types

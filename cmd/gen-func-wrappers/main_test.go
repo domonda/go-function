@@ -170,3 +170,31 @@ func TestRewritePaths_ReportsAllOutdatedFiles(t *testing.T) {
 	assert.Contains(t, stderr.String(), "a.go")
 	assert.Contains(t, stderr.String(), "b.go")
 }
+
+// TestRewritePaths_CurrentDir tests the paths relative to the working directory,
+// the default without arguments and the documented `go tool gen-func-wrappers ./...`,
+// of which only "./..." also rewrites the packages in subdirectories.
+func TestRewritePaths_CurrentDir(t *testing.T) {
+	for _, args := range [][]string{nil, {"."}, {"./..."}} {
+		t.Run(strings.Join(args, " "), func(t *testing.T) {
+			dir := t.TempDir()
+			writeFiles(t, dir, map[string]string{
+				"p.go":     "package p\n\nimport \"github.com/domonda/go-function\"\n\nvar gWrapper = function.WrapperTODO(G)\n\nfunc G() {}\n",
+				"sub/s.go": "package sub\n\nimport \"github.com/domonda/go-function\"\n\nvar fWrapper = function.WrapperTODO(F)\n\nfunc F() {}\n",
+			})
+			t.Chdir(dir)
+			setFlags(t, false, false)
+			var stdout, stderr bytes.Buffer
+			exitCode := rewritePaths(args, nil, &stdout, &stderr)
+			require.Equal(t, 0, exitCode, stderr.String())
+
+			p, err := os.ReadFile(filepath.Join(dir, "p.go"))
+			require.NoError(t, err)
+			assert.NotContains(t, string(p), "WrapperTODO", "package in the working directory is rewritten")
+			s, err := os.ReadFile(filepath.Join(dir, "sub", "s.go"))
+			require.NoError(t, err)
+			recursive := len(args) == 1 && args[0] == "./..."
+			assert.Equal(t, recursive, !strings.Contains(string(s), "WrapperTODO"), "only ./... rewrites subdirectories")
+		})
+	}
+}

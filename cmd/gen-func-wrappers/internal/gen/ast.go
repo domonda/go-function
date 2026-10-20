@@ -163,7 +163,9 @@ func unqualifiedIdents(expr ast.Expr, idents map[string]struct{}) {
 
 // isContextType reports if the type expression expr of a parameter
 // declared in file is context.Context, also if file imports
-// the context package with another name.
+// the context package with another name, or golang.org/x/net/context
+// whose Context is an alias of context.Context,
+// so that ReflectWrapper also sees it as context.Context.
 func isContextType(expr ast.Expr, file *ast.File) bool {
 	sel, ok := expr.(*ast.SelectorExpr)
 	if !ok || sel.Sel.Name != "Context" {
@@ -175,7 +177,7 @@ func isContextType(expr ast.Expr, file *ast.File) bool {
 	}
 	for _, imp := range file.Imports {
 		path, err := strconv.Unquote(imp.Path.Value)
-		if err != nil || path != "context" {
+		if err != nil || path != "context" && path != "golang.org/x/net/context" {
 			continue
 		}
 		name := "context"

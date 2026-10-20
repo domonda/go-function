@@ -116,6 +116,12 @@ func (s *TypeStringScanners) ScanString(sourceStr string, destPtr any) error {
 	return ErrTypeNotSupported
 }
 
+// hasTypeInterfaceOrKindScanners reports if s has scanners
+// besides its default scanner.
+func (s *TypeStringScanners) hasTypeInterfaceOrKindScanners() bool {
+	return len(s.types) > 0 || len(s.interfaces) > 0 || len(s.kinds) > 0
+}
+
 // compareInterfaceTypes orders interface types
 // by their reflect.Type.String() and PkgPath().
 func compareInterfaceTypes(a, b reflect.Type) int {

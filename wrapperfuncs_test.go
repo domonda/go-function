@@ -106,11 +106,24 @@ func TestArgsFuncs_HandlerErrorStopsHandlers(t *testing.T) {
 		t.Error("handler after failing handler must not be called")
 		return nil
 	})
-	var err error
-	require.NotPanics(t, func() {
-		err = NewStringArgsFunc(failingFunc, failingHandler, unreachableHandler)(context.Background())
-	})
-	assert.Equal(t, handlerErr, err)
+	ctx := context.Background()
+	for name, call := range map[string]func() error{
+		"NewStringArgsFunc": func() error {
+			return NewStringArgsFunc(failingFunc, failingHandler, unreachableHandler)(ctx)
+		},
+		"NewNamedStringArgsFunc": func() error {
+			return NewNamedStringArgsFunc(failingFunc, failingHandler, unreachableHandler)(ctx, nil)
+		},
+		"NewJSONArgsFunc": func() error {
+			return NewJSONArgsFunc(failingFunc, failingHandler, unreachableHandler)(ctx, []byte(`{}`))
+		},
+	} {
+		t.Run(name, func(t *testing.T) {
+			var err error
+			require.NotPanics(t, func() { err = call() })
+			assert.Equal(t, handlerErr, err)
+		})
+	}
 }
 
 func TestNewJSONArgsFunc(t *testing.T) {

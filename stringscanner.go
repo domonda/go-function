@@ -97,7 +97,8 @@ func (f StringScannerFunc) ScanString(sourceStr string, destPtr any) error {
 // Special string values:
 //   - Empty string, "nil", or "null" are treated as zero/nil values
 //     (except for string kinds and []byte, which keep "nil" and "null" as text,
-//     and encoding.TextUnmarshaler and json.Unmarshaler)
+//     encoding.TextUnmarshaler and json.Unmarshaler, and types
+//     like complex numbers that are scanned with fmt.Sscan as last resort)
 //   - Whitespace is trimmed for most types
 //     (except string, []byte, and encoding.TextUnmarshaler)
 //
@@ -212,7 +213,7 @@ func scanString(sourceStr string, destVal reflect.Value, explicitStr bool) (err 
 				return nil
 			}
 		}
-		return fmt.Errorf("can't parse %q as time.Time using formats %#v", trimmedSrc, TimeFormats)
+		return fmt.Errorf("can't parse %s as time.Time using formats %#v", quoteForError(trimmedSrc), TimeFormats)
 
 	case interface{ Set(time.Time) }:
 		if nilSrc {
@@ -226,7 +227,7 @@ func scanString(sourceStr string, destVal reflect.Value, explicitStr bool) (err 
 				return nil
 			}
 		}
-		return fmt.Errorf("can't parse %q as time.Time using formats %#v", trimmedSrc, TimeFormats)
+		return fmt.Errorf("can't parse %s as time.Time using formats %#v", quoteForError(trimmedSrc), TimeFormats)
 
 	case *time.Duration:
 		if nilSrc {
@@ -254,7 +255,7 @@ func scanString(sourceStr string, destVal reflect.Value, explicitStr bool) (err 
 			// then escape it as JSON string
 			source, err = json.Marshal(sourceStr)
 			if err != nil {
-				return fmt.Errorf("can't marshal %q as JSON string: %w", sourceStr, err)
+				return fmt.Errorf("can't marshal %s as JSON string: %w", quoteForError(sourceStr), err)
 			}
 			return dest.UnmarshalJSON(source)
 		}
@@ -322,7 +323,7 @@ func scanString(sourceStr string, destVal reflect.Value, explicitStr bool) (err 
 		}
 		b, err := strconv.ParseBool(trimmedSrc)
 		if err != nil {
-			return fmt.Errorf("can't parse %q as bool because of: %w", trimmedSrc, numErrorReason(err))
+			return fmt.Errorf("can't parse %s as bool because of: %w", quoteForError(trimmedSrc), numErrorReason(err))
 		}
 		destVal.SetBool(b)
 		return nil
@@ -334,7 +335,7 @@ func scanString(sourceStr string, destVal reflect.Value, explicitStr bool) (err 
 		}
 		i, err := strconv.ParseInt(trimmedSrc, 10, destVal.Type().Bits())
 		if err != nil {
-			return fmt.Errorf("can't parse %q as int because of: %w", trimmedSrc, numErrorReason(err))
+			return fmt.Errorf("can't parse %s as int because of: %w", quoteForError(trimmedSrc), numErrorReason(err))
 		}
 		destVal.SetInt(i)
 		return nil
@@ -346,7 +347,7 @@ func scanString(sourceStr string, destVal reflect.Value, explicitStr bool) (err 
 		}
 		u, err := strconv.ParseUint(trimmedSrc, 10, destVal.Type().Bits())
 		if err != nil {
-			return fmt.Errorf("can't parse %q as uint because of: %w", trimmedSrc, numErrorReason(err))
+			return fmt.Errorf("can't parse %s as uint because of: %w", quoteForError(trimmedSrc), numErrorReason(err))
 		}
 		destVal.SetUint(u)
 		return nil
@@ -358,7 +359,7 @@ func scanString(sourceStr string, destVal reflect.Value, explicitStr bool) (err 
 		}
 		f, err := strconv.ParseFloat(trimmedSrc, destVal.Type().Bits())
 		if err != nil {
-			return fmt.Errorf("can't parse %q as float because of: %w", trimmedSrc, numErrorReason(err))
+			return fmt.Errorf("can't parse %s as float because of: %w", quoteForError(trimmedSrc), numErrorReason(err))
 		}
 		destVal.SetFloat(f)
 		return nil
@@ -401,7 +402,7 @@ func scanString(sourceStr string, destVal reflect.Value, explicitStr bool) (err 
 		}
 		arrayLen := destVal.Len()
 		if len(elems) != arrayLen {
-			return fmt.Errorf("array value %q needs to have %d elements, but has %d", sourceStr, arrayLen, len(elems))
+			return fmt.Errorf("array value %s needs to have %d elements, but has %d", quoteForError(sourceStr), arrayLen, len(elems))
 		}
 		for i, elem := range elems {
 			err := scanNestedString(elem, destVal.Index(i), explicit[i])
@@ -427,6 +428,28 @@ func scanString(sourceStr string, destVal reflect.Value, explicitStr bool) (err 
 	}
 
 	return nil
+}
+
+// maxErrorValueLen is the maximum number of bytes of a scanned string
+// that are quoted in an error message, because the string can be
+// a large untrusted input like an HTTP request body,
+// whose quoted copy would need several times its size.
+const maxErrorValueLen = 100
+
+// quoteForError returns s quoted like the %q verb for error messages,
+// for longer strings than maxErrorValueLen only its beginning
+// followed by "..." and the length of s.
+func quoteForError(s string) string {
+	if len(s) <= maxErrorValueLen {
+		return strconv.Quote(s)
+	}
+	// Cut at the start of a rune, so that a valid
+	// multi-byte character is not quoted as invalid bytes
+	end := maxErrorValueLen
+	for end > 0 && !utf8.RuneStart(s[end]) {
+		end--
+	}
+	return fmt.Sprintf("%s... (%d bytes)", strconv.Quote(s[:end]), len(s))
 }
 
 // numErrorReason returns the reason like strconv.ErrSyntax
@@ -456,7 +479,7 @@ func unmarshalTrimmedJSON(sourceStr, trimmedSrc string, explicitStr bool, destPt
 	if explicitStr {
 		source, err := json.Marshal(sourceStr)
 		if err != nil {
-			return fmt.Errorf("can't marshal %q as JSON string: %w", sourceStr, err)
+			return fmt.Errorf("can't marshal %s as JSON string: %w", quoteForError(sourceStr), err)
 		}
 		return json.Unmarshal(source, destPtr)
 	}
@@ -479,6 +502,14 @@ func scanNestedString(sourceStr string, destVal reflect.Value, explicitStr bool)
 	if scanners == nil {
 		return scanString(sourceStr, destVal, explicitStr)
 	}
+	if !scanners.hasTypeInterfaceOrKindScanners() {
+		// No registered scanner can match, so recurse into scanString
+		// like the default scanner of an explicitStr, and like DefaultScanString,
+		// without looking up the scanners for every element
+		if _, isDefault := scanners.defaultScanner.(defaultStringScanner); explicitStr || isDefault {
+			return scanString(sourceStr, destVal, explicitStr)
+		}
+	}
 	destPtr := destVal.Addr().Interface()
 	if explicitStr {
 		// Registered scanners get the explicit string first,
@@ -488,6 +519,15 @@ func scanNestedString(sourceStr string, destVal reflect.Value, explicitStr bool)
 		return explicitScanners.ScanString(sourceStr, destPtr)
 	}
 	return scanners.ScanString(sourceStr, destPtr)
+}
+
+// defaultStringScanner is the StringScanner of DefaultScanString
+// that the package-level StringScanners uses as default scanner,
+// so that scanNestedString can recognize it.
+type defaultStringScanner struct{}
+
+func (defaultStringScanner) ScanString(sourceStr string, destPtr any) error {
+	return DefaultScanString(sourceStr, destPtr)
 }
 
 // scanExplicitString is DefaultScanString for an explicit string value
@@ -526,7 +566,7 @@ func parseSliceLiteralOrSingle(sourceStr string, explicitStr bool) (elems []stri
 		}
 		return elems, explicit, nil
 	case hasPrefix != hasSuffix:
-		return nil, nil, fmt.Errorf("malformed slice literal %q: must be wrapped in matching '[' and ']'", sourceStr)
+		return nil, nil, fmt.Errorf("malformed slice literal %s: must be wrapped in matching '[' and ']'", quoteForError(sourceStr))
 	default:
 		return []string{sourceStr}, []bool{explicitStr}, nil
 	}
@@ -582,10 +622,10 @@ func unquoteSliceElement(field string) (str string, ok bool) {
 // Brackets containing only whitespace like "[ ]" return no fields like "[]".
 func sliceLiteralFields(sourceStr string) (fields []string, err error) {
 	if !strings.HasPrefix(sourceStr, "[") {
-		return nil, fmt.Errorf("slice value %q does not begin with '['", sourceStr)
+		return nil, fmt.Errorf("slice value %s does not begin with '['", quoteForError(sourceStr))
 	}
 	if !strings.HasSuffix(sourceStr, "]") {
-		return nil, fmt.Errorf("slice value %q does not end with ']'", sourceStr)
+		return nil, fmt.Errorf("slice value %s does not end with ']'", quoteForError(sourceStr))
 	}
 	var (
 		objectDepth  = 0  // Tracks nesting depth of {} braces
@@ -616,7 +656,7 @@ func sliceLiteralFields(sourceStr string) (fields []string, err error) {
 		case '}':
 			objectDepth--
 			if objectDepth < 0 {
-				return nil, fmt.Errorf("slice value %q has too many '}'", sourceStr)
+				return nil, fmt.Errorf("slice value %s has too many '}'", quoteForError(sourceStr))
 			}
 
 		case '[':
@@ -627,7 +667,7 @@ func sliceLiteralFields(sourceStr string) (fields []string, err error) {
 			if bracketDepth == 0 {
 				// Closing bracket of the slice literal must be the last character
 				if i != len(sourceStr)-1 {
-					return nil, fmt.Errorf("slice value %q has content after closing ']'", sourceStr)
+					return nil, fmt.Errorf("slice value %s has content after closing ']'", quoteForError(sourceStr))
 				}
 				if objectDepth == 0 {
 					field := strings.TrimSpace(sourceStr[begin:i])
@@ -636,7 +676,7 @@ func sliceLiteralFields(sourceStr string) (fields []string, err error) {
 						fields = append(fields, field)
 					case len(fields) > 0:
 						// Element after last comma is empty
-						return nil, fmt.Errorf("slice value %q has an empty element", sourceStr)
+						return nil, fmt.Errorf("slice value %s has an empty element", quoteForError(sourceStr))
 					}
 					// else only whitespace between the brackets: empty slice
 				}
@@ -646,7 +686,7 @@ func sliceLiteralFields(sourceStr string) (fields []string, err error) {
 			if objectDepth == 0 && bracketDepth == 1 {
 				field := strings.TrimSpace(sourceStr[begin:i])
 				if field == "" {
-					return nil, fmt.Errorf("slice value %q has an empty element", sourceStr)
+					return nil, fmt.Errorf("slice value %s has an empty element", quoteForError(sourceStr))
 				}
 				fields = append(fields, field)
 				// Another element follows the comma, so stop parsing
@@ -662,13 +702,13 @@ func sliceLiteralFields(sourceStr string) (fields []string, err error) {
 		}
 	}
 	if withinQuote {
-		return nil, fmt.Errorf("slice value %q has unterminated string literal", sourceStr)
+		return nil, fmt.Errorf("slice value %s has unterminated string literal", quoteForError(sourceStr))
 	}
 	if objectDepth != 0 {
-		return nil, fmt.Errorf("slice value %q has unbalanced '{}'", sourceStr)
+		return nil, fmt.Errorf("slice value %s has unbalanced '{}'", quoteForError(sourceStr))
 	}
 	if bracketDepth != 0 {
-		return nil, fmt.Errorf("slice value %q has unbalanced '[]'", sourceStr)
+		return nil, fmt.Errorf("slice value %s has unbalanced '[]'", quoteForError(sourceStr))
 	}
 	return fields, nil
 }

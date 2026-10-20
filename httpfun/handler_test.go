@@ -3,9 +3,11 @@ package httpfun_test
 import (
 	"context"
 	"errors"
+	"fmt"
 	"io/fs"
 	"net/http"
 	"net/http/httptest"
+	"net/url"
 	"os"
 	"strings"
 	"testing"
@@ -91,6 +93,17 @@ func TestHandler(t *testing.T) {
 		// A panicking function must not crash the server
 		assert.Equal(t, http.StatusInternalServerError, response.Code)
 		assert.NotContains(t, response.Body.String(), "secret")
+
+		// The recovered panic goes to the error handlers of the endpoint
+		// like an error, so that they can report it
+		errHandler := new(recordingErrHandler)
+		handler := httpfun.Handler(httpfun.RequestQueryArgs, wrapper, httpfun.RespondJSON, errHandler)
+
+		response = serve(handler, httptest.NewRequest(http.MethodGet, "/calculate?op=panic", nil))
+
+		assert.Equal(t, http.StatusTeapot, response.Code)
+		require.Len(t, errHandler.errs, 1)
+		assert.ErrorContains(t, errHandler.errs[0], "secret panic details")
 	})
 
 	t.Run("unparseable argument", func(t *testing.T) {
@@ -325,18 +338,51 @@ type decoratedWrapper struct {
 	function.Wrapper
 }
 
+// jsonArgsWrapper is a function.Wrapper that calls the CallWithJSON method
+// of the embedded wrapper with the named strings as raw JSON values
+// of an object, like a wrapper of a function that takes JSON from the request.
+type jsonArgsWrapper struct {
+	function.Wrapper
+}
+
+func (w jsonArgsWrapper) CallWithNamedStrings(ctx context.Context, args map[string]string) ([]any, error) {
+	var b strings.Builder
+	b.WriteByte('{')
+	for name, value := range args {
+		if b.Len() > 1 {
+			b.WriteByte(',')
+		}
+		fmt.Fprintf(&b, "%q:%s", name, value)
+	}
+	b.WriteByte('}')
+	return w.Wrapper.CallWithJSON(ctx, []byte(b.String()))
+}
+
 func TestHandler_requestErrorsOfWrappers(t *testing.T) {
 	// An argument parse error of the wrapper passed to Handler is an error
-	// of the request also if the wrapper is decorated or passed as pointer
+	// of the request also if the wrapper is decorated or passed as pointer,
+	// and also if it is an error of the JSON of an argument or of all arguments.
+	// The response names the argument but not its value
 	inner := function.MustReflectWrapper(func(a int) {}, "a")
-	for name, wrapper := range map[string]function.CallWithNamedStringsWrapper{
-		"decorated": decoratedWrapper{inner},
-		"pointer":   &decoratedWrapper{inner},
-	} {
-		t.Run(name, func(t *testing.T) {
-			response := serve(httpfun.Handler(httpfun.RequestQueryArgs, wrapper, httpfun.RespondJSON), httptest.NewRequest(http.MethodGet, "/?a=five", nil))
+	tests := []struct {
+		name     string
+		wrapper  function.CallWithNamedStringsWrapper
+		query    url.Values
+		wantBody string
+	}{
+		{name: "decorated", wrapper: decoratedWrapper{inner}, query: url.Values{"a": {"five"}}, wantBody: "invalid value for argument \"a\"\n"},
+		{name: "pointer", wrapper: &decoratedWrapper{inner}, query: url.Values{"a": {"five"}}, wantBody: "invalid value for argument \"a\"\n"},
+		// The JSON string "five" can't be unmarshalled as int: ErrParseArgJSON
+		{name: "JSON of argument", wrapper: jsonArgsWrapper{inner}, query: url.Values{"a": {`"five"`}}, wantBody: "invalid JSON for argument \"a\"\n"},
+		// {"a":five} is no JSON object: ErrParseArgsJSON
+		{name: "JSON of arguments", wrapper: jsonArgsWrapper{inner}, query: url.Values{"a": {"five"}}, wantBody: "invalid JSON object for arguments\n"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			response := serve(httpfun.Handler(httpfun.RequestQueryArgs, tt.wrapper, httpfun.RespondJSON), httptest.NewRequest(http.MethodGet, "/?"+tt.query.Encode(), nil))
 
 			assert.Equal(t, http.StatusBadRequest, response.Code)
+			assert.Equal(t, tt.wantBody, response.Body.String())
 		})
 	}
 }

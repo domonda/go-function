@@ -35,13 +35,15 @@ var (
 	// or array literal like [1,2,3] that is scanned from a string,
 	// because scanning allocates memory for every element and untrusted input
 	// like an HTTP request body must not make it allocate without limit.
-	// The limit applies to every literal, also to nested ones.
+	// The limit applies to every slice literal, also to nested ones,
+	// but not to the arrays in JSON objects of struct or map destinations,
+	// which encoding/json decodes.
 	// A value <= 0 disables the limit.
 	MaxSliceLiteralElements = 1 << 20
 )
 
 func init() {
-	StringScanners = NewTypeStringScanners(StringScannerFunc(DefaultScanString))
+	StringScanners = NewTypeStringScanners(defaultStringScanner{})
 }
 
 var (

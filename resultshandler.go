@@ -329,6 +329,10 @@ var PrintStructSliceAsTable ResultsHandlerFunc = func(ctx context.Context, resul
 			header = append(header, field.Name)
 			fieldIndices = append(fieldIndices, field.Index[0])
 		}
+		if len(header) == 0 {
+			// A table without columns would print only the delimiters
+			return fmt.Errorf("expected structs with exported fields, got %T for result %d", result, i)
+		}
 		rows := [][]string{header}
 
 		sliceVal := reflect.ValueOf(result)

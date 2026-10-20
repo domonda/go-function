@@ -30,7 +30,8 @@ Each method is also its own interface (`CallWrapper`, `CallWithStringsWrapper`, 
 | Untyped `nil` or JSON `null` | zero value | | | zero value |
 | Argument of type `any` | the value as passed | the string, not parsed | the string, not parsed | what `json.Unmarshal` produces, like `float64(42)` for `42` |
 | Argument of type `error` | the value as passed | `nil` for `""`, `nil`, `null`, else `errors.New` of the trimmed string | like `CallWithStrings` | a JSON string with the message, `nil` for `""` or `null` |
-| Variadic last argument `xs ...T` | one `[]T` value | every string from its position on is one element | one string, parsed as a slice literal like `[1,2]` | a JSON array |
+| Variadic last argument `xs ...T` | one `[]T` value | every string from its position on is one element | one string, parsed as a slice literal like `[1,2]`, for `...any` a JSON array like `["a","b"]` | a JSON array |
+| Argument named `_` | the value as passed | its string is not used, zero value | not passed by name, zero value | not passed by key, zero value |
 | Name comparison | | | exact, case-sensitive | exact, case-sensitive |
 | Whole input | | | a nil map passes no arguments | must be a JSON object or `null`, which counts as `{}` |
 
@@ -172,7 +173,7 @@ All handlers except `PrintlnText` and `PrintStructSliceAsTable` format results l
 | implements `fmt.GoStringer` | `GoString()` |
 | implements `fmt.Stringer` | `String()` |
 | `[]string` | elements joined with newlines |
-| `[]byte` | text if it's valid UTF-8 without control characters (except whitespace), else hex like `0x00ff` |
+| `[]byte` | text if it's valid UTF-8 without non-printable characters (except whitespace), else hex like `0x00ff` |
 | `[][]string` | padded table with `\|` between columns |
 | float, also behind pointers | up to 12 decimals, no trailing zeros: `3.14`, `212` |
 | struct, map, slice, array, also behind pointers | indented JSON |

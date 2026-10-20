@@ -170,6 +170,50 @@ func TestTypeStringScanners_ScanString_InterfaceScannerOrder(t *testing.T) {
 	}
 }
 
+func TestTypeStringScanners_ScanString_InterfaceScannerFallthrough(t *testing.T) {
+	// An interface scanner returning ErrTypeNotSupported passes the destination
+	// to the next matching interface scanner in the documented order:
+	// the interfaces of the type, then the ones of its pointer type,
+	// then the kind scanner
+	notSupported := StringScannerFunc(func(string, any) error {
+		return fmt.Errorf("wrapped: %w", ErrTypeNotSupported)
+	})
+	scanTo := func(name string) StringScanner {
+		return StringScannerFunc(func(_ string, destPtr any) error {
+			reflect.ValueOf(destPtr).Elem().SetString(name)
+			return nil
+		})
+	}
+
+	t.Run("next interface of the type", func(t *testing.T) {
+		scanners := NewTypeStringScanners(nil).
+			WithInterfaceTypeScanner(reflect.TypeFor[scannerTestA](), notSupported).
+			WithInterfaceTypeScanner(reflect.TypeFor[scannerTestB](), scanTo("B"))
+		var both bothValueInterfaces
+		require.NoError(t, scanners.ScanString("x", &both))
+		assert.Equal(t, bothValueInterfaces("B"), both)
+	})
+
+	t.Run("interface of the pointer type", func(t *testing.T) {
+		scanners := NewTypeStringScanners(nil).
+			WithInterfaceTypeScanner(reflect.TypeFor[scannerTestB](), notSupported).
+			WithInterfaceTypeScanner(reflect.TypeFor[scannerTestA](), scanTo("A"))
+		var valueAndPtr valueAndPointerInterfaces
+		require.NoError(t, scanners.ScanString("x", &valueAndPtr))
+		assert.Equal(t, valueAndPointerInterfaces("A"), valueAndPtr)
+	})
+
+	t.Run("kind scanner", func(t *testing.T) {
+		scanners := NewTypeStringScanners(nil).
+			WithInterfaceTypeScanner(reflect.TypeFor[scannerTestA](), notSupported).
+			WithInterfaceTypeScanner(reflect.TypeFor[scannerTestB](), notSupported).
+			WithKindScanner(reflect.String, scanTo("kind"))
+		var both bothValueInterfaces
+		require.NoError(t, scanners.ScanString("x", &both))
+		assert.Equal(t, bothValueInterfaces("kind"), both)
+	})
+}
+
 func TestTypeStringScanners_With_DoesNotModifyReceiver(t *testing.T) {
 	// The global StringScanners is read concurrently and changed
 	// by assigning the result of a With method to it,
