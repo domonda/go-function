@@ -8,15 +8,30 @@ import (
 	"io"
 	"os"
 	"reflect"
+	"slices"
 	"strings"
 	"unicode"
 	"unicode/utf8"
 )
 
+// ResultsHandler handles the results of a function call,
+// like printing them, for NewStringArgsFunc, NewNamedStringArgsFunc,
+// NewJSONArgsFunc, and the commands of the cli package.
+//
+// HandleResults gets the results without the error result
+// and the error result as resultErr, which is nil if the function returned no error.
+// A ResultsHandler can't handle resultErr for the caller:
+// the functions calling handlers return resultErr after all handlers,
+// also if a handler returned nil.
+// A handler that has nothing to do for a non-nil resultErr returns it.
+// A handler that fails, like when the results can't be written,
+// returns its own error, which is returned instead of resultErr
+// without calling the handlers after it.
 type ResultsHandler interface {
 	HandleResults(ctx context.Context, results []any, resultErr error) error
 }
 
+// ResultsHandlerFunc is a function type that implements ResultsHandler.
 type ResultsHandlerFunc func(ctx context.Context, results []any, resultErr error) error
 
 func (f ResultsHandlerFunc) HandleResults(ctx context.Context, results []any, resultErr error) error {
@@ -70,10 +85,12 @@ func writePaddedTextTable(w io.Writer, rows [][]string, columnDelimiter string) 
 	return nil
 }
 
-// makeResultsPrintable converts the elements of the results slice
-// to strings with a readable representation.
-// It modifies the results slice in place.
-func makeResultsPrintable(results []any) error {
+// printableResults returns a copy of results with the elements
+// converted to strings with a readable representation.
+// It doesn't modify results, because the results handlers
+// after the calling one get the same slice.
+func printableResults(results []any) ([]any, error) {
+	results = slices.Clone(results)
 	for i, result := range results {
 		switch x := result.(type) {
 		case fmt.GoStringer:
@@ -86,7 +103,8 @@ func makeResultsPrintable(results []any) error {
 			results[i] = strings.Join(x, "\n")
 
 		case []byte:
-			if utf8.Valid(x) && bytes.IndexFunc(x, func(r rune) bool { return !unicode.IsPrint(r) }) == -1 {
+			// Whitespace like newlines and tabs is printable text
+			if utf8.Valid(x) && bytes.IndexFunc(x, func(r rune) bool { return !unicode.IsPrint(r) && !unicode.IsSpace(r) }) == -1 {
 				results[i] = string(x)
 			} else {
 				results[i] = fmt.Sprintf("%#x", x)
@@ -96,7 +114,7 @@ func makeResultsPrintable(results []any) error {
 			var b strings.Builder
 			err := writePaddedTextTable(&b, x, "|")
 			if err != nil {
-				return fmt.Errorf("can't print command result padded text table because: %w", err)
+				return nil, fmt.Errorf("can't print command result padded text table because: %w", err)
 			}
 			results[i] = b.String()
 
@@ -104,12 +122,15 @@ func makeResultsPrintable(results []any) error {
 			switch v := derefValue(reflect.ValueOf(result)); v.Kind() {
 			case reflect.Float32, reflect.Float64:
 				// Print with up to 12 decimals precision
-				results[i] = strings.TrimRight(fmt.Sprintf("%.12f", v.Interface()), "0")
+				// without trailing zeros and without a trailing decimal point
+				// for whole numbers (TrimSuffix after TrimRight, so the zeros
+				// of the integer part are never trimmed)
+				results[i] = strings.TrimSuffix(strings.TrimRight(fmt.Sprintf("%.12f", v.Interface()), "0"), ".")
 
 			case reflect.Struct, reflect.Map, reflect.Slice, reflect.Array:
 				b, err := json.MarshalIndent(result, "", "  ")
 				if err != nil {
-					return fmt.Errorf("can't print command result as JSON because: %w", err)
+					return nil, fmt.Errorf("can't print command result as JSON because: %w", err)
 				}
 				results[i] = string(b)
 
@@ -120,16 +141,16 @@ func makeResultsPrintable(results []any) error {
 			}
 		}
 	}
-	return nil
+	return results, nil
 }
 
-// PrintTo calls fmt.Fprint on writer with the result values as varidic arguments
+// PrintTo calls fmt.Fprint on writer with the result values as variadic arguments
 func PrintTo(writer io.Writer) ResultsHandlerFunc {
 	return func(ctx context.Context, results []any, resultErr error) error {
 		if resultErr != nil {
 			return resultErr
 		}
-		err := makeResultsPrintable(results)
+		results, err := printableResults(results)
 		if err != nil {
 			return err
 		}
@@ -144,7 +165,7 @@ func PrintlnTo(writer io.Writer) ResultsHandlerFunc {
 		if resultErr != nil {
 			return resultErr
 		}
-		err := makeResultsPrintable(results)
+		results, err := printableResults(results)
 		if err != nil {
 			return err
 		}
@@ -163,7 +184,7 @@ var Println ResultsHandlerFunc = func(ctx context.Context, results []any, result
 	if resultErr != nil {
 		return resultErr
 	}
-	err := makeResultsPrintable(results)
+	results, err := printableResults(results)
 	if err != nil {
 		return err
 	}
@@ -182,7 +203,7 @@ func PrintlnWithPrefixTo(prefix string, writer io.Writer) ResultsHandlerFunc {
 		if resultErr != nil {
 			return resultErr
 		}
-		err := makeResultsPrintable(results)
+		results, err := printableResults(results)
 		if err != nil {
 			return err
 		}
@@ -202,7 +223,7 @@ func PrintlnWithPrefix(prefix string) ResultsHandlerFunc {
 		if resultErr != nil {
 			return resultErr
 		}
-		err := makeResultsPrintable(results)
+		results, err := printableResults(results)
 		if err != nil {
 			return err
 		}
@@ -216,38 +237,39 @@ func PrintlnWithPrefix(prefix string) ResultsHandlerFunc {
 	}
 }
 
-// Logger interface
+// Logger is the interface of loggers for LogTo and LogWithPrefixTo,
+// which *log.Logger implements.
 type Logger interface {
 	Printf(format string, args ...any)
 }
 
-// LogTo calls logger.Printf(fmt.Sprintln(results...))
+// LogTo calls logger.Printf("%s", fmt.Sprintln(results...))
 func LogTo(logger Logger) ResultsHandlerFunc {
 	return func(ctx context.Context, results []any, resultErr error) error {
 		if resultErr != nil {
 			return resultErr
 		}
-		err := makeResultsPrintable(results)
+		results, err := printableResults(results)
 		if err != nil {
 			return err
 		}
-		logger.Printf(fmt.Sprintln(results...))
+		logger.Printf("%s", fmt.Sprintln(results...))
 		return nil
 	}
 }
 
-// LogWithPrefixTo calls logger.Printf(fmt.Sprintln(results...)) with prefix prepended to the results
+// LogWithPrefixTo calls logger.Printf("%s", fmt.Sprintln(results...)) with prefix prepended to the results
 func LogWithPrefixTo(prefix string, logger Logger) ResultsHandlerFunc {
 	return func(ctx context.Context, results []any, resultErr error) error {
 		if resultErr != nil {
 			return resultErr
 		}
-		err := makeResultsPrintable(results)
+		results, err := printableResults(results)
 		if err != nil {
 			return err
 		}
 		results = append([]any{prefix}, results...)
-		logger.Printf(fmt.Sprintln(results...))
+		logger.Printf("%s", fmt.Sprintln(results...))
 		return nil
 	}
 }
@@ -283,20 +305,33 @@ var PrintStructSliceAsTable ResultsHandlerFunc = func(ctx context.Context, resul
 	for i, result := range results {
 		// Check if all results are slices of the same type
 		resultType := reflect.TypeOf(result)
-		if resultType.Kind() != reflect.Slice && resultType.Kind() != reflect.Array {
+		if resultType == nil || resultType.Kind() != reflect.Slice && resultType.Kind() != reflect.Array {
 			return fmt.Errorf("expected slice or array, got %T for result %d", result, i)
-		}
-		if resultType.Elem().Kind() != reflect.Struct && resultType.Elem().Kind() != reflect.Pointer {
-			return fmt.Errorf("expected slice/array of structs or struct pointers, got %T for result %d", result, i)
 		}
 		isPtr := resultType.Elem().Kind() == reflect.Pointer
 		structType := resultType.Elem()
 		if isPtr {
 			structType = structType.Elem()
 		}
-		var header []string
-		for col := 0; col < structType.NumField(); col++ {
-			header = append(header, structType.Field(col).Name)
+		if structType.Kind() != reflect.Struct {
+			return fmt.Errorf("expected slice/array of structs or struct pointers, got %T for result %d", result, i)
+		}
+		// Values of unexported fields can't be accessed
+		// so only exported fields are used as columns
+		var (
+			header       []string
+			fieldIndices []int
+		)
+		for field := range structType.Fields() {
+			if !field.IsExported() {
+				continue
+			}
+			header = append(header, field.Name)
+			fieldIndices = append(fieldIndices, field.Index[0])
+		}
+		if len(header) == 0 {
+			// A table without columns would print only the delimiters
+			return fmt.Errorf("expected structs with exported fields, got %T for result %d", result, i)
 		}
 		rows := [][]string{header}
 
@@ -309,16 +344,16 @@ var PrintStructSliceAsTable ResultsHandlerFunc = func(ctx context.Context, resul
 				}
 				structVal = structVal.Elem()
 			}
-			fieldStrings := make([]string, structType.NumField())
-			for col := 0; col < structType.NumField(); col++ {
-				fieldStrings[col] = fmt.Sprint(structVal.Field(col).Interface())
+			fieldStrings := make([]string, len(fieldIndices))
+			for col, fieldIndex := range fieldIndices {
+				fieldStrings[col] = fmt.Sprint(structVal.Field(fieldIndex).Interface())
 			}
 			rows = append(rows, fieldStrings)
 		}
 
-		colWidths := make([]int, structType.NumField())
+		colWidths := make([]int, len(header))
 		for row := range rows {
-			for col := 0; col < structType.NumField() && col < len(rows[row]); col++ {
+			for col := 0; col < len(header) && col < len(rows[row]); col++ {
 				numRunes := utf8.RuneCountInString(rows[row][col])
 				colWidths[col] = max(colWidths[col], numRunes)
 			}

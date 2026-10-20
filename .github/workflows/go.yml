@@ -34,6 +34,14 @@ jobs:
     - name: Build
       run: xargs -I {} go build {}/... < module-dirs
 
+    # go.work supplies checksums from go.work.sum, which hides go.sum entries
+    # that are missing when a module is built on its own outside the workspace.
+    - name: Check modules are tidy
+      run: |
+        while read -r dir; do
+          (cd "$dir" && GOWORK=off go mod tidy -diff)
+        done < module-dirs
+
     # The tools module holds only a `tool` directive and no packages of its own.
     # `go vet`, `go test` and gosec all treat a pattern that matches no packages
     # as an error, so check only the modules that have something to look at.
@@ -48,7 +56,7 @@ jobs:
       run: |
         while read -r dir; do
           [ -n "$(go list "$dir/..." 2>/dev/null)" ] || continue
-          go test -count=1 -v "$dir/..."
+          go test -count=1 -race -v "$dir/..."
         done < module-dirs
 
     - name: Gosec

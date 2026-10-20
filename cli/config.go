@@ -3,6 +3,9 @@ package cli
 import "github.com/fatih/color"
 
 const (
+	// DefaultCommand is the name of the default command,
+	// which runs without a command name,
+	// see StringArgsDispatcher.AddDefaultCommand.
 	DefaultCommand = ""
 )
 

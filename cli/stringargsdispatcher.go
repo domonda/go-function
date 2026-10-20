@@ -2,6 +2,7 @@ package cli
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"maps"
 	"reflect"
@@ -29,8 +30,11 @@ func checkCommandChars(command string) error {
 	if strings.IndexFunc(command, unicode.IsSpace) >= 0 {
 		return fmt.Errorf("command contains space characters: '%s'", command)
 	}
-	if strings.IndexFunc(command, unicode.IsGraphic) == -1 {
-		return fmt.Errorf("command contains non graphic characters: '%s'", command)
+	if command == "" {
+		return errors.New("command is empty")
+	}
+	if strings.IndexFunc(command, isNotGraphic) >= 0 {
+		return fmt.Errorf("command contains non graphic characters: %q", command)
 	}
 	if strings.ContainsAny(command, "|&;()<>") {
 		return fmt.Errorf("command contains invalid characters: '%s'", command)
@@ -38,8 +42,17 @@ func checkCommandChars(command string) error {
 	return nil
 }
 
+func isNotGraphic(r rune) bool { return !unicode.IsGraphic(r) }
+
 // StringArgsCommandLogger provides a way to log or track command executions.
 // Implementations can write to log files, send metrics, or perform auditing.
+//
+// LogStringArgsCommand is called before a found command is executed
+// with the name of the command and its arguments.
+// The command is DefaultCommand ("") for the default command of a StringArgsDispatcher.
+// For a SuperStringArgsDispatcher the command is the super command
+// and the command joined with a space, like "user create",
+// or only the super command for its default command, like "deploy".
 type StringArgsCommandLogger interface {
 	LogStringArgsCommand(command string, args []string)
 }
@@ -97,7 +110,7 @@ func NewStringArgsDispatcher(baseCommand string, loggers ...StringArgsCommandLog
 // Example:
 //
 //	err := dispatcher.AddCommand("deploy", "Deploy a service",
-//	    function.MustReflectWrapper("deploy", Deploy))
+//	    function.MustReflectWrapper(Deploy, "env", "service", "version"))
 func (disp *StringArgsDispatcher) AddCommand(command, description string, commandFunc function.Wrapper, resultsHandlers ...function.ResultsHandler) error {
 	if _, exists := disp.comm[command]; exists {
 		return fmt.Errorf("Command '%s' already added", command)
@@ -131,8 +144,11 @@ func (disp *StringArgsDispatcher) MustAddCommand(command, description string, co
 //
 //	// When user runs just "myapp" with no arguments
 //	dispatcher.AddDefaultCommand("Run the server",
-//	    function.MustReflectWrapper("serve", Serve))
+//	    function.MustReflectWrapper(Serve))
 func (disp *StringArgsDispatcher) AddDefaultCommand(description string, commandFunc function.Wrapper, resultsHandlers ...function.ResultsHandler) error {
+	if _, exists := disp.comm[DefaultCommand]; exists {
+		return errors.New("Default command already added")
+	}
 	disp.comm[DefaultCommand] = &stringArgsCommand{
 		command:         DefaultCommand,
 		description:     description,
@@ -189,25 +205,11 @@ func (disp *StringArgsDispatcher) Dispatch(ctx context.Context, command string, 
 	return cmd.stringArgsFunc(ctx, args...)
 }
 
-// MustDispatch is like Dispatch but panics on error.
-func (disp *StringArgsDispatcher) MustDispatch(ctx context.Context, command string, args ...string) {
-	err := disp.Dispatch(ctx, command, args...)
-	if err != nil {
-		panic(fmt.Errorf("command '%s' returned: %w", command, err))
-	}
-}
-
-// DispatchDefaultCommand executes the default command with a background context.
-func (disp *StringArgsDispatcher) DispatchDefaultCommand() error {
-	return disp.Dispatch(context.Background(), DefaultCommand)
-}
-
-// MustDispatchDefaultCommand is like DispatchDefaultCommand but panics on error.
-func (disp *StringArgsDispatcher) MustDispatchDefaultCommand() {
-	err := disp.DispatchDefaultCommand()
-	if err != nil {
-		panic(fmt.Errorf("default command: %w", err))
-	}
+// DispatchDefaultCommand executes the default command without arguments.
+// Returns ErrCommandNotFound if there is no default command,
+// or any error returned by the wrapped function.
+func (disp *StringArgsDispatcher) DispatchDefaultCommand(ctx context.Context) error {
+	return disp.Dispatch(ctx, DefaultCommand)
 }
 
 // DispatchCombinedCommandAndArgs parses and dispatches from os.Args style input.
@@ -223,20 +225,11 @@ func (disp *StringArgsDispatcher) MustDispatchDefaultCommand() {
 //	}
 func (disp *StringArgsDispatcher) DispatchCombinedCommandAndArgs(ctx context.Context, commandAndArgs []string) (command string, err error) {
 	if len(commandAndArgs) == 0 {
-		return DefaultCommand, disp.DispatchDefaultCommand()
+		return DefaultCommand, disp.Dispatch(ctx, DefaultCommand)
 	}
 	command = commandAndArgs[0]
 	args := commandAndArgs[1:]
 	return command, disp.Dispatch(ctx, command, args...)
-}
-
-// MustDispatchCombinedCommandAndArgs is like DispatchCombinedCommandAndArgs but panics on error.
-func (disp *StringArgsDispatcher) MustDispatchCombinedCommandAndArgs(ctx context.Context, commandAndArgs []string) (command string) {
-	command, err := disp.DispatchCombinedCommandAndArgs(ctx, commandAndArgs)
-	if err != nil {
-		panic(fmt.Errorf("MustDispatchCombinedCommandAndArgs(%v): %w", commandAndArgs, err))
-	}
-	return command
 }
 
 // PrintCommands prints all registered commands with their descriptions and argument types.
@@ -248,24 +241,31 @@ func (disp *StringArgsDispatcher) PrintCommands() {
 	})
 
 	for _, cmd := range commands {
-		UsageColor.Printf("  %s %s %s\n", disp.baseCommand, cmd.command, functionArgsString(cmd.commandFunc)) //#nosec G104
-		if cmd.description != "" {
-			DescriptionColor.Printf("      %s\n", cmd.description) //#nosec G104
-		}
-		hasAnyArgDesc := false
-		for _, desc := range cmd.commandFunc.ArgDescriptions() {
-			if desc != "" {
-				hasAnyArgDesc = true
-				break
-			}
-		}
-		if hasAnyArgDesc {
-			for i, desc := range cmd.commandFunc.ArgDescriptions() {
-				DescriptionColor.Printf("          <%s:%s> %s\n", cmd.commandFunc.ArgNames()[i], derefType(cmd.commandFunc.ArgTypes()[i]), desc) //#nosec G104
-			}
-		}
-		DescriptionColor.Println() //#nosec G104
+		printCommandUsage(disp.baseCommand, cmd.command, cmd)
 	}
+}
+
+// printCommandUsage prints the usage of cmd, called as command of baseCommand,
+// with its description and the descriptions of its arguments, if any.
+// The context argument is left out, because the dispatcher passes it.
+func printCommandUsage(baseCommand, command string, cmd *stringArgsCommand) {
+	// Without the empty name of the default command or an empty argument list,
+	// so that the line has no trailing space
+	usage := slices.DeleteFunc([]string{baseCommand, command, functionArgsString(cmd.commandFunc)}, func(s string) bool { return s == "" })
+	UsageColor.Printf("  %s\n", strings.Join(usage, " ")) //#nosec G104
+	if cmd.description != "" {
+		DescriptionColor.Printf("      %s\n", cmd.description) //#nosec G104
+	}
+	argDescriptions := cmd.commandFunc.ArgDescriptions()
+	// Other Description implementations can return no descriptions
+	firstArg := min(firstCommandArg(cmd.commandFunc), len(argDescriptions))
+	if slices.ContainsFunc(argDescriptions[firstArg:], func(desc string) bool { return desc != "" }) {
+		argNames := cmd.commandFunc.ArgNames()
+		for i := firstArg; i < len(argDescriptions); i++ {
+			DescriptionColor.Printf("          <%s:%s> %s\n", argNames[i], argTypeString(cmd.commandFunc, i), argDescriptions[i]) //#nosec G104
+		}
+	}
+	DescriptionColor.Println() //#nosec G104
 }
 
 // PrintCommandsUsageIntro prints a "Commands:" header followed by all commands.
@@ -278,8 +278,9 @@ func (disp *StringArgsDispatcher) PrintCommandsUsageIntro() {
 	disp.PrintCommands()
 }
 
-// PrintCompletion prints commands matching the given prefix for shell completion.
-// This is used internally by the completion system.
+// PrintCompletion prints the commands starting with the prefix args[0]
+// for shell completion, one per line prefixed with the base command.
+// See CompleteStringArgsDispatcher for shell completion with posener/complete.
 func (disp *StringArgsDispatcher) PrintCompletion(args []string) {
 	prefix := ""
 	if len(args) > 0 {
@@ -289,25 +290,51 @@ func (disp *StringArgsDispatcher) PrintCompletion(args []string) {
 		return strings.Compare(a.command, b.command)
 	})
 	for _, cmd := range commands {
-		if strings.HasPrefix(cmd.command, prefix) {
+		if !strings.HasPrefix(cmd.command, prefix) {
+			continue
+		}
+		if cmd.command == DefaultCommand {
+			fmt.Println(disp.baseCommand)
+		} else {
 			fmt.Println(disp.baseCommand, cmd.command)
 		}
 	}
 }
 
-// functionArgsString formats function arguments as a string for help text.
-// Returns a space-separated list like: "<name:string> <age:int> <active:bool>"
+// functionArgsString formats the command line arguments of f as a string for help text,
+// without a context argument, which the dispatcher passes.
+// Returns a space-separated list like: "<name:string> <age:int> <tags:...string>"
 func functionArgsString(f function.Wrapper) string {
 	b := strings.Builder{}
 	argNames := f.ArgNames()
-	argTypes := f.ArgTypes()
-	for i := range argNames {
-		if i > 0 {
+	for i := firstCommandArg(f); i < len(argNames); i++ {
+		if b.Len() > 0 {
 			b.WriteByte(' ')
 		}
-		fmt.Fprintf(&b, "<%s:%s>", argNames[i], derefType(argTypes[i]))
+		fmt.Fprintf(&b, "<%s:%s>", argNames[i], argTypeString(f, i))
 	}
 	return b.String()
+}
+
+// firstCommandArg returns the index of the first argument of f
+// that is passed as command line argument:
+// 1 if the first argument is a context.Context, which the dispatcher passes, else 0.
+func firstCommandArg(f function.Description) int {
+	if f.ContextArg() {
+		return 1
+	}
+	return 0
+}
+
+// argTypeString returns the type of the argument with index i for help text,
+// with "..." and the element type for a variadic argument like "...int",
+// because every string from its position on is one element of it.
+func argTypeString(f function.Description, i int) string {
+	argType := f.ArgTypes()[i]
+	if f.Variadic() && i == f.NumArgs()-1 {
+		return "..." + derefType(argType.Elem()).String()
+	}
+	return derefType(argType).String()
 }
 
 // derefType returns the element type if t is a pointer type, otherwise returns t.

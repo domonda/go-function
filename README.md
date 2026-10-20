@@ -13,7 +13,7 @@
 - **Automatic Type Conversion**: Convert strings to the correct types automatically
 - **HTTP Integration**: Turn functions into HTTP handlers with `httpfun` package
 - **CLI Integration**: Build command-line interfaces with `cli` package
-- **HTML Forms**: Generate HTML forms from function signatures with `htmlform` package
+- **HTML Forms**: Generate HTML forms for quick internal dashboards with the separate module [go-htmlform](https://github.com/domonda/go-htmlform)
 - **Code Generation**: Generate zero-overhead wrappers with `gen-func-wrappers`
 - **Reflection Fallback**: Use reflection-based wrappers when code generation isn't needed
 - **Context Support**: Automatic `context.Context` handling
@@ -25,6 +25,26 @@
 go get github.com/domonda/go-function
 ```
 
+The changes of every release are listed in [CHANGELOG.md](CHANGELOG.md).
+
+## Documentation
+
+- **Tutorial:** [One function, four interfaces](docs/tutorial-one-function-four-ways.md): build a program whose one function runs as Go call, CLI command, JSON API, and HTML form
+- **How-to guides:**
+  [switch to generated wrappers](docs/howto-generated-wrappers.md),
+  [make your own types scannable](docs/howto-custom-string-types.md),
+  [customize HTTP error responses](docs/howto-http-errors.md)
+- **Reference:**
+  [calling conventions](docs/reference-calling-conventions.md),
+  [string conversion](docs/reference-string-conversion.md),
+  [HTTP status codes](docs/reference-http-status-codes.md)
+- **Explanation:**
+  [architecture](docs/explanation-architecture.md),
+  [security model](docs/explanation-security-model.md)
+- **API:** [pkg.go.dev](https://pkg.go.dev/github.com/domonda/go-function), and the [gen-func-wrappers README](cmd/gen-func-wrappers/README.md)
+
+All documents are listed in [docs/README.md](docs/README.md).
+
 ## Quick Start
 
 ### Basic Function Wrapping
@@ -35,6 +55,7 @@ package main
 import (
     "context"
     "fmt"
+
     "github.com/domonda/go-function"
 )
 
@@ -47,9 +68,10 @@ func Greet(ctx context.Context, name string) (string, error) {
 }
 
 func main() {
-    // Wrap functions using reflection
-    addWrapper := function.MustReflectWrapper("Add", Add)
-    greetWrapper := function.MustReflectWrapper("Greet", Greet)
+    // Wrap functions using reflection,
+    // passing the argument names (including "ctx" for a context.Context)
+    addWrapper := function.MustReflectWrapper(Add, "a", "b")
+    greetWrapper := function.MustReflectWrapper(Greet, "ctx", "name")
 
     ctx := context.Background()
 
@@ -58,13 +80,13 @@ func main() {
     fmt.Println(results[0]) // Output: 8
 
     // Call with named arguments
-    results, _ := greetWrapper.CallWithNamedStrings(ctx, map[string]string{
+    results, _ = greetWrapper.CallWithNamedStrings(ctx, map[string]string{
         "name": "World",
     })
     fmt.Println(results[0]) // Output: Hello, World!
 
-    // Call with JSON
-    results, _ := addWrapper.CallWithJSON(ctx, []byte(`[10, 20]`))
+    // Call with a JSON object of named arguments
+    results, _ = addWrapper.CallWithJSON(ctx, []byte(`{"a": 10, "b": 20}`))
     fmt.Println(results[0]) // Output: 30
 }
 ```
@@ -76,7 +98,10 @@ package main
 
 import (
     "context"
+    "fmt"
     "net/http"
+
+    "github.com/domonda/go-function"
     "github.com/domonda/go-function/httpfun"
 )
 
@@ -92,13 +117,14 @@ func Calculate(ctx context.Context, operation string, a, b int) (int, error) {
 }
 
 func main() {
-    // Create HTTP handler from function
-    handler := httpfun.NewHandler(
-        function.MustReflectWrapper("Calculate", Calculate),
-        nil, // Use default result writer
-    )
+    calculate := function.MustReflectWrapper(Calculate, "ctx", "operation", "a", "b")
 
-    http.Handle("/calculate", handler)
+    // Create HTTP handlers from the function that get the arguments
+    // from the URL query or from the fields of a JSON object request body
+    // and respond with the result as JSON
+    http.Handle("GET /calculate", httpfun.Handler(httpfun.RequestQueryArgs, calculate, httpfun.RespondJSON))
+    http.Handle("POST /calculate", httpfun.Handler(httpfun.RequestBodyJSONFieldsAsArgs, calculate, httpfun.RespondJSON))
+
     http.ListenAndServe(":8080", nil)
 
     // Usage:
@@ -116,6 +142,7 @@ import (
     "context"
     "fmt"
     "os"
+
     "github.com/domonda/go-function"
     "github.com/domonda/go-function/cli"
 )
@@ -126,12 +153,16 @@ func Deploy(env, service string, version int) error {
 }
 
 func main() {
-    dispatcher := cli.NewStringArgsDispatcher(context.Background())
-    dispatcher.MustAddCommand("", function.MustReflectWrapper("deploy", Deploy))
+    dispatcher := cli.NewStringArgsDispatcher("myapp")
+    dispatcher.MustAddCommand(
+        "deploy",
+        "Deploy a service version to an environment",
+        function.MustReflectWrapper(Deploy, "env", "service", "version"),
+    )
 
-    err := dispatcher.Dispatch(os.Args[1:]...)
+    command, err := dispatcher.DispatchCombinedCommandAndArgs(context.Background(), os.Args[1:])
     if err != nil {
-        fmt.Fprintf(os.Stderr, "Error: %v\n", err)
+        fmt.Fprintf(os.Stderr, "Error in %s: %v\n", command, err)
         os.Exit(1)
     }
 }
@@ -159,10 +190,11 @@ func Calculate(a, b int) int {
 var CalculateWrapper = function.WrapperTODO(Calculate)
 ```
 
-Then run the code generator:
+Then add the code generator as a tool of your module and run it:
 
 ```bash
-go run github.com/domonda/go-function/cmd/gen-func-wrappers
+go get -tool github.com/domonda/go-function/cmd/gen-func-wrappers@latest
+go tool gen-func-wrappers ./...
 ```
 
 This replaces `WrapperTODO` calls with generated, type-safe wrapper code that has zero reflection overhead.
@@ -181,7 +213,8 @@ func WithContext(ctx context.Context, arg string) error
 // Multiple arguments and results
 func Complex(ctx context.Context, a int, b string) (result int, err error)
 
-// Variadic functions (limited support)
+// Variadic functions (Call takes the variadic arguments as one slice argument,
+// CallWithStrings takes every string from the variadic position on as one element)
 func Variadic(args ...string) string
 ```
 
@@ -202,22 +235,23 @@ func Variadic(args ...string) string
 
 ### HTTP Package (`httpfun`)
 
-- `NewHandler` - Create HTTP handler from function
-- `HandlerWithoutContext` - HTTP handler without context arg
-- `RequestArgs` - Parse function arguments from HTTP requests
+- `Handler` - Create HTTP handler from function
+- `HandlerNoWrapper` - HTTP handler for a `func(context.Context) ([]byte, error)`
+- `RequestArgsFunc` - Parse function arguments from HTTP requests
 - `ResultsWriter` - Write function results as HTTP responses
 
 ### CLI Package (`cli`)
 
 - `StringArgsDispatcher` - Command dispatcher for CLI apps
 - `SuperStringArgsDispatcher` - Multi-level command dispatcher
-- `Complete` - Shell completion support
+- `CompleteStringArgsDispatcher` / `CompleteSuperStringArgsDispatcher` - Shell completion support
 
-### HTML Forms Package (`htmlform`)
+### HTML Forms (`go-htmlform`)
 
-- `NewHandler` - Generate HTML forms for functions
-- Form generation with validation
-- Customizable templates
+HTML forms for wrapped functions moved to the separate module
+[github.com/domonda/go-htmlform](https://github.com/domonda/go-htmlform),
+meant for quick internal dashboards. Its last release from this repository
+is `htmlform/v0.7.1`.
 
 ### Code Generator (`cmd/gen-func-wrappers`)
 
@@ -225,6 +259,7 @@ func Variadic(args ...string) string
 - Zero reflection overhead
 - Preserves type safety
 - Supports custom import prefixes
+- Documentation: [cmd/gen-func-wrappers/README.md](cmd/gen-func-wrappers/README.md)
 
 ## Configuration
 
@@ -273,10 +308,10 @@ But you can customize type to string conversions:
 import "github.com/domonda/go-function"
 
 // Add custom scanner for a specific type
-function.StringScanners.SetForType(
-    reflect.TypeOf(MyCustomType{}),
+function.StringScanners = function.StringScanners.WithTypeScanner(
+    reflect.TypeFor[MyCustomType](),
     function.StringScannerFunc(func(src string, dest any) error {
-        // Custom conversion logic
+        // Custom conversion logic, dest is a *MyCustomType
         return nil
     }),
 )
@@ -297,22 +332,30 @@ function.TimeLocation = time.UTC
 ### HTTP Configuration
 
 ```go
-import "github.com/domonda/go-function/httpfun"
+import (
+    "log"
+    "net/http"
+
+    "github.com/domonda/go-function/httpfun"
+)
 
 // Pretty-print JSON responses
 httpfun.PrettyPrint = true
 httpfun.PrettyPrintIndent = "  "
 
-// Custom error handler
-httpfun.HandleError = func(err error, w http.ResponseWriter, r *http.Request) {
-    // Custom error handling
+// Custom error handler, delegating to the default
+// that answers invalid arguments with 400 Bad Request
+httpfun.HandleError = func(err error, w http.ResponseWriter, r *http.Request) bool {
+    log.Printf("HTTP error: %v", err)
+    return httpfun.DefaultHandleError(err, w, r)
 }
 
 // Panic recovery
 httpfun.CatchHandlerPanics = true
 
-// Multipart form size limits (used by RequestMultipartFormArgs)
-httpfun.MaxMultipartFormSize = 32 << 20   // total request body cap, default 32 MiB
+// Request body size limits, larger requests are answered with 413
+httpfun.MaxRequestBodySize = 32 << 20     // RequestBodyAsArg and RequestBodyJSONFieldsAsArgs, default 32 MiB, <= 0 disables it
+httpfun.MaxMultipartFormSize = 32 << 20   // RequestMultipartFormArgs total request body cap, default 32 MiB
 httpfun.MaxMultipartFormMemory = 1 << 20  // in-memory threshold, default 1 MiB
 ```
 
@@ -322,43 +365,55 @@ httpfun.MaxMultipartFormMemory = 1 << 20  // in-memory threshold, default 1 MiB
 
 ```go
 // Custom handler that always returns uppercase strings
-customHandler := httpfun.ResultsWriterFunc(func(results []any, w http.ResponseWriter, r *http.Request) error {
-    if len(results) > 0 {
+customHandler := httpfun.ResultsWriterFunc(func(results []any, resultErr error, w http.ResponseWriter, r *http.Request) error {
+    if resultErr == nil && len(results) > 0 {
         if str, ok := results[0].(string); ok {
-            w.Write([]byte(strings.ToUpper(str)))
-            return nil
+            _, err := w.Write([]byte(strings.ToUpper(str)))
+            return err
         }
     }
-    return httpfun.DefaultResultsWriter.WriteResults(results, w, r)
+    return httpfun.RespondJSON(results, resultErr, w, r)
 })
 
-handler := httpfun.NewHandler(wrapper, customHandler)
+handler := httpfun.Handler(httpfun.RequestQueryArgs, wrapper, customHandler)
 ```
 
 ### Multi-level CLI Commands
 
 ```go
+// Given the functions:
+//   func CreateUser(ctx context.Context, name string) error
+//   func DeleteUser(ctx context.Context, name string) error
+//   func Migrate(ctx context.Context) error
+//   func Seed(ctx context.Context) error
+
 // Build CLI with subcommands: app user create, app user delete, etc.
-dispatcher := cli.NewSuperStringArgsDispatcher(context.Background())
+dispatcher := cli.NewSuperStringArgsDispatcher("app")
 
-userDispatcher := dispatcher.AddSubDispatcher("user")
-userDispatcher.MustAddCommand("create", function.MustReflectWrapper("CreateUser", CreateUser))
-userDispatcher.MustAddCommand("delete", function.MustReflectWrapper("DeleteUser", DeleteUser))
+userDispatcher := dispatcher.MustAddSuperCommand("user")
+userDispatcher.MustAddCommand("create", "Create a user", function.MustReflectWrapper(CreateUser, "ctx", "name"))
+userDispatcher.MustAddCommand("delete", "Delete a user", function.MustReflectWrapper(DeleteUser, "ctx", "name"))
 
-dbDispatcher := dispatcher.AddSubDispatcher("db")
-dbDispatcher.MustAddCommand("migrate", function.MustReflectWrapper("Migrate", Migrate))
-dbDispatcher.MustAddCommand("seed", function.MustReflectWrapper("Seed", Seed))
+dbDispatcher := dispatcher.MustAddSuperCommand("db")
+dbDispatcher.MustAddCommand("migrate", "Migrate the database", function.MustReflectWrapper(Migrate))
+dbDispatcher.MustAddCommand("seed", "Seed the database", function.MustReflectWrapper(Seed))
 
-dispatcher.Dispatch(os.Args[1:]...)
+superCommand, command, err := dispatcher.DispatchCombinedCommandAndArgs(context.Background(), os.Args[1:])
+if err != nil {
+    fmt.Fprintf(os.Stderr, "%s %s: %v\n", superCommand, command, err)
+    os.Exit(1)
+}
 ```
 
 ## Testing
 
-The library includes comprehensive tests. Run them with:
+The library includes comprehensive tests. Run the tests of all modules of the workspace with:
 
 ```bash
-go test ./...
+./test-workspace.sh
 ```
+
+`go test ./...` in the repository root only tests the root module.
 
 ## Contributing
 
@@ -367,7 +422,7 @@ Contributions are welcome! Please:
 1. Add tests for new features
 2. Update documentation
 3. Follow existing code style
-4. Ensure `go test ./...` passes
+4. Ensure `./test-workspace.sh` passes
 
 ## License
 
@@ -375,7 +430,6 @@ MIT License - see LICENSE file for details
 
 ## Related Projects
 
-- [go-errs](https://github.com/domonda/go-errs) - Error wrapping used by this library
 - [go-types](https://github.com/domonda/go-types) - Type definitions with string scanning support
 - [go-astvisit](https://github.com/ungerik/go-astvisit) - AST manipulation utilities used by the code generator
 

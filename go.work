@@ -4,6 +4,5 @@ use (
 	.
 	./cli
 	./cmd/gen-func-wrappers
-	./htmlform
 	./tools
 )

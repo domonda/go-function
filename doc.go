@@ -21,7 +21,7 @@
 //	    return a + b
 //	}
 //
-//	wrapper := function.MustReflectWrapper("Add", Add)
+//	wrapper := function.MustReflectWrapper(Add, "a", "b")
 //	results, err := wrapper.CallWithStrings(ctx, "5", "3")
 //	// results[0] == 8
 //
@@ -30,8 +30,10 @@
 //	// In your code, use placeholder functions:
 //	var AddWrapper = function.WrapperTODO(Add)
 //
-//	// Then run gen-func-wrappers to replace with generated code:
-//	// go run github.com/domonda/go-function/cmd/gen-func-wrappers
+//	// Then add gen-func-wrappers as tool to your module once:
+//	//   go get -tool github.com/domonda/go-function/cmd/gen-func-wrappers@latest
+//	// and run it to replace the placeholders with generated code:
+//	//   go tool gen-func-wrappers ./...
 //
 // # Function Signatures
 //
@@ -60,13 +62,29 @@
 //   - Custom types: supports encoding.TextUnmarshaler and json.Unmarshaler
 //
 // String conversion can be customized via StringScanners configuration.
+// Scanners registered there also apply to slice and array elements
+// and pointer targets, like the elements of a variadic argument.
+//
+// Like in a Go call, CallWithStrings passes every string from the position
+// of a variadic last argument on as one element of it:
+// CallWithStrings(ctx, "%v", "hello") calls func(format string, args ...any)
+// with args []any{"hello"}. CallWithNamedStrings parses the single string
+// of a variadic argument as slice literal like "[1,2]".
+//
+// # Security
+//
+// Strings and JSON passed to CallWithStrings, CallWithNamedStrings,
+// or CallWithJSON become argument values as they are.
+// Don't expose functions with arguments of types that name files or other
+// resources to untrusted input like HTTP requests, for example fs.File
+// of github.com/ungerik/go-fs, which is a path string,
+// because the input becomes a path on the server.
 //
 // # Sub-packages
 //
 // The package includes several sub-packages for specific use cases:
 //
 //   - httpfun: Create HTTP handlers from functions
-//   - htmlform: Generate HTML forms for function arguments
 //   - cli: Build command-line interfaces from functions
 //   - cmd/gen-func-wrappers: Code generator for zero-overhead wrappers
 //
@@ -80,9 +98,11 @@
 // # Error Handling
 //
 // Functions can return an error as the last result. The wrapper will return
-// this error through the error return value of the Call* methods. If the
-// function doesn't return an error, any panics during execution will be
-// recovered and returned as errors (when CatchHandlerPanics is enabled).
+// this error through the error return value of the Call* methods.
+// Panics of the wrapped function are not recovered by the Call* methods,
+// they propagate to the caller. httpfun.Handler recovers them
+// if httpfun.CatchHandlerPanics is true (the default)
+// and responds with an HTTP error.
 //
 // # Context Support
 //

@@ -18,10 +18,12 @@ import (
 type ResultsWriter interface {
 	// WriteResults writes the results and optionally the resultErr to the response.
 	// If the method does not handle the resultErr then it should return it
-	// so it can be handled by the next writer in the chain.
+	// so it can be handled by the error handlers of the Handler.
+	// An error returned for a failed write is also passed to the error handlers.
 	WriteResults(results []any, resultErr error, response http.ResponseWriter, request *http.Request) error
 }
 
+// ResultsWriterFunc is a function type that implements ResultsWriter.
 type ResultsWriterFunc func(results []any, resultErr error, response http.ResponseWriter, request *http.Request) error
 
 func (f ResultsWriterFunc) WriteResults(results []any, resultErr error, response http.ResponseWriter, request *http.Request) error {
@@ -68,12 +70,13 @@ var RespondJSON ResultsWriterFunc = func(results []any, resultErr error, respons
 // If the last result is an error and the resultKeys don't have a key for it
 // then the error is returned unhandled if not nil.
 // If there is a result key for the error then the error
-// is marshalled as JSON string and not returned.
+// is marshalled as JSON string, or null if nil, and not returned.
 //
 // An error is returned if the number of results does not match the number of resultKeys
 // or number of resultKeys minus one if the last result is an error.
 func RespondJSONObject(resultKeys ...string) ResultsWriterFunc {
-	if len(slices.Compact(resultKeys)) != len(resultKeys) {
+	// Compact a sorted copy to find all duplicates without modifying resultKeys
+	if len(slices.Compact(slices.Sorted(slices.Values(resultKeys)))) != len(resultKeys) {
 		panic(fmt.Sprintf("RespondJSONObject resultKeys contains duplicates: %#v", resultKeys))
 	}
 	return func(results []any, resultErr error, response http.ResponseWriter, request *http.Request) error {
@@ -93,7 +96,11 @@ func RespondJSONObject(resultKeys ...string) ResultsWriterFunc {
 			r[resultKeys[i]] = result
 		}
 		if errorHasKey {
-			r[resultKeys[len(resultKeys)-1]] = resultErr.Error()
+			var errStr any // JSON null for nil error
+			if resultErr != nil {
+				errStr = resultErr.Error()
+			}
+			r[resultKeys[len(resultKeys)-1]] = errStr
 		}
 		j, err := encodeJSON(r)
 		if err != nil {
@@ -135,6 +142,9 @@ func RespondBinary(contentType string) ResultsWriterFunc {
 	}
 }
 
+// RespondXML writes the results of a function call as XML to the response,
+// multiple results separated by a newline.
+// Any resultErr is not handled and will be returned by this method.
 var RespondXML ResultsWriterFunc = func(results []any, resultErr error, response http.ResponseWriter, request *http.Request) error {
 	// Don't handle resultErr or context cancellation
 	if resultErr != nil || request.Context().Err() != nil {
@@ -167,11 +177,16 @@ var RespondPlaintext ResultsWriterFunc = func(results []any, resultErr error, re
 	}
 	var buf bytes.Buffer
 	fmt.Fprint(&buf, results...)
-	response.Header().Add("Content-Type", contenttype.PlainText)
+	response.Header().Set("Content-Type", contenttype.PlainText)
 	_, err := response.Write(buf.Bytes())
 	return err
 }
 
+// RespondHTML writes the results of a function call as HTML to the response,
+// []byte results as they are and other results formatted with fmt.Fprint.
+// The results are not escaped, so the function has to return valid
+// and safe HTML, without unescaped user input.
+// Any resultErr is not handled and will be returned by this method.
 var RespondHTML ResultsWriterFunc = func(results []any, resultErr error, response http.ResponseWriter, request *http.Request) error {
 	// Don't handle resultErr or context cancellation
 	if resultErr != nil || request.Context().Err() != nil {
@@ -185,11 +200,15 @@ var RespondHTML ResultsWriterFunc = func(results []any, resultErr error, respons
 			fmt.Fprint(&buf, result)
 		}
 	}
-	response.Header().Add("Content-Type", contenttype.HTML)
+	response.Header().Set("Content-Type", contenttype.HTML)
 	_, err := response.Write(buf.Bytes())
 	return err
 }
 
+// RespondDetectContentType writes the single []byte result of a function call
+// to the response with the content type detected by DetectContentType.
+// An error is returned for other results.
+// Any resultErr is not handled and will be returned by this method.
 var RespondDetectContentType ResultsWriterFunc = func(results []any, resultErr error, response http.ResponseWriter, request *http.Request) error {
 	// Don't handle resultErr or context cancellation
 	if resultErr != nil || request.Context().Err() != nil {
@@ -203,12 +222,17 @@ var RespondDetectContentType ResultsWriterFunc = func(results []any, resultErr e
 		return fmt.Errorf("RespondDetectContentType needs []byte result, got %T", results[0])
 	}
 
-	response.Header().Add("Content-Type", DetectContentType(data))
+	response.Header().Set("Content-Type", DetectContentType(data))
 	_, err := response.Write(data)
 	return err
 }
 
-func RespondContentType(contentType string) ResultsWriter {
+// RespondContentType returns a ResultsWriter that writes the single []byte result
+// of a function call to the response with contentType.
+// An error is returned for other results, see RespondBinary
+// for multiple results and results of type string or io.Reader.
+// Any resultErr is not handled and will be returned by the writer.
+func RespondContentType(contentType string) ResultsWriterFunc {
 	return ResultsWriterFunc(func(results []any, resultErr error, response http.ResponseWriter, request *http.Request) error {
 		// Don't handle resultErr or context cancellation
 		if resultErr != nil || request.Context().Err() != nil {
@@ -222,7 +246,7 @@ func RespondContentType(contentType string) ResultsWriter {
 			return fmt.Errorf("RespondContentType(%s)  needs []byte result, got %T", contentType, results[0])
 		}
 
-		response.Header().Add("Content-Type", contentType)
+		response.Header().Set("Content-Type", contentType)
 		_, err := response.Write(data) //#nosec G705 -- contentType was chosen by the caller of this package
 		return err
 	})
@@ -231,9 +255,9 @@ func RespondContentType(contentType string) ResultsWriter {
 // DetectContentType tries to detect the MIME content-type of data,
 // or returns "application/octet-stream" if none could be identified.
 func DetectContentType(data []byte) string {
-	jsonData := map[string]any{}
-	jsonErr := json.Unmarshal(data, &jsonData)
-	if jsonErr == nil {
+	// JSON objects and arrays, but not scalars like 123 or true
+	// that are more likely plain text
+	if trimmed := bytes.TrimSpace(data); len(trimmed) > 0 && (trimmed[0] == '{' || trimmed[0] == '[') && json.Valid(trimmed) {
 		return "application/json"
 	}
 
@@ -258,7 +282,7 @@ func encodeXML(response any) ([]byte, error) {
 	return xml.Marshal(response)
 }
 
-// Static content HTTPResultsWriter also implement http.Handler
+// Static content ResultsWriters also implement http.Handler
 var (
 	_ ResultsWriter = RespondNothing
 	_ ResultsWriter = RespondStaticHTML("")
@@ -277,6 +301,9 @@ var (
 	_ http.Handler = RespondRedirectFunc(nil)
 )
 
+// RespondNothing is a ResultsWriter and http.Handler that writes nothing,
+// so the response is 200 OK without body if nothing else is written.
+// Any resultErr is not handled and will be returned by WriteResults.
 var RespondNothing respondNothing
 
 type respondNothing struct{}
@@ -287,6 +314,9 @@ func (respondNothing) WriteResults(results []any, resultErr error, response http
 
 func (respondNothing) ServeHTTP(writer http.ResponseWriter, _ *http.Request) {}
 
+// RespondStaticHTML is a ResultsWriter and http.Handler
+// that responds with its HTML string, ignoring the results.
+// Any resultErr is not handled and will be returned by WriteResults.
 type RespondStaticHTML string
 
 func (html RespondStaticHTML) WriteResults(results []any, resultErr error, response http.ResponseWriter, request *http.Request) error {
@@ -299,10 +329,13 @@ func (html RespondStaticHTML) WriteResults(results []any, resultErr error, respo
 }
 
 func (html RespondStaticHTML) ServeHTTP(response http.ResponseWriter, _ *http.Request) {
-	response.Header().Add("Content-Type", contenttype.HTML)
+	response.Header().Set("Content-Type", contenttype.HTML)
 	response.Write([]byte(html)) //#nosec G104,G705
 }
 
+// RespondStaticXML is a ResultsWriter and http.Handler
+// that responds with its XML string, ignoring the results.
+// Any resultErr is not handled and will be returned by WriteResults.
 type RespondStaticXML string
 
 func (xml RespondStaticXML) WriteResults(results []any, resultErr error, response http.ResponseWriter, request *http.Request) error {
@@ -319,6 +352,9 @@ func (xml RespondStaticXML) ServeHTTP(response http.ResponseWriter, _ *http.Requ
 	response.Write([]byte(xml)) //#nosec G104,G705
 }
 
+// RespondStaticJSON is a ResultsWriter and http.Handler
+// that responds with its JSON string, ignoring the results.
+// Any resultErr is not handled and will be returned by WriteResults.
 type RespondStaticJSON string
 
 func (json RespondStaticJSON) WriteResults(results []any, resultErr error, response http.ResponseWriter, request *http.Request) error {
@@ -335,6 +371,9 @@ func (json RespondStaticJSON) ServeHTTP(response http.ResponseWriter, _ *http.Re
 	response.Write([]byte(json)) //#nosec G104,G705
 }
 
+// RespondStaticPlaintext is a ResultsWriter and http.Handler
+// that responds with its plain text string, ignoring the results.
+// Any resultErr is not handled and will be returned by WriteResults.
 type RespondStaticPlaintext string
 
 func (text RespondStaticPlaintext) WriteResults(results []any, resultErr error, response http.ResponseWriter, request *http.Request) error {
@@ -347,13 +386,17 @@ func (text RespondStaticPlaintext) WriteResults(results []any, resultErr error, 
 }
 
 func (text RespondStaticPlaintext) ServeHTTP(response http.ResponseWriter, _ *http.Request) {
-	response.Header().Add("Content-Type", contenttype.PlainText)
+	response.Header().Set("Content-Type", contenttype.PlainText)
 	response.Write([]byte(text)) //#nosec G104,G705
 }
 
-// RespondRedirect implements HTTPResultsWriter and http.Handler
-// with for a redirect URL string.
-// The redirect will be done with HTTP status code 302: Found.
+// RespondRedirect is a ResultsWriter and http.Handler
+// that redirects to its URL string, ignoring the results.
+// As ResultsWriter it redirects requests with other methods than GET and HEAD
+// with HTTP status code 303: See Other, so that clients get the URL with GET
+// like after a form POST (Post/Redirect/Get),
+// and as http.Handler, or for GET and HEAD, with 302: Found.
+// Any resultErr is not handled and will be returned by WriteResults.
 type RespondRedirect string
 
 func (re RespondRedirect) WriteResults(results []any, resultErr error, response http.ResponseWriter, request *http.Request) error {
@@ -361,7 +404,7 @@ func (re RespondRedirect) WriteResults(results []any, resultErr error, response 
 	if resultErr != nil || request.Context().Err() != nil {
 		return resultErr
 	}
-	re.ServeHTTP(response, request)
+	http.Redirect(response, request, string(re), redirectStatusAfterCall(request))
 	return nil
 }
 
@@ -369,9 +412,14 @@ func (re RespondRedirect) ServeHTTP(response http.ResponseWriter, request *http.
 	http.Redirect(response, request, string(re), http.StatusFound)
 }
 
-// RespondRedirectFunc implements HTTPResultsWriter and http.Handler
-// with a function that returns the redirect URL.
-// The redirect will be done with HTTP status code 302: Found.
+// RespondRedirectFunc is a ResultsWriter and http.Handler
+// that redirects to the URL returned by the function, ignoring the results.
+// As ResultsWriter it redirects requests with other methods than GET and HEAD
+// with HTTP status code 303: See Other, so that clients get the URL with GET
+// like after a form POST (Post/Redirect/Get),
+// and as http.Handler, or for GET and HEAD, with 302: Found.
+// Any resultErr and an error of the function are returned by WriteResults,
+// as http.Handler the error of the function is handled by HandleError.
 type RespondRedirectFunc func(request *http.Request) (url string, err error)
 
 func (f RespondRedirectFunc) WriteResults(results []any, resultErr error, response http.ResponseWriter, request *http.Request) error {
@@ -383,7 +431,7 @@ func (f RespondRedirectFunc) WriteResults(results []any, resultErr error, respon
 	if err != nil {
 		return err
 	}
-	http.Redirect(response, request, url, http.StatusFound)
+	http.Redirect(response, request, url, redirectStatusAfterCall(request))
 	return nil
 }
 
@@ -394,4 +442,16 @@ func (f RespondRedirectFunc) ServeHTTP(response http.ResponseWriter, request *ht
 		return
 	}
 	http.Redirect(response, request, url, http.StatusFound)
+}
+
+// redirectStatusAfterCall returns the HTTP status code of RespondRedirect
+// and RespondRedirectFunc to redirect after the function was called:
+// 303 See Other for requests with other methods than GET and HEAD,
+// because browsers repeat PUT, PATCH, and DELETE requests
+// at the URL of a 302 Found redirect, which is used for GET and HEAD.
+func redirectStatusAfterCall(request *http.Request) int {
+	if request.Method == http.MethodGet || request.Method == http.MethodHead {
+		return http.StatusFound
+	}
+	return http.StatusSeeOther
 }

@@ -13,3 +13,7 @@
 
 # Dependency directories (remove the comment below to include it)
 # vendor/
+
+# The go command writes go.work.sum for commands like `go list -m all`,
+# the workspace needs no checksums beyond the go.sum files of its modules
+go.work.sum

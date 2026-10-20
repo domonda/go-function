@@ -2,6 +2,8 @@ package function
 
 import (
 	"context"
+	"encoding/json"
+	"fmt"
 	"reflect"
 )
 
@@ -28,20 +30,28 @@ type Wrapper interface {
 //
 //	var MyFuncWrapper = function.WrapperTODO(MyFunc)
 //
-// Then run: go run github.com/domonda/go-function/cmd/gen-func-wrappers
+// Then add the code generator as tool to your module once
+// and run it:
+//
+//	go get -tool github.com/domonda/go-function/cmd/gen-func-wrappers@latest
+//	go tool gen-func-wrappers ./...
 //
 // This will replace WrapperTODO calls with generated wrapper implementations.
 // The function panics at runtime to ensure you don't forget to run the code generator.
 func WrapperTODO(function any) Wrapper {
 	if reflect.ValueOf(function).Kind() != reflect.Func {
-		panic("function.WrapperTODO must be used with a function as argument, then run gen-func-wrappers to to replace it with generated code")
+		panic("function.WrapperTODO must be used with a function as argument, then run gen-func-wrappers to replace it with generated code")
 	}
 	panic("function.WrapperTODO: run gen-func-wrappers")
 }
 
 // CallWrapper provides the ability to call a function with a slice of any values.
-// The context is passed as the first argument if the function accepts context.Context.
-// Arguments are type-checked and converted as needed before calling the wrapped function.
+// The context is passed as the first argument if the function accepts context.Context,
+// so args don't include a context.Context argument.
+// The arg for a variadic last argument is a slice of its element type.
+// Missing or untyped nil args are passed as zero values.
+// ReflectWrapper, VoidFuncWrapper, ErrorFuncWrapper, and generated wrappers
+// return an error for too many args or args not assignable to their argument type.
 type CallWrapper interface {
 	Call(ctx context.Context, args []any) (results []any, err error)
 }
@@ -49,7 +59,7 @@ type CallWrapper interface {
 // CallWrapperTODO is a placeholder for code generation. See WrapperTODO for details.
 func CallWrapperTODO(function any) CallWrapper {
 	if reflect.ValueOf(function).Kind() != reflect.Func {
-		panic("function.CallWrapperTODO must be used with a function as argument, then run gen-func-wrappers to to replace it with generated code")
+		panic("function.CallWrapperTODO must be used with a function as argument, then run gen-func-wrappers to replace it with generated code")
 	}
 	panic("function.CallWrapperTODO: run gen-func-wrappers")
 }
@@ -57,7 +67,20 @@ func CallWrapperTODO(function any) CallWrapper {
 // CallWithStringsWrapper provides the ability to call a function with string arguments
 // that are automatically converted to the required types.
 // String conversion supports basic types, time values, slices, structs (as JSON), and more.
-// See StringScanner for conversion details.
+// See ScanString for conversion details.
+//
+// Like in a Go call, every string from the position of a variadic last argument on
+// is one element of the variadic slice, also a single string, so it is never parsed
+// as slice literal. Elements are converted to the element type,
+// elements of type any get the unconverted string.
+// No strings at the variadic position result in no variadic elements.
+// Missing strings for other arguments are passed as zero values.
+// ReflectWrapper, VoidFuncWrapper, ErrorFuncWrapper, and generated wrappers
+// return an error for too many strings for a function without variadic argument.
+//
+// Security: the strings become argument values as they are, so don't pass
+// untrusted input for arguments of types that name files or other resources,
+// like fs.File of github.com/ungerik/go-fs which is a path on the server.
 type CallWithStringsWrapper interface {
 	CallWithStrings(ctx context.Context, args ...string) (results []any, err error)
 }
@@ -74,6 +97,11 @@ func CallWithStringsWrapperTODO(function any) CallWithStringsWrapper {
 // The argument names must match the function's parameter names.
 // String values are automatically converted to the required types.
 // Missing arguments will use zero values.
+// The single string of a variadic last argument is parsed as slice literal like "[1,2]".
+//
+// Security: the strings become argument values as they are, so don't pass
+// untrusted input for arguments of types that name files or other resources,
+// like fs.File of github.com/ungerik/go-fs which is a path on the server.
 type CallWithNamedStringsWrapper interface {
 	CallWithNamedStrings(ctx context.Context, args map[string]string) (results []any, err error)
 }
@@ -87,8 +115,18 @@ func CallWithNamedStringsWrapperTODO(function any) CallWithNamedStringsWrapper {
 }
 
 // CallWithJSONWrapper provides the ability to call a function with JSON-encoded arguments.
-// The JSON can be either an array of arguments or an object with named arguments.
-// Arguments are unmarshaled using json.Unmarshal into the required types.
+// The JSON must be an object with the argument names as keys,
+// a JSON array of arguments is not supported.
+// ReflectWrapper, VoidFuncWrapper, ErrorFuncWrapper, and generated wrappers
+// return an error for JSON that is no object, except null,
+// which they handle like an empty object.
+// Arguments are unmarshaled using json.Unmarshal into the required types,
+// except error arguments, which are JSON strings where an empty string
+// or null is no error.
+//
+// Security: the JSON values become argument values as they are, so don't pass
+// untrusted input for arguments of types that name files or other resources,
+// like fs.File of github.com/ungerik/go-fs which is a path on the server.
 type CallWithJSONWrapper interface {
 	CallWithJSON(ctx context.Context, argsJSON []byte) (results []any, err error)
 }
@@ -143,6 +181,9 @@ func (f CallWithJSONWrapperFunc) CallWithJSON(ctx context.Context, argsJSON []by
 
 // VoidFuncWrapper is a Wrapper for a function without arguments and without results.
 // It implements all wrapper interfaces and can be used for simple callback-style functions.
+// Like ReflectWrapper, its Call methods return an error for passed arguments
+// or strings and for JSON that is no object, and ignore named strings
+// and the values of a JSON object.
 //
 // Example:
 //
@@ -155,6 +196,7 @@ func (VoidFuncWrapper) Name() string   { return "func()" }
 
 func (VoidFuncWrapper) NumArgs() int                { return 0 }
 func (VoidFuncWrapper) ContextArg() bool            { return false }
+func (VoidFuncWrapper) Variadic() bool              { return false }
 func (VoidFuncWrapper) NumResults() int             { return 0 }
 func (VoidFuncWrapper) ErrorResult() bool           { return false }
 func (VoidFuncWrapper) ArgNames() []string          { return nil }
@@ -162,12 +204,18 @@ func (VoidFuncWrapper) ArgDescriptions() []string   { return nil }
 func (VoidFuncWrapper) ArgTypes() []reflect.Type    { return nil }
 func (VoidFuncWrapper) ResultTypes() []reflect.Type { return nil }
 
-func (f VoidFuncWrapper) Call(context.Context, []any) ([]any, error) {
+func (f VoidFuncWrapper) Call(_ context.Context, args []any) ([]any, error) {
+	if len(args) > 0 {
+		return nil, noArgsError(f, len(args))
+	}
 	f()
 	return nil, nil
 }
 
-func (f VoidFuncWrapper) CallWithStrings(context.Context, ...string) ([]any, error) {
+func (f VoidFuncWrapper) CallWithStrings(_ context.Context, strs ...string) ([]any, error) {
+	if len(strs) > 0 {
+		return nil, noArgsError(f, len(strs))
+	}
 	f()
 	return nil, nil
 }
@@ -177,13 +225,20 @@ func (f VoidFuncWrapper) CallWithNamedStrings(context.Context, map[string]string
 	return nil, nil
 }
 
-func (f VoidFuncWrapper) CallWithJSON(context.Context, []byte) (results []any, err error) {
+func (f VoidFuncWrapper) CallWithJSON(_ context.Context, argsJSON []byte) (results []any, err error) {
+	err = checkArgsJSONObject(f, argsJSON)
+	if err != nil {
+		return nil, err
+	}
 	f()
 	return nil, nil
 }
 
 // ErrorFuncWrapper is a Wrapper for a function without arguments that returns only an error.
 // It implements all wrapper interfaces and is useful for validation or initialization functions.
+// Like ReflectWrapper, its Call methods return an error for passed arguments
+// or strings and for JSON that is no object, and ignore named strings
+// and the values of a JSON object.
 //
 // Example:
 //
@@ -199,6 +254,7 @@ func (ErrorFuncWrapper) Name() string   { return "func() error" }
 
 func (ErrorFuncWrapper) NumArgs() int                { return 0 }
 func (ErrorFuncWrapper) ContextArg() bool            { return false }
+func (ErrorFuncWrapper) Variadic() bool              { return false }
 func (ErrorFuncWrapper) NumResults() int             { return 1 }
 func (ErrorFuncWrapper) ErrorResult() bool           { return true }
 func (ErrorFuncWrapper) ArgNames() []string          { return nil }
@@ -206,11 +262,17 @@ func (ErrorFuncWrapper) ArgDescriptions() []string   { return nil }
 func (ErrorFuncWrapper) ArgTypes() []reflect.Type    { return nil }
 func (ErrorFuncWrapper) ResultTypes() []reflect.Type { return []reflect.Type{typeOfError} }
 
-func (f ErrorFuncWrapper) Call(context.Context, []any) ([]any, error) {
+func (f ErrorFuncWrapper) Call(_ context.Context, args []any) ([]any, error) {
+	if len(args) > 0 {
+		return nil, noArgsError(f, len(args))
+	}
 	return nil, f()
 }
 
-func (f ErrorFuncWrapper) CallWithStrings(context.Context, ...string) ([]any, error) {
+func (f ErrorFuncWrapper) CallWithStrings(_ context.Context, strs ...string) ([]any, error) {
+	if len(strs) > 0 {
+		return nil, noArgsError(f, len(strs))
+	}
 	return nil, f()
 }
 
@@ -218,6 +280,26 @@ func (f ErrorFuncWrapper) CallWithNamedStrings(context.Context, map[string]strin
 	return nil, f()
 }
 
-func (f ErrorFuncWrapper) CallWithJSON(context.Context, []byte) (results []any, err error) {
+func (f ErrorFuncWrapper) CallWithJSON(_ context.Context, argsJSON []byte) (results []any, err error) {
+	err = checkArgsJSONObject(f, argsJSON)
+	if err != nil {
+		return nil, err
+	}
 	return nil, f()
+}
+
+// noArgsError returns the error of a wrapper of a function without arguments
+// for numArgs passed arguments, like ReflectWrapper.
+func noArgsError(f fmt.Stringer, numArgs int) error {
+	return fmt.Errorf("%d arguments passed, but function %s takes 0", numArgs, f)
+}
+
+// checkArgsJSONObject returns an ErrParseArgsJSON if argsJSON is no JSON object
+// or null, like the CallWithJSON method of ReflectWrapper.
+func checkArgsJSONObject(f fmt.Stringer, argsJSON []byte) error {
+	err := json.Unmarshal(argsJSON, new(map[string]json.RawMessage))
+	if err != nil {
+		return NewErrParseArgsJSON(err, f)
+	}
+	return nil
 }
