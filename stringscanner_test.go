@@ -11,6 +11,7 @@ import (
 	"strings"
 	"testing"
 	"time"
+	"unicode/utf8"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -1479,6 +1480,9 @@ func Test_quoteForError(t *testing.T) {
 	// A multi-byte character at the limit is not cut into invalid bytes
 	long := strings.Repeat("a", maxErrorValueLen-1) + "ä" + "b"
 	assert.Equal(t, `"`+strings.Repeat("a", maxErrorValueLen-1)+`"... (102 bytes)`, quoteForError(long))
+	// Invalid UTF-8 of continuation bytes still quotes a prefix
+	invalid := strings.Repeat("\x80", 200)
+	assert.Equal(t, strconv.Quote(invalid[:maxErrorValueLen-utf8.UTFMax+1])+"... (200 bytes)", quoteForError(invalid))
 }
 
 // settableTime has a Set(time.Time) method like nullable.Time of go-types

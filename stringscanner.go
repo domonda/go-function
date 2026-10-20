@@ -444,9 +444,10 @@ func quoteForError(s string) string {
 		return strconv.Quote(s)
 	}
 	// Cut at the start of a rune, so that a valid
-	// multi-byte character is not quoted as invalid bytes
+	// multi-byte character is not quoted as invalid bytes,
+	// which takes at most utf8.UTFMax-1 bytes for valid UTF-8
 	end := maxErrorValueLen
-	for end > 0 && !utf8.RuneStart(s[end]) {
+	for i := 1; i < utf8.UTFMax && !utf8.RuneStart(s[end]); i++ {
 		end--
 	}
 	return fmt.Sprintf("%s... (%d bytes)", strconv.Quote(s[:end]), len(s))
