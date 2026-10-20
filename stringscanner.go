@@ -17,7 +17,9 @@ import (
 //
 // Supported conversions include:
 //   - Basic types: int, float, bool, string, byte slice
-//   - Time types: time.Time (multiple formats), time.Duration
+//   - Time types: time.Time (multiple formats), time.Duration,
+//     types with a Set(time.Time) method like nullable.Time of github.com/domonda/go-types
+//     get the time parsed like time.Time
 //   - Pointers: "nil" or "null" converts to nil
 //   - Slices/arrays: JSON-like syntax [1,2,3] or ["a","b"]
 //     with at most MaxSliceLiteralElements elements
@@ -102,8 +104,15 @@ func (f StringScannerFunc) ScanString(sourceStr string, destPtr any) error {
 // A type with a SetNull() method gets it called for an empty string,
 // "nil", or "null" before any other conversion.
 //
-// Destinations implementing encoding.TextUnmarshaler (except time.Time,
-// which is parsed using TimeFormats) get the unmodified string passed
+// A type with a Set(time.Time) method gets the string parsed using TimeFormats
+// and TimeLocation like time.Time and passed to Set, or the zero time.Time
+// for an empty string, "nil", or "null", also if it implements
+// encoding.TextUnmarshaler or json.Unmarshaler, so that a nullable time type
+// accepts the same formats as time.Time.
+//
+// Destinations implementing encoding.TextUnmarshaler (except time.Time
+// and types with a Set(time.Time) method, which are parsed using TimeFormats)
+// get the unmodified string passed
 // to UnmarshalText for all input, including whitespace, "", "nil", and "null",
 // so the type owns its parsing and validation.
 // Destinations implementing json.Unmarshaler get the string passed
@@ -148,12 +157,13 @@ func DefaultScanString(sourceStr string, destPtr any) (err error) {
 // It handles type-specific conversion logic for all supported types.
 //
 // The conversion strategy is:
-// 1. Check for types with SetNull() method for nil values
-// 2. Type switch on common pointer types (string, error, time, etc.)
-// 3. Check for encoding.TextUnmarshaler interface
-// 4. Check for json.Unmarshaler interface
-// 5. Reflection-based conversion by Kind (bool, int, float, slice, etc.)
-// 6. Fallback to fmt.Sscan for any remaining types
+//  1. Check for types with SetNull() method for nil values
+//  2. Type switch on common pointer types (string, error, time, etc.)
+//     and types with a Set(time.Time) method
+//  3. Check for encoding.TextUnmarshaler interface
+//  4. Check for json.Unmarshaler interface
+//  5. Reflection-based conversion by Kind (bool, int, float, slice, etc.)
+//  6. Fallback to fmt.Sscan for any remaining types
 //
 // Slice and array elements and pointer targets are scanned
 // with scanNestedString, so that registered scanners apply to them.

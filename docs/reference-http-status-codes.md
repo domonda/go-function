@@ -45,12 +45,14 @@ The body of a 500 response is `Internal Server Error`. It includes the error tex
 | 500 Internal Server Error | `Internal Server Error` | an environment variable of `RequestArgFromEnvVar` is not set |
 | 500 Internal Server Error | `Internal Server Error` | a temporary file for an upload couldn't be written |
 | 500 Internal Server Error | `Internal Server Error` | the function returned an argument parse error of *another* wrapper it called, which is a bug of the server, not of the request |
+| 500 Internal Server Error | `Internal Server Error` | an argument couldn't be parsed by a wrapper that `Handler` can't recognize, behind a function adapter like `function.CallWithNamedStringsWrapperFunc` or in a named struct field: embed the wrapper to get 400 |
 
 Notes:
 
 - Every error row passes through the error handlers and `HandleError`, so a custom handler can change its response. For the 400 parse-error rows, the error passed to the handlers wraps the parse error, so `errors.AsType[function.ErrParseArgString](err)` finds it.
 - The 400 bodies name the argument but never contain its value or the parse error, because both can be large or private.
 - With `CatchHandlerPanics` false, a panic is not recovered by the handler. `net/http` then logs it and aborts the response.
+- A panic with `http.ErrAbortHandler` is never recovered, so `net/http` aborts the response without logging it, also by `htmlform.Handler`.
 - If the request's context is canceled, the built-in `ResultsWriter`s write nothing.
 
 `HandlerNoWrapper` produces the same responses for its function's errors, panics, and `ResultsWriter` errors. It has no arguments to parse.

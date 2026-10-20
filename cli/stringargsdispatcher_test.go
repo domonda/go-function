@@ -274,3 +274,24 @@ func TestStringArgsDispatcher_PrintCommands_variadic(t *testing.T) {
 
 	assert.Equal(t, "  myapp sum <label:string> <nums:...int>\n\n  myapp sumslice <nums:[]int>\n\n", got)
 }
+
+func TestStringArgsDispatcher_AddCommand_invalidNames(t *testing.T) {
+	// Command names are printed in the help and typed in shells,
+	// so they must not contain whitespace, shell metacharacters,
+	// or non graphic characters like terminal escape sequences
+	noop := function.MustReflectWrapper(func() {})
+	for _, command := range []string{"", "de ploy", "de\tploy", "dep|loy", "dep;loy", "dep\x1b[31mloy", "dep\x00loy", "dep​loy"} {
+		disp := NewStringArgsDispatcher("myapp")
+		assert.Error(t, disp.AddCommand(command, "", noop), "command %q", command)
+		assert.False(t, disp.HasCommand(command))
+	}
+	for _, command := range []string{"deploy", "db:migrate", "größe", "日本"} {
+		disp := NewStringArgsDispatcher("myapp")
+		assert.NoError(t, disp.AddCommand(command, "", noop), "command %q", command)
+	}
+
+	// Super commands are checked the same way
+	super := NewSuperStringArgsDispatcher("myapp")
+	_, err := super.AddSuperCommand("us\x1ber")
+	assert.Error(t, err)
+}

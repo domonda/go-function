@@ -636,3 +636,24 @@ func Test_qualifiedFuncName(t *testing.T) {
 	assert.Equal(t, "function.isNilSource", w.Name())
 	assert.Equal(t, "function.isNilSource(trimmedSrc string) bool", w.String())
 }
+
+func TestReflectWrapper_InvalidFunctionOrNames(t *testing.T) {
+	// Invalid input is an error of ReflectWrapper
+	// instead of a panic or wrong arguments when the wrapper is called
+	var nilFunc func(int)
+	_, err := ReflectWrapper(nilFunc, "a")
+	assert.EqualError(t, err, "nil function of type func(int) passed")
+
+	_, err = ReflectWrapper(func(a, b int) {}, "a", "a")
+	assert.EqualError(t, err, `argument name "a" passed more than once for func(int, int)`)
+
+	_, err = ReflectWrapper(func(a, b int) {}, "a", "")
+	assert.EqualError(t, err, "empty name passed for argument 1 of func(int, int)")
+
+	// Like in Go, "_" can be used for multiple arguments
+	w, err := ReflectWrapper(func(a, b, c int) int { return c }, "_", "_", "c")
+	require.NoError(t, err)
+	results, err := w.CallWithStrings(context.Background(), "1", "2", "3")
+	require.NoError(t, err)
+	assert.Equal(t, []any{3}, results)
+}

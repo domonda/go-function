@@ -255,6 +255,24 @@ func TestHandler_CatchHandlerPanics(t *testing.T) {
 	})
 }
 
+func TestHandler_ErrAbortHandler(t *testing.T) {
+	// net/http aborts the response for a panic with http.ErrAbortHandler,
+	// so it is not recovered and answered like other panics
+	for name, handler := range map[string]http.HandlerFunc{
+		"Handler":          httpfun.Handler(nil, function.MustReflectWrapper(func() { panic(http.ErrAbortHandler) }), nil),
+		"HandlerNoWrapper": httpfun.HandlerNoWrapper(func(context.Context) ([]byte, error) { panic(http.ErrAbortHandler) }, nil),
+	} {
+		t.Run(name, func(t *testing.T) {
+			response := httptest.NewRecorder()
+			assert.PanicsWithValue(t, http.ErrAbortHandler, func() {
+				handler(response, httptest.NewRequest(http.MethodGet, "/", nil))
+			})
+			assert.False(t, response.Flushed)
+			assert.Empty(t, response.Body.String(), "no error response written")
+		})
+	}
+}
+
 func TestHandlerNoWrapper(t *testing.T) {
 	handler := httpfun.HandlerNoWrapper(
 		func(ctx context.Context) ([]byte, error) {

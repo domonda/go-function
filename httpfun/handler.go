@@ -61,6 +61,16 @@ func (f ErrorHandlerFunc) HandleError(err error, response http.ResponseWriter, r
 // like the errors of httperr, to respond with another status.
 // Temporary files of uploads parsed by getArgs are removed after the response.
 //
+// An invalid argument value is recognized by the Func of its
+// function.ErrParseArgString, ErrParseArgJSON, or ErrParseArgsJSON,
+// which has to be the passed wrapper, the value it points to,
+// or a wrapper embedded in it, like by a decorating struct.
+// So a parse error of another wrapper that the wrapped function called
+// and returned is an error of the server, also if it was returned unwrapped.
+// A wrapper behind a function adapter like function.CallWithNamedStringsWrapperFunc
+// or in a named struct field can't be recognized, so its invalid argument values
+// are answered as errors of the server: embed the wrapper to keep 400 Bad Request.
+//
 // Example:
 //
 //	func Calculate(ctx context.Context, a, b int) (int, error) {
@@ -78,11 +88,7 @@ func (f ErrorHandlerFunc) HandleError(err error, response http.ResponseWriter, r
 func Handler(getArgs RequestArgsFunc, function function.CallWithNamedStringsWrapper, resultsWriter ResultsWriter, errHandlers ...ErrorHandler) http.HandlerFunc {
 	return func(response http.ResponseWriter, request *http.Request) {
 		if CatchHandlerPanics {
-			defer func() {
-				if p := recover(); p != nil {
-					handleError(httperr.AsError(p), errHandlers, response, request)
-				}
-			}()
+			defer handlePanic(errHandlers, response, request)
 		}
 
 		if request.MultipartForm == nil {
@@ -151,11 +157,7 @@ func Handler(getArgs RequestArgsFunc, function function.CallWithNamedStringsWrap
 func HandlerNoWrapper(function func(context.Context) ([]byte, error), resultsWriter ResultsWriter, errHandlers ...ErrorHandler) http.HandlerFunc {
 	return func(response http.ResponseWriter, request *http.Request) {
 		if CatchHandlerPanics {
-			defer func() {
-				if p := recover(); p != nil {
-					handleError(httperr.AsError(p), errHandlers, response, request)
-				}
-			}()
+			defer handlePanic(errHandlers, response, request)
 		}
 
 		result, err := function(request.Context())
@@ -171,6 +173,20 @@ func HandlerNoWrapper(function func(context.Context) ([]byte, error), resultsWri
 			handleError(err, errHandlers, response, request)
 		}
 	}
+}
+
+// handlePanic is deferred by the handlers to recover a panic
+// and pass it as error to handleError, except http.ErrAbortHandler,
+// with which a handler aborts the response, so it is panicked again for net/http.
+func handlePanic(errHandlers []ErrorHandler, response http.ResponseWriter, request *http.Request) {
+	p := recover()
+	if p == nil {
+		return
+	}
+	if p == http.ErrAbortHandler {
+		panic(p)
+	}
+	handleError(httperr.AsError(p), errHandlers, response, request)
 }
 
 // handleError passes err to errHandlers in order until one handles it,

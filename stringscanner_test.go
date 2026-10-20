@@ -1398,3 +1398,32 @@ func TestScanString_numberErrorsQuoteStringOnce(t *testing.T) {
 	err = ScanString("abc", &d)
 	assert.EqualError(t, err, `can't parse time.Duration: time: invalid duration "abc"`)
 }
+
+// settableTime has a Set(time.Time) method like nullable.Time of go-types
+// and an UnmarshalText method that only accepts one format
+type settableTime struct {
+	t   time.Time
+	set bool
+}
+
+func (s *settableTime) Set(t time.Time) { s.t, s.set = t, true }
+
+func (s *settableTime) UnmarshalText(text []byte) error {
+	return errors.New("UnmarshalText must not be called")
+}
+
+func TestScanString_SetTime(t *testing.T) {
+	// A type with a Set(time.Time) method gets the time parsed like time.Time,
+	// as documented also if it implements encoding.TextUnmarshaler
+	var dest settableTime
+	require.NoError(t, ScanString("2026-01-02 15:04", &dest))
+	assert.True(t, dest.set)
+	assert.Equal(t, time.Date(2026, 1, 2, 15, 4, 0, 0, TimeLocation), dest.t)
+
+	dest = settableTime{}
+	require.NoError(t, ScanString("null", &dest))
+	assert.True(t, dest.set)
+	assert.True(t, dest.t.IsZero())
+
+	assert.Error(t, ScanString("not a time", &dest))
+}

@@ -69,6 +69,17 @@ by `gen-func-wrappers` are now covered by semantic versioning.
   like missing fields, so a string argument gets `""` instead of `"null"`,
   and with `MergeRequestArgs` a null field no longer replaces the argument of an earlier source.
 - **Breaking:** `httpfun.RespondContentType` returns a `ResultsWriterFunc` like `RespondBinary`.
+- **Breaking:** `httpfun.RequestQueryArg` and `RequestQueryAsArg` leave out a query param
+  that is not in the request instead of passing an empty string, so they no longer overwrite
+  defaults of earlier getters of `MergeRequestArgs` like `ConstRequestArg` with zero values,
+  and pass multiple values like `RequestQueryArgs` instead of only the first one.
+  The header getters keep setting missing headers to an empty string,
+  so a trusted header placed last overwrites client values also if it is missing.
+- **Breaking:** `ReflectWrapper` returns an error for a nil value of a function type,
+  which panicked when called, and for empty or duplicate argument names except `_`,
+  which can't be passed by name or got the same value by name.
+- **Breaking:** cli command names with a non-graphic character like a terminal escape sequence
+  are rejected, instead of only names without any graphic character.
 - **Breaking:** the loggers of a `cli.SuperStringArgsDispatcher` get the super command and the command
   joined with a space like `user create`, and the super command like `deploy` for its default command,
   instead of only the command of the super command.
@@ -189,6 +200,10 @@ by `gen-func-wrappers` are now covered by semantic versioning.
   so changing them doesn't rename the arguments of the wrapper.
 - `NewStringArgsFunc`, `NewNamedStringArgsFunc` and `NewJSONArgsFunc` no longer panic
   when a results handler returns a non-comparable error such as a slice of errors.
+- The printing and logging results handlers like `PrintTo` and `LogTo` no longer replace
+  the results with their strings for the results handlers after them.
+- `httpfun.Handler`, `HandlerNoWrapper` and `htmlform.Handler` panic again with `http.ErrAbortHandler`,
+  so that net/http aborts the response, instead of answering it with 500 Internal Server Error.
 - `ScanString` and `TypeStringScanners.ScanString` return an error for non-pointer
   or nil destinations instead of panicking.
 - Interface scanners registered with `WithInterfaceTypeScanner` also match types

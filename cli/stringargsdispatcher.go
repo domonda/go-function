@@ -30,14 +30,19 @@ func checkCommandChars(command string) error {
 	if strings.IndexFunc(command, unicode.IsSpace) >= 0 {
 		return fmt.Errorf("command contains space characters: '%s'", command)
 	}
-	if strings.IndexFunc(command, unicode.IsGraphic) == -1 {
-		return fmt.Errorf("command contains non graphic characters: '%s'", command)
+	if command == "" {
+		return errors.New("command is empty")
+	}
+	if strings.IndexFunc(command, isNotGraphic) >= 0 {
+		return fmt.Errorf("command contains non graphic characters: %q", command)
 	}
 	if strings.ContainsAny(command, "|&;()<>") {
 		return fmt.Errorf("command contains invalid characters: '%s'", command)
 	}
 	return nil
 }
+
+func isNotGraphic(r rune) bool { return !unicode.IsGraphic(r) }
 
 // StringArgsCommandLogger provides a way to log or track command executions.
 // Implementations can write to log files, send metrics, or perform auditing.

@@ -51,6 +51,8 @@ httpfun.MergeRequestArgs(
 )
 ```
 
+This works because the header getters always set their argument, to an empty string if the header is missing. If the proxy didn't set `X-Tenant`, the client's `?tenant=` is still overwritten. The query getters `RequestQueryArg` and `RequestQueryAsArg` leave a missing parameter out instead, so a default placed before them is kept.
+
 Better still, don't make identity an argument at all. `httpfun.Handler` and `htmlform.Handler` call the function with the request's context, so authentication middleware can store the user in the context and the function reads it from `ctx`. An argument that doesn't exist can't be forged.
 
 ## Resource limits
@@ -100,7 +102,7 @@ Exceptions you control:
 
 ## Panics
 
-Without recovery, `net/http` logs a handler panic with its stack trace and aborts the connection, so the client gets no response at all. `httpfun.Handler` recovers panics when `httpfun.CatchHandlerPanics` is true (the default) and answers 500 without the panic message. `htmlform.Handler` always recovers. Keep `CatchHandlerPanics` on in production.
+Without recovery, `net/http` logs a handler panic with its stack trace and aborts the connection, so the client gets no response at all. `httpfun.Handler` recovers panics when `httpfun.CatchHandlerPanics` is true (the default) and answers 500 without the panic message. `htmlform.Handler` always recovers. Both let a panic with `http.ErrAbortHandler` through, which aborts the response like without recovery. Keep `CatchHandlerPanics` on in production.
 
 ## Checklist
 

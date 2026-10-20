@@ -113,7 +113,7 @@ A slice or array value is written like a JSON array whose elements can be unquot
 
 For `[]*string`, `[null, "null"]` scans as a nil pointer followed by a pointer to `"null"`.
 
-`httpfun.RequestQueryArgs` and `RequestMultipartFormArgs` pass a parameter with multiple values, like `?x=1&x=2`, as the literal `["1","2"]`. Because the elements are quoted, they are explicit strings: an empty value in `?x=1&x=` is an error for a `[]int` argument instead of a `0`, and `?x=null&x=a` gives a `[]*string` argument a pointer to `"null"` instead of a nil pointer.
+`httpfun.RequestQueryArgs`, `RequestQueryArg`, `RequestQueryAsArg`, and `RequestMultipartFormArgs` pass a parameter with multiple values, like `?x=1&x=2`, as the literal `["1","2"]`. Because the elements are quoted, they are explicit strings: an empty value in `?x=1&x=` is an error for a `[]int` argument instead of a `0`, and `?x=null&x=a` gives a `[]*string` argument a pointer to `"null"` instead of a nil pointer.
 
 A literal may hold at most `MaxSliceLiteralElements` elements. Longer literals fail with `slice value has more than 1048576 elements (MaxSliceLiteralElements)` before memory for the elements is allocated.
 

@@ -49,11 +49,17 @@ func TestRequestArgsFuncs(t *testing.T) {
 			want:    map[string]string{"name": "Alice"},
 		},
 		{
-			// A missing query param is passed as empty string,
-			// which is scanned as zero value for most types
+			// A missing query param is left out, so the argument gets its zero value
+			// and MergeRequestArgs keeps the value of an earlier getter
 			name:    "RequestQueryArg missing",
 			getArgs: httpfun.RequestQueryArg("missing"),
-			want:    map[string]string{"missing": ""},
+			want:    map[string]string{},
+		},
+		{
+			// Multiple values are passed like by RequestQueryArgs
+			name:    "RequestQueryArg multiple values",
+			getArgs: httpfun.RequestQueryArg("tag"),
+			want:    map[string]string{"tag": `["a","b"]`},
 		},
 		{
 			name:    "RequestQueryAsArg",
@@ -82,6 +88,13 @@ func TestRequestArgsFuncs(t *testing.T) {
 			want:    map[string]string{"token": "Bearer token", "userAgent": "test"},
 		},
 		{
+			// Unlike missing query params, missing headers give empty strings,
+			// so a trusted header placed last always overwrites client values
+			name:    "missing headers",
+			getArgs: httpfun.MergeRequestArgs(httpfun.RequestHeaderArg("X-Missing"), httpfun.RequestHeaderAsArg("X-Missing", "x"), httpfun.RequestHeadersAsArgs(map[string]string{"X-Missing": "y"})),
+			want:    map[string]string{"X-Missing": "", "x": "", "y": ""},
+		},
+		{
 			name:    "RequestArgFromEnvVar",
 			getArgs: httpfun.RequestArgFromEnvVar("HTTPFUN_TEST_ENV_VAR", "value"),
 			want:    map[string]string{"value": "from env"},
@@ -94,6 +107,25 @@ func TestRequestArgsFuncs(t *testing.T) {
 				httpfun.RequestQueryArg("name"),
 			),
 			want: map[string]string{"name": "Alice", "version": "1.0"},
+		},
+		{
+			// A missing query param doesn't overwrite a default
+			name: "MergeRequestArgs keeps defaults",
+			getArgs: httpfun.MergeRequestArgs(
+				httpfun.ConstRequestArg("limit", "10"),
+				httpfun.RequestQueryArg("limit"),
+			),
+			want: map[string]string{"limit": "10"},
+		},
+		{
+			// A trusted header placed last overwrites the value of the client
+			// also if the header is missing, like when a proxy didn't set it
+			name: "MergeRequestArgs trusted header last",
+			getArgs: httpfun.MergeRequestArgs(
+				httpfun.RequestQueryAsArg("name", "tenant"),
+				httpfun.RequestHeaderAsArg("X-Tenant", "tenant"),
+			),
+			want: map[string]string{"tenant": ""},
 		},
 	}
 	for _, tt := range tests {

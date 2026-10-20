@@ -24,6 +24,9 @@ import (
 // Except when the function only has one argument
 // of type context.Context then "ctx" is assumed
 // as argument name in case no name has been passed.
+// The names must not be empty and must be unique,
+// except "_" for arguments that are not called by name, like in Go.
+// An error is returned for a nil function, also of a function type.
 func ReflectWrapper(function any, argNames ...string) (Wrapper, error) {
 	return newReflectWrapper(function, argNames)
 }
@@ -44,12 +47,24 @@ func newReflectWrapper(function any, argNames []string) (*reflectWrapper, error)
 		return nil, fmt.Errorf("expected function but got %T", function)
 	}
 	funcType := funcVal.Type()
+	if funcVal.IsNil() {
+		return nil, fmt.Errorf("nil function of type %s passed", funcType)
+	}
 	switch {
 	case len(argNames) == 0 && funcType.NumIn() == 1 && funcType.In(0) == typeOfContext:
 		argNames = []string{"ctx"}
 
 	case len(argNames) != funcType.NumIn():
 		return nil, fmt.Errorf("%d argNames passed, but %s has %d arguments", len(argNames), funcType, funcType.NumIn())
+	}
+	for i, argName := range argNames {
+		switch {
+		case argName == "":
+			return nil, fmt.Errorf("empty name passed for argument %d of %s", i, funcType)
+		case argName != "_" && slices.Contains(argNames[:i], argName):
+			// Named strings and JSON would pass the same value to both arguments
+			return nil, fmt.Errorf("argument name %q passed more than once for %s", argName, funcType)
+		}
 	}
 	// Clone so that a slice passed as argNames... can be modified by the caller
 	return &reflectWrapper{funcVal, funcType, slices.Clone(argNames)}, nil

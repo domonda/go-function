@@ -298,10 +298,14 @@ func (handler *Handler) SetSubmitButtonText(text string) {
 
 // ServeHTTP implements http.Handler.
 // It handles both GET requests (display form) and POST requests (process form submission).
-// Panics are recovered and converted to HTTP errors.
+// Panics are recovered and converted to HTTP errors,
+// except http.ErrAbortHandler, with which net/http aborts the response.
 func (handler *Handler) ServeHTTP(response http.ResponseWriter, request *http.Request) {
 	defer func() {
 		if r := recover(); r != nil {
+			if r == http.ErrAbortHandler {
+				panic(r)
+			}
 			httpfun.HandleError(httperr.AsError(r), response, request)
 		}
 	}()

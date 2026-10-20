@@ -46,7 +46,15 @@ func RequestBodyAsArg(argName string) RequestArgsFunc {
 
 // MergeRequestArgs returns a RequestArgsFunc
 // that merges the arguments of the given getters.
-// Later getters overwrite earlier ones.
+// Later getters overwrite earlier ones, so put defaults first
+// and trusted values last.
+//
+// The getters of query params and form fields leave out the params
+// that are not in the request, so they keep defaults of earlier getters
+// like ConstRequestArg. The getters of headers always set their arguments,
+// to an empty string for a missing header, because headers are used for
+// trusted values like the ones set by a proxy: placed last, a header getter
+// overwrites a value of the client also if the header is missing.
 func MergeRequestArgs(getters ...RequestArgsFunc) RequestArgsFunc {
 	return func(request *http.Request) (map[string]string, error) {
 		args := make(map[string]string)
@@ -64,45 +72,52 @@ func MergeRequestArgs(getters ...RequestArgsFunc) RequestArgsFunc {
 // RequestQueryArg returns a RequestArgsFunc
 // that returns the value of the query param queryKeyArgName
 // as the value of the argument queryKeyArgName.
+// Multiple values are passed like by RequestQueryArgs
+// as slice literal of JSON strings like ["1","2"].
+// A missing query param is left out, see MergeRequestArgs.
 func RequestQueryArg(queryKeyArgName string) RequestArgsFunc {
-	return func(request *http.Request) (map[string]string, error) {
-		return map[string]string{queryKeyArgName: request.URL.Query().Get(queryKeyArgName)}, nil
-	}
+	return RequestQueryAsArg(queryKeyArgName, queryKeyArgName)
 }
 
 // RequestQueryAsArg returns a RequestArgsFunc
 // that returns the value of the query param queryKey
 // as the value of the argument argName.
+// Multiple values are passed like by RequestQueryArgs
+// as slice literal of JSON strings like ["1","2"].
+// A missing query param is left out, see MergeRequestArgs.
 func RequestQueryAsArg(queryKey, argName string) RequestArgsFunc {
 	return func(request *http.Request) (map[string]string, error) {
-		return map[string]string{argName: request.URL.Query().Get(queryKey)}, nil
+		values, ok := request.URL.Query()[queryKey]
+		if !ok {
+			return map[string]string{}, nil
+		}
+		return map[string]string{argName: joinValues(values)}, nil
 	}
 }
 
 // RequestHeaderArg returns a RequestArgsFunc
-// that returns the value of the header headerKeyArgName
+// that returns the first value of the header headerKeyArgName
 // as the value of the argument headerKeyArgName.
+// A missing header gives an empty string, see MergeRequestArgs.
 func RequestHeaderArg(headerKeyArgName string) RequestArgsFunc {
-	return func(request *http.Request) (map[string]string, error) {
-		return map[string]string{headerKeyArgName: request.Header.Get(headerKeyArgName)}, nil
-	}
+	return RequestHeaderAsArg(headerKeyArgName, headerKeyArgName)
 }
 
 // RequestHeaderAsArg returns a RequestArgsFunc
-// that returns the value of the header headerKey
+// that returns the first value of the header headerKey
 // as the value of the argument argName.
+// A missing header gives an empty string, see MergeRequestArgs.
 func RequestHeaderAsArg(headerKey, argName string) RequestArgsFunc {
-	return func(request *http.Request) (map[string]string, error) {
-		return map[string]string{argName: request.Header.Get(headerKey)}, nil
-	}
+	return RequestHeadersAsArgs(map[string]string{headerKey: argName})
 }
 
 // RequestHeadersAsArgs returns a RequestArgsFunc
-// that returns the values of the request headers as argument values.
+// that returns the first values of the request headers as argument values.
 // The keys of headerToArg are the header keys and the values are the argument names.
+// Missing headers give empty strings, see MergeRequestArgs.
 func RequestHeadersAsArgs(headerToArg map[string]string) RequestArgsFunc {
 	return func(request *http.Request) (map[string]string, error) {
-		args := make(map[string]string)
+		args := make(map[string]string, len(headerToArg))
 		for headerKey, argName := range headerToArg {
 			args[argName] = request.Header.Get(headerKey)
 		}

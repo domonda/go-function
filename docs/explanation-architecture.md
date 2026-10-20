@@ -58,11 +58,11 @@ The wrapper separates a last `error` result from the other results and returns t
 - `cli` passes them to `function.ResultsHandler`s, like `function.Println`.
 - `httpfun` and `htmlform` pass them to an `httpfun.ResultsWriter`, like `httpfun.RespondJSON`, and errors on to error handlers.
 
-Argument parse errors carry the wrapper that failed (`ErrParseArgString.Func`). That lets `httpfun.Handler` tell two situations apart that look identical otherwise: the request sent `degrees=hot` (the client's fault, 400 Bad Request), or the function internally called another wrapper with bad data (the server's fault, 500). See [HTTP status codes](reference-http-status-codes.md).
+Argument parse errors carry the wrapper that failed (`ErrParseArgString.Func`). That lets `httpfun.Handler` tell two situations apart that look identical otherwise: the request sent `degrees=hot` (the client's fault, 400 Bad Request), or the function internally called another wrapper with bad data (the server's fault, 500). The wrapper is recognized if it's the one passed to `Handler`, the value it points to, or embedded in a decorating struct. Behind a function adapter like `function.CallWithNamedStringsWrapperFunc` it can't be, so invalid arguments are answered with 500 there. See [HTTP status codes](reference-http-status-codes.md).
 
 ### Panics
 
-The `Call*` methods don't recover panics, because the wrapper can't know what a caller wants to do with them. Adapters decide: `httpfun.Handler` recovers them if `httpfun.CatchHandlerPanics` is true (the default) and answers 500, `htmlform.Handler` always does, and `cli` lets them crash the program like any other panic in `main`.
+The `Call*` methods don't recover panics, because the wrapper can't know what a caller wants to do with them. Adapters decide: `httpfun.Handler` recovers them if `httpfun.CatchHandlerPanics` is true (the default) and answers 500, `htmlform.Handler` always does, and `cli` lets them crash the program like any other panic in `main`. Both HTTP handlers let a panic with `http.ErrAbortHandler` through, because a handler uses it to make `net/http` abort the response.
 
 ## Why ReflectWrapper needs argument names
 

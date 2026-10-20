@@ -42,7 +42,7 @@ Strings for arguments of kind `string` are passed unchanged by the default scann
 
 - `results` holds every result of the function except a last result of type `error`, which is returned as `err`.
 - If converting an argument fails, the function is not called and `results` is nil.
-- Panics of the function are not recovered by the `Call*` methods. `httpfun.Handler` recovers them if `httpfun.CatchHandlerPanics` is true (the default), and `htmlform.Handler` always does. The `cli` dispatchers don't.
+- Panics of the function are not recovered by the `Call*` methods. `httpfun.Handler` recovers them if `httpfun.CatchHandlerPanics` is true (the default), and `htmlform.Handler` always does, except a panic with `http.ErrAbortHandler`. The `cli` dispatchers don't.
 
 ## Errors
 
@@ -111,7 +111,7 @@ func ReflectWrapper(function any, argNames ...string) (Wrapper, error)
 func MustReflectWrapper(function any, argNames ...string) Wrapper
 ```
 
-Pass one name per argument, including the `context.Context` argument. A different number of names is an error like `1 argNames passed, but func(int, int) has 2 arguments`. A function whose only argument is a `context.Context` can be wrapped without names, it gets the name `ctx`.
+Pass one name per argument, including the `context.Context` argument. A different number of names is an error like `1 argNames passed, but func(int, int) has 2 arguments`. A function whose only argument is a `context.Context` can be wrapped without names, it gets the name `ctx`. Names must not be empty or repeated, except `_` for arguments that are not passed by name, like in Go. A nil function is an error, also a nil value of a function type like `var f func()`.
 
 The names are used by `CallWithNamedStrings`, `CallWithJSON`, `httpfun` request parameters, `htmlform` field names, and `cli` help text. Generated wrappers take the names from the source code instead. [Architecture](explanation-architecture.md#why-reflectwrapper-needs-argument-names) explains why reflection can't.
 

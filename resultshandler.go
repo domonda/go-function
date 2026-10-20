@@ -8,6 +8,7 @@ import (
 	"io"
 	"os"
 	"reflect"
+	"slices"
 	"strings"
 	"unicode"
 	"unicode/utf8"
@@ -84,10 +85,12 @@ func writePaddedTextTable(w io.Writer, rows [][]string, columnDelimiter string) 
 	return nil
 }
 
-// makeResultsPrintable converts the elements of the results slice
-// to strings with a readable representation.
-// It modifies the results slice in place.
-func makeResultsPrintable(results []any) error {
+// printableResults returns a copy of results with the elements
+// converted to strings with a readable representation.
+// It doesn't modify results, because the results handlers
+// after the calling one get the same slice.
+func printableResults(results []any) ([]any, error) {
+	results = slices.Clone(results)
 	for i, result := range results {
 		switch x := result.(type) {
 		case fmt.GoStringer:
@@ -111,7 +114,7 @@ func makeResultsPrintable(results []any) error {
 			var b strings.Builder
 			err := writePaddedTextTable(&b, x, "|")
 			if err != nil {
-				return fmt.Errorf("can't print command result padded text table because: %w", err)
+				return nil, fmt.Errorf("can't print command result padded text table because: %w", err)
 			}
 			results[i] = b.String()
 
@@ -127,7 +130,7 @@ func makeResultsPrintable(results []any) error {
 			case reflect.Struct, reflect.Map, reflect.Slice, reflect.Array:
 				b, err := json.MarshalIndent(result, "", "  ")
 				if err != nil {
-					return fmt.Errorf("can't print command result as JSON because: %w", err)
+					return nil, fmt.Errorf("can't print command result as JSON because: %w", err)
 				}
 				results[i] = string(b)
 
@@ -138,7 +141,7 @@ func makeResultsPrintable(results []any) error {
 			}
 		}
 	}
-	return nil
+	return results, nil
 }
 
 // PrintTo calls fmt.Fprint on writer with the result values as variadic arguments
@@ -147,7 +150,7 @@ func PrintTo(writer io.Writer) ResultsHandlerFunc {
 		if resultErr != nil {
 			return resultErr
 		}
-		err := makeResultsPrintable(results)
+		results, err := printableResults(results)
 		if err != nil {
 			return err
 		}
@@ -162,7 +165,7 @@ func PrintlnTo(writer io.Writer) ResultsHandlerFunc {
 		if resultErr != nil {
 			return resultErr
 		}
-		err := makeResultsPrintable(results)
+		results, err := printableResults(results)
 		if err != nil {
 			return err
 		}
@@ -181,7 +184,7 @@ var Println ResultsHandlerFunc = func(ctx context.Context, results []any, result
 	if resultErr != nil {
 		return resultErr
 	}
-	err := makeResultsPrintable(results)
+	results, err := printableResults(results)
 	if err != nil {
 		return err
 	}
@@ -200,7 +203,7 @@ func PrintlnWithPrefixTo(prefix string, writer io.Writer) ResultsHandlerFunc {
 		if resultErr != nil {
 			return resultErr
 		}
-		err := makeResultsPrintable(results)
+		results, err := printableResults(results)
 		if err != nil {
 			return err
 		}
@@ -220,7 +223,7 @@ func PrintlnWithPrefix(prefix string) ResultsHandlerFunc {
 		if resultErr != nil {
 			return resultErr
 		}
-		err := makeResultsPrintable(results)
+		results, err := printableResults(results)
 		if err != nil {
 			return err
 		}
@@ -246,7 +249,7 @@ func LogTo(logger Logger) ResultsHandlerFunc {
 		if resultErr != nil {
 			return resultErr
 		}
-		err := makeResultsPrintable(results)
+		results, err := printableResults(results)
 		if err != nil {
 			return err
 		}
@@ -261,7 +264,7 @@ func LogWithPrefixTo(prefix string, logger Logger) ResultsHandlerFunc {
 		if resultErr != nil {
 			return resultErr
 		}
-		err := makeResultsPrintable(results)
+		results, err := printableResults(results)
 		if err != nil {
 			return err
 		}

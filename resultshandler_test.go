@@ -249,3 +249,31 @@ func TestPrintStructSliceAsTable(t *testing.T) {
 		})
 	}
 }
+
+func TestPrintHandlers_DontModifyResults(t *testing.T) {
+	// All results handlers get the same results slice,
+	// so a print handler must not replace the results with their strings
+	// for the handlers after it
+	var buf bytes.Buffer
+	handlers := map[string]ResultsHandler{
+		"PrintTo":             PrintTo(&buf),
+		"PrintlnTo":           PrintlnTo(&buf),
+		"PrintlnWithPrefixTo": PrintlnWithPrefixTo("prefix", &buf),
+		"LogTo":               LogTo(log.New(&buf, "", 0)),
+		"LogWithPrefixTo":     LogWithPrefixTo("prefix", log.New(&buf, "", 0)),
+	}
+	for name, printHandler := range handlers {
+		t.Run(name, func(t *testing.T) {
+			var got []any
+			record := ResultsHandlerFunc(func(_ context.Context, results []any, resultErr error) error {
+				got = results
+				return resultErr
+			})
+			f := NewStringArgsFunc(MustReflectWrapper(func() ([]int, float64) { return []int{1, 2}, 0.5 }), printHandler, record)
+
+			require.NoError(t, f(context.Background()))
+			assert.Equal(t, []any{[]int{1, 2}, 0.5}, got)
+			assert.NotEmpty(t, buf.String())
+		})
+	}
+}

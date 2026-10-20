@@ -18,7 +18,8 @@ var (
 
 	// CatchHandlerPanics controls whether panics in HTTP handlers are recovered.
 	// When true, panics are caught and converted to errors
-	// for the error handlers of the Handler and HandleError.
+	// for the error handlers of the Handler and HandleError,
+	// except http.ErrAbortHandler, which aborts the response like without recovering.
 	// When false, panics will crash the server (useful for debugging).
 	// Default: true
 	//

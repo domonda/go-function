@@ -241,6 +241,19 @@ func TestHandler_POST_panic(t *testing.T) {
 	assert.NotContains(t, response.Body.String(), "secret")
 }
 
+func TestHandler_POST_ErrAbortHandler(t *testing.T) {
+	// net/http aborts the response for a panic with http.ErrAbortHandler,
+	// so it is not recovered and answered like other panics
+	f := func(ctx context.Context, name string) error {
+		panic(http.ErrAbortHandler)
+	}
+	handler := htmlform.MustNewHandler(function.MustReflectWrapper(f, "ctx", "name"), "Form", httpfun.RespondJSON)
+
+	assert.PanicsWithValue(t, http.ErrAbortHandler, func() {
+		postForm(t, handler, map[string]string{"name": "Alice"}, nil)
+	})
+}
+
 func TestHandler_SetArgValidator(t *testing.T) {
 	var (
 		called       bool
